@@ -6,7 +6,7 @@ Stop repeating yourself. Context Sync is an MCP server that remembers your proje
 
 <p align="center">
   <img src="https://img.shields.io/badge/MCP-Compatible-blue" alt="MCP Compatible">
-  <img src="https://img.shields.io/badge/Version-0.1.0-green" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.2.0-green" alt="Version">
   <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
 </p>
 
@@ -258,6 +258,128 @@ Archive important conversation snippets
   "role": "user"
 }
 ```
+
+---
+
+---
+
+## 🗂️ NEW: Workspace Features (v0.2.0)
+
+**Read your actual codebase. No more copy-pasting.**
+
+Context Sync now has IDE-like capabilities! Point Claude to your project folder and it can:
+- 📂 Read any file in your project
+- 🌳 Visualize your folder structure  
+- 🔍 Scan and understand your codebase
+- 🎯 Provide context-aware code assistance
+
+### Quick Start
+
+```
+You: Set workspace to /Users/me/my-app
+Claude: ✅ Workspace set! I can now read your files.
+
+You: How does authentication work?
+Claude: [reads src/lib/auth.ts]
+Claude: You're using NextAuth with JWT. Here's how it works...
+```
+
+**No manual file sharing. Just natural conversation.**
+
+### Workspace Tools
+
+#### `set_workspace`
+Open a project folder (like opening in VS Code)
+```
+You: Set workspace to C:\projects\my-app
+```
+
+#### `read_file`
+Read any file using relative paths
+```
+You: Read src/components/Header.tsx
+```
+
+#### `get_project_structure`
+See your file/folder tree
+```
+You: Show me the project structure
+```
+Returns:
+```
+📂 Project Structure:
+├── 📋 package.json
+├── 📝 README.md
+├── 📁 src/
+│   ├── 📁 app/
+│   ├── 📁 components/
+│   └── 📁 lib/
+```
+
+#### `scan_workspace`
+Get intelligent project overview
+```
+You: Scan the workspace
+```
+Returns:
+- File count by type
+- Lines of code estimate
+- Important files (configs, entry points, docs)
+- Project structure
+
+### Real-World Examples
+
+**Example 1: Code Understanding**
+```
+You: Set workspace to /my/ecommerce-app
+You: How do products get from database to UI?
+
+Claude: [reads src/lib/db.ts, api/products/route.ts, ProductCard.tsx]
+Claude: Here's the data flow:
+1. Database query in db.ts
+2. API route fetches products  
+3. ProductCard displays them
+[explains each step]
+```
+
+**Example 2: Debugging**
+```
+You: I'm getting a TypeScript error in Header component
+Claude: [reads src/components/Header.tsx]
+Claude: Found it! Line 12 - you're passing a string where 
+a number is expected. Here's the fix...
+```
+
+**Example 3: Project Onboarding**
+```
+You: I just joined this project. What is it?
+Claude: [scans workspace]
+Claude: This is a Next.js 14 e-commerce app:
+- Frontend: React + TypeScript + Tailwind
+- Backend: Next.js API routes
+- Database: PostgreSQL with Prisma
+- Auth: NextAuth
+
+Key files:
+- src/app/page.tsx - Homepage
+- src/lib/db.ts - Database config
+- src/lib/auth.ts - Authentication
+```
+
+### Supported File Types
+
+📘 TypeScript • ⚛️ React/TSX • 📜 JavaScript • 🐍 Python  
+🦀 Rust • 🔷 Go • ☕ Java • 🎨 CSS • 🌐 HTML  
+📋 JSON • 📝 Markdown • and 15+ more!
+
+### Documentation
+
+**Full guide:** See [WORKSPACE.md](WORKSPACE.md) for:
+- Complete tool reference
+- Advanced examples
+- Troubleshooting
+- Security best practices
+- Tips & tricks
 
 ---
 

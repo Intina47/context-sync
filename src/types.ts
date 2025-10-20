@@ -53,4 +53,6 @@ export interface StorageInterface {
   
   // Context
   getContextSummary(projectId: string): ContextSummary;
+
+  findProjectByPath(projectPath: string): ProjectContext | null;
 }

@@ -7,14 +7,20 @@ import {
   GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { Storage } from './storage.js';
+import { ProjectDetector } from './project-detector.js';
+import { WorkspaceDetector } from './workspace-detector.js';
 
 export class ContextSyncServer {
   private server: Server;
   private storage: Storage;
+  private projectDetector: ProjectDetector;
+  private workspaceDetector: WorkspaceDetector; 
 
   constructor(storagePath?: string) {
     this.storage = new Storage(storagePath);
-    
+    this.projectDetector = new ProjectDetector(this.storage);
+    this.workspaceDetector = new WorkspaceDetector(this.storage, this.projectDetector);
+
     this.server = new Server(
       {
         name: 'context-sync',
@@ -122,7 +128,15 @@ export class ContextSyncServer {
     prompt += `assume they're referring to ${project.name} unless they explicitly mention a different project\n`;
     prompt += `• Use the decisions and tech stack above to inform your responses\n`;
     prompt += `• If you're not sure if they're asking about ${project.name}, call get_project_context to check\n`;
-    prompt += `• Don't explicitly say "I loaded context" or "based on the context" - just naturally use the information`;
+    prompt += `• Don't explicitly say "I loaded context" or "based on the context" - just naturally use the information\n\n`;
+    
+    prompt += `AVAILABLE WORKSPACE TOOLS:\n`;
+    prompt += `• set_workspace(path) - Open a project folder and read its files\n`;
+    prompt += `• scan_workspace() - Get overview of all files in workspace\n`;
+    prompt += `• read_file(path) - Read any file from the workspace\n`;
+    prompt += `• get_project_structure() - See file/folder tree\n\n`;
+    
+    prompt += `When user says "scan workspace", "read file X", "show me the code", or asks about specific files, USE THESE TOOLS!`;
 
     return prompt;
   }
@@ -203,6 +217,69 @@ export class ContextSyncServer {
             required: ['name'],
           },
         },
+        {
+          name: 'detect_project',
+          description: 'Auto-detect project from a directory path',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              path: {
+                type: 'string',
+                description: 'Absolute path to project directory',
+              },
+            },
+            required: ['path'],
+          },
+        },
+        {
+          name: 'set_workspace',
+          description: 'Set the current workspace/project folder (like opening in IDE)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              path: {
+                type: 'string',
+                description: 'Absolute path to workspace directory',
+              },
+            },
+            required: ['path'],
+          },
+        },
+        {
+          name: 'read_file',
+          description: 'Read a file from the current workspace',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              path: {
+                type: 'string',
+                description: 'Relative path to file within workspace (e.g. "src/app/page.tsx")',
+              },
+            },
+            required: ['path'],
+          },
+        },
+        {
+          name: 'get_project_structure',
+          description: 'Get the file/folder structure of current workspace',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              depth: {
+                type: 'number',
+                description: 'Maximum depth to traverse (default: 3)',
+              },
+            },
+          },
+        },
+        {
+          name: 'scan_workspace',
+          description: 'Scan workspace and get overview of important files',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+          },
+        },
       ],
     }));
 
@@ -225,6 +302,26 @@ export class ContextSyncServer {
 
         case 'init_project': {
           return this.handleInitProject(args as any);
+        }
+
+        case 'detect_project': {
+          return this.handleDetectProject(args as any);
+        }
+
+        case 'set_workspace': {
+          return this.handleSetWorkspace(args as any);
+        }
+
+        case 'read_file': {
+          return this.handleReadFile(args as any);
+        }
+
+        case 'get_project_structure': {
+          return this.handleGetProjectStructure(args as any);
+        }
+
+        case 'scan_workspace': {
+          return this.handleScanWorkspace();
         }
 
         default:
@@ -351,6 +448,216 @@ export class ContextSyncServer {
         },
       ],
     };
+  }
+
+  private handleDetectProject(args: { path: string }) {
+    try {
+      this.projectDetector.createOrUpdateProject(args.path);
+      
+      const project = this.storage.getCurrentProject();
+      
+      if (!project) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `No project detected at: ${args.path}`,
+            },
+          ],
+        };
+      }
+
+      const techStack = project.techStack.join(', ') || 'None detected';
+      const arch = project.architecture || 'Not specified';
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `📁 Detected project: ${project.name}\n🏗️  Architecture: ${arch}\n⚙️  Tech Stack: ${techStack}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error detecting project: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          },
+        ],
+      };
+    }
+  }
+
+  private handleSetWorkspace(args: { path: string }) {
+    try {
+      // Set workspace (this also auto-detects project)
+      this.workspaceDetector.setWorkspace(args.path);
+      
+      // Get the detected project
+      const project = this.storage.getCurrentProject();
+      
+      if (!project) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Workspace set to: ${args.path}\nBut no project configuration detected.`,
+            },
+          ],
+        };
+      }
+
+      // Get structure preview
+      const structure = this.workspaceDetector.getProjectStructure(2);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✅ Workspace set: ${args.path}\n\n📁 Project: ${project.name}\n⚙️  Tech Stack: ${project.techStack.join(', ')}\n\n📂 Structure Preview:\n${structure}\n\nYou can now:\n- read_file to view any file\n- get_project_structure for full tree\n- scan_workspace for overview`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error setting workspace: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          },
+        ],
+      };
+    }
+  }
+
+  private handleReadFile(args: { path: string }) {
+    try {
+      const file = this.workspaceDetector.readFile(args.path);
+      
+      if (!file) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `File not found: ${args.path}\n\nMake sure:\n1. Workspace is set (use set_workspace)\n2. Path is relative to workspace root\n3. File exists`,
+            },
+          ],
+        };
+      }
+
+      // For large files, warn about size
+      const sizeKB = file.size / 1024;
+      let sizeWarning = '';
+      if (sizeKB > 100) {
+        sizeWarning = `\n⚠️  Large file (${sizeKB.toFixed(1)}KB) - showing full content\n`;
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `📄 ${file.path} (${file.language})${sizeWarning}\n\`\`\`${file.language.toLowerCase()}\n${file.content}\n\`\`\``,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error reading file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          },
+        ],
+      };
+    }
+  }
+
+  private handleGetProjectStructure(args: { depth?: number }) {
+    try {
+      const depth = args.depth || 3;
+      const structure = this.workspaceDetector.getProjectStructure(depth);
+
+      if (!structure || structure === 'No workspace open') {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'No workspace set. Use set_workspace first.',
+            },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `📂 Project Structure (depth: ${depth}):\n\n${structure}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error getting structure: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          },
+        ],
+      };
+    }
+  }
+
+  private handleScanWorkspace() {
+    try {
+      const snapshot = this.workspaceDetector.createSnapshot();
+
+      if (!snapshot.rootPath) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'No workspace set. Use set_workspace first.',
+            },
+          ],
+        };
+      }
+
+      let response = `📊 Workspace Scan Results\n\n`;
+      response += `📁 Root: ${snapshot.rootPath}\n\n`;
+      response += `${snapshot.summary}\n\n`;
+      response += `📂 Structure:\n${snapshot.structure}\n\n`;
+      response += `📋 Scanned ${snapshot.files.length} important files:\n`;
+      
+      snapshot.files.forEach(f => {
+        const icon = f.language.includes('TypeScript') ? '📘' : 
+                     f.language.includes('JavaScript') ? '📜' : 
+                     f.language === 'JSON' ? '📋' : '📄';
+        response += `${icon} ${f.path} (${f.language}, ${(f.size / 1024).toFixed(1)}KB)\n`;
+      });
+
+      response += `\nUse read_file to view any specific file!`;
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: response,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error scanning workspace: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          },
+        ],
+      };
+    }
   }
 
   private formatContextSummary(summary: any): string {

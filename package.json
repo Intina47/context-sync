@@ -1,7 +1,7 @@
 {
   "name": "context-sync",
-  "version": "0.1.0",
-  "description": "MCP server for syncing AI coding context across multiple tools",
+  "version": "0.2.0",
+  "description": "MCP server for AI context sync with persistent memory and workspace file access",
   "main": "dist/index.js",
   "bin": {
     "context-sync": "./dist/index.js"
@@ -18,10 +18,21 @@
     "context",
     "claude",
     "cursor",
-    "copilot"
+    "copilot",
+    "workspace",
+    "file-access",
+    "developer-tools"
   ],
   "author": "mamba",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Intina47/context-sync.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Intina47/context-sync/issues"
+  },
+  "homepage": "https://github.com/Intina47/context-sync#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
     "better-sqlite3": "^11.0.0",

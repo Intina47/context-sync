@@ -164,6 +164,16 @@ export class Storage implements StorageInterface {
     };
   }
 
+  findProjectByPath(projectPath: string): ProjectContext | null {
+    const row = this.db.prepare(`
+      SELECT * FROM projects WHERE path = ?
+    `).get(projectPath) as any;
+
+    if (!row) return null;
+
+    return this.rowToProject(row);
+  }
+
   getRecentConversations(projectId: string, limit: number = 10): Conversation[] {
     const rows = this.db.prepare(`
       SELECT * FROM conversations 
