@@ -1,6 +1,6 @@
 {
   "name": "@context-sync/server",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "MCP server for AI context sync with persistent memory, workspace file access, and intelligent code operations",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

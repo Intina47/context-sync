@@ -24,7 +24,7 @@ function log(color, message) {
 const isGlobalInstall = process.env.npm_config_global === 'true' || 
                         process.env.npm_config_location === 'global';
 
-log(colors.cyan + colors.bold, '\n🧠 Context Sync MCP Server v0.3.0\n');
+log(colors.cyan + colors.bold, '\n🧠 Context Sync MCP Server v0.3.1\n');
 
 if (!isGlobalInstall) {
   log(colors.yellow, '⚠️  Detected local installation.');
