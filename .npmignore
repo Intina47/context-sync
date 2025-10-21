@@ -1,0 +1,18 @@
+# .npmignore
+src/
+test/
+test.ts
+*.log
+*.db
+.git/
+.github/
+node_modules/
+.DS_Store
+.env
+.env.*
+tsconfig.json
+setup.js
+setup_test/
+documentation/
+MIGRATION_*.md
+TESTING_*.md

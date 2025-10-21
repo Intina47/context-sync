@@ -2,12 +2,13 @@
 
 > **Give Claude perfect memory across all your chats.**
 
-Stop repeating yourself. Context Sync is an MCP server that remembers your projects, decisions, and conversations across every Claude chat - automatically.
+Context Sync is an MCP server that remembers your projects, decisions, and conversations across every Claude chat - automatically.
 
 <p align="center">
   <img src="https://img.shields.io/badge/MCP-Compatible-blue" alt="MCP Compatible">
-  <img src="https://img.shields.io/badge/Version-0.2.0-green" alt="Version">
   <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
+  <img alt="NPM Version" src="https://img.shields.io/npm/v/@context-sync/server" alt="npm">
+
 </p>
 
 ---
@@ -66,9 +67,28 @@ with Supabase. Want to continue with authentication?"
 
 ---
 
-## 🚀 Quick Start (5 Minutes)
 
 ### Installation
+
+### 🚀 Quick Start (Recommended)
+
+```bash
+npm install -g @context-sync/server
+```
+
+That's it! The package will automatically:
+
+- ✅ Build the server
+- ✅ Configure Claude Desktop
+- ✅ Set up everything you need
+
+### Alternative: Use npx (no install)
+
+```bash
+npx @context-sync/server
+```
+
+### Source Code Configuration
 
 ```bash
 # Clone the repository
