@@ -12,6 +12,10 @@ import { WorkspaceDetector } from './workspace-detector.js';
 import { FileWriter } from './file-writer.js';
 import { FileSearcher } from './file-searcher.js';
 import { GitIntegration } from './git-integration.js';
+import { DependencyAnalyzer } from './dependency-analyzer.js';
+import { CallGraphAnalyzer } from './call-graph-analyzer.js';  
+import { TypeAnalyzer } from './type-analyzer.js';
+import { PlatformSync, type AIPlatform } from './platform-sync.js';   
 
 export class ContextSyncServer {
   private server: Server;
@@ -21,6 +25,10 @@ export class ContextSyncServer {
   private fileWriter: FileWriter;
   private fileSearcher: FileSearcher;
   private gitIntegration: GitIntegration | null = null;
+  private dependencyAnalyzer: DependencyAnalyzer | null = null; 
+  private callGraphAnalyzer: CallGraphAnalyzer | null = null;
+  private typeAnalyzer: TypeAnalyzer | null = null;
+  private platformSync: PlatformSync;
 
   constructor(storagePath?: string) {
     this.storage = new Storage(storagePath);
@@ -32,7 +40,7 @@ export class ContextSyncServer {
     this.server = new Server(
       {
         name: 'context-sync',
-        version: '0.3.0',
+        version: '0.4.0',
       },
       {
         capabilities: {
@@ -42,6 +50,12 @@ export class ContextSyncServer {
       }
     );
 
+    this.platformSync = new PlatformSync(this.storage);
+    
+    // Auto-detect platform
+    const detectedPlatform = PlatformSync.detectPlatform();
+    this.platformSync.setPlatform(detectedPlatform);
+    
     this.setupToolHandlers();
     this.setupPromptHandlers();
   }
@@ -174,6 +188,27 @@ export class ContextSyncServer {
       if (name === 'git_branch_info') return this.handleGitBranchInfo(args as any);
       if (name === 'suggest_commit_message') return this.handleSuggestCommitMessage(args as any);
 
+      // V0.4.0 - Dependency Analysis
+      if (name === 'analyze_dependencies') return this.handleAnalyzeDependencies(args as any);
+      if (name === 'get_dependency_tree') return this.handleGetDependencyTree(args as any);
+      if (name === 'find_importers') return this.handleFindImporters(args as any);
+      if (name === 'detect_circular_deps') return this.handleDetectCircularDeps(args as any);
+
+      // V0.4.0 - Call Graph Analysis (ADD THESE)
+      if (name === 'analyze_call_graph') return this.handleAnalyzeCallGraph(args as any);
+      if (name === 'find_callers') return this.handleFindCallers(args as any);
+      if (name === 'trace_execution_path') return this.handleTraceExecutionPath(args as any);
+      if (name === 'get_call_tree') return this.handleGetCallTree(args as any);
+
+      // V0.4.0 - Type Analysis (ADD THESE)
+      if (name === 'find_type_definition') return this.handleFindTypeDefinition(args as any);
+      if (name === 'get_type_info') return this.handleGetTypeInfo(args as any);
+      if (name === 'find_type_usages') return this.handleFindTypeUsages(args as any);
+
+      if (name === 'switch_platform') return this.handleSwitchPlatform(args as any);
+      if (name === 'get_platform_status') return this.handleGetPlatformStatus();
+      if (name === 'get_platform_context') return this.handleGetPlatformContext(args as any);
+      if (name === 'setup_cursor') return this.handleSetupCursor();
       throw new Error(`Unknown tool: ${name}`);
     });
   }
@@ -444,6 +479,230 @@ export class ContextSyncServer {
           },
         },
       },
+        // V0.4.0 - Dependency Analysis Tools (ADD THESE)
+            {
+              name: 'analyze_dependencies',
+              description: 'Analyze import/export dependencies for a file. Returns all imports, exports, files that import this file, and circular dependencies.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  filePath: { 
+                    type: 'string', 
+                    description: 'Path to the file to analyze (relative to workspace)' 
+                  },
+                },
+                required: ['filePath'],
+              },
+            },
+            {
+              name: 'get_dependency_tree',
+              description: 'Get a tree view of all dependencies for a file, showing nested imports up to a specified depth.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  filePath: { 
+                    type: 'string',
+                    description: 'Path to the file (relative to workspace)' 
+                  },
+                  depth: { 
+                    type: 'number',
+                    description: 'Maximum depth to traverse (default: 3, max: 10)' 
+                  },
+                },
+                required: ['filePath'],
+              },
+            },
+            {
+              name: 'find_importers',
+              description: 'Find all files that import a given file. Useful for understanding what depends on this file.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  filePath: { 
+                    type: 'string',
+                    description: 'Path to the file (relative to workspace)' 
+                  },
+                },
+                required: ['filePath'],
+              },
+            },
+            {
+              name: 'detect_circular_deps',
+              description: 'Detect circular dependencies starting from a file. Shows all circular dependency chains.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  filePath: { 
+                    type: 'string',
+                    description: 'Path to the file (relative to workspace)' 
+                  },
+                },
+                required: ['filePath'],
+              },
+            },
+                  // V0.4.0 - Call Graph Analysis Tools (ADD THESE)
+      {
+        name: 'analyze_call_graph',
+        description: 'Analyze the call graph for a function. Shows what functions it calls (callees) and what functions call it (callers).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            functionName: { 
+              type: 'string', 
+              description: 'Name of the function to analyze' 
+            },
+          },
+          required: ['functionName'],
+        },
+      },
+      {
+        name: 'find_callers',
+        description: 'Find all functions that call a given function. Useful for impact analysis.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            functionName: { 
+              type: 'string',
+              description: 'Name of the function' 
+            },
+          },
+          required: ['functionName'],
+        },
+      },
+      {
+        name: 'trace_execution_path',
+        description: 'Trace all possible execution paths from one function to another. Shows the call chain.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            startFunction: { 
+              type: 'string',
+              description: 'Starting function name' 
+            },
+            endFunction: { 
+              type: 'string',
+              description: 'Target function name' 
+            },
+            maxDepth: { 
+              type: 'number',
+              description: 'Maximum depth to search (default: 10)' 
+            },
+          },
+          required: ['startFunction', 'endFunction'],
+        },
+      },
+      {
+        name: 'get_call_tree',
+        description: 'Get a tree view of function calls starting from a given function.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            functionName: { 
+              type: 'string',
+              description: 'Name of the function' 
+            },
+            depth: { 
+              type: 'number',
+              description: 'Maximum depth (default: 3)' 
+            },
+          },
+          required: ['functionName'],
+        },
+      },
+
+      // V0.4.0 - Type Analysis Tools (ADD THESE)
+      {
+        name: 'find_type_definition',
+        description: 'Find where a type, interface, class, or enum is defined.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            typeName: { 
+              type: 'string', 
+              description: 'Name of the type to find' 
+            },
+          },
+          required: ['typeName'],
+        },
+      },
+      {
+        name: 'get_type_info',
+        description: 'Get complete information about a type including properties, methods, and usage.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            typeName: { 
+              type: 'string',
+              description: 'Name of the type' 
+            },
+          },
+          required: ['typeName'],
+        },
+      },
+      {
+        name: 'find_type_usages',
+        description: 'Find all places where a type is used in the codebase.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            typeName: { 
+              type: 'string',
+              description: 'Name of the type' 
+            },
+          },
+          required: ['typeName'],
+        },
+      },
+      {
+        name: 'switch_platform',
+        description: 'Switch between AI platforms (Claude ↔ Cursor) with full context handoff',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            fromPlatform: {
+              type: 'string',
+              enum: ['claude', 'cursor', 'copilot', 'other'],
+              description: 'Platform you are switching from',
+            },
+            toPlatform: {
+              type: 'string',
+              enum: ['claude', 'cursor', 'copilot', 'other'],
+              description: 'Platform you are switching to',
+            },
+          },
+          required: ['fromPlatform', 'toPlatform'],
+        },
+      },
+      {
+        name: 'get_platform_status',
+        description: 'Check which AI platforms have Context Sync configured',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'get_platform_context',
+        description: 'Get context specific to a platform (conversations, decisions)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            platform: {
+              type: 'string',
+              enum: ['claude', 'cursor', 'copilot', 'other'],
+              description: 'Platform to get context for (defaults to current platform)',
+            },
+          },
+        },
+      },
+      {
+        name: 'setup_cursor',
+        description: 'Get instructions for setting up Context Sync in Cursor IDE',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
     ];
   }
 
@@ -558,7 +817,10 @@ export class ContextSyncServer {
     try {
       this.workspaceDetector.setWorkspace(args.path);
       this.gitIntegration = new GitIntegration(args.path);
-      
+      this.dependencyAnalyzer = new DependencyAnalyzer(args.path)
+      this.callGraphAnalyzer = new CallGraphAnalyzer(args.path);
+      this.typeAnalyzer = new TypeAnalyzer(args.path); 
+
       const project = this.storage.getCurrentProject();
       
       if (!project) {
@@ -1056,11 +1318,738 @@ export class ContextSyncServer {
     return text;
   }
 
+ // ========== V0.4.0 HANDLERS - DEPENDENCY ANALYSIS ==========
+ private handleAnalyzeDependencies(args: any) {
+  if (!this.dependencyAnalyzer) {
+    return {
+      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
+    };
+  }
+
+  try {
+    const graph = this.dependencyAnalyzer.analyzeDependencies(args.filePath);
+    
+    let response = `📊 Dependency Analysis: ${graph.filePath}\n\n`;
+    
+    // Imports
+    if (graph.imports.length > 0) {
+      response += `📥 Imports (${graph.imports.length}):\n`;
+      graph.imports.forEach(imp => {
+        const type = imp.isExternal ? '📦 [external]' : '📄 [local]';
+        const names = imp.importedNames.length > 0 ? `{ ${imp.importedNames.join(', ')} }` : 
+                      imp.defaultImport ? imp.defaultImport :
+                      imp.namespaceImport ? `* as ${imp.namespaceImport}` : '';
+        response += `  ${type} ${imp.source}${names ? ` - ${names}` : ''} (line ${imp.line})\n`;
+      });
+      response += '\n';
+    }
+    
+    // Exports
+    if (graph.exports.length > 0) {
+      response += `📤 Exports (${graph.exports.length}):\n`;
+      graph.exports.forEach(exp => {
+        if (exp.hasDefaultExport) {
+          response += `  • default export (line ${exp.line})\n`;
+        }
+        if (exp.exportedNames.length > 0) {
+          response += `  • ${exp.exportedNames.join(', ')} (line ${exp.line})\n`;
+        }
+      });
+      response += '\n';
+    }
+    
+    // Importers
+    if (graph.importers.length > 0) {
+      response += `👥 Imported by (${graph.importers.length} files):\n`;
+      graph.importers.slice(0, 10).forEach(file => {
+        const relativePath = file.replace(this.dependencyAnalyzer!['workspacePath'], '').replace(/^[\\\/]/, '');
+        response += `  • ${relativePath}\n`;
+      });
+      if (graph.importers.length > 10) {
+        response += `  ... and ${graph.importers.length - 10} more files\n`;
+      }
+      response += '\n';
+    }
+    
+    // Circular dependencies
+    if (graph.circularDeps.length > 0) {
+      response += `⚠️  Circular Dependencies (${graph.circularDeps.length}):\n`;
+      graph.circularDeps.forEach(cycle => {
+        response += `  • ${cycle.description}\n`;
+      });
+    } else {
+      response += `✅ No circular dependencies detected\n`;
+    }
+
+    return {
+      content: [{ type: 'text', text: response }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error analyzing dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }],
+    };
+  }
+}
+
+private handleGetDependencyTree(args: any) {
+  if (!this.dependencyAnalyzer) {
+    return {
+      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
+    };
+  }
+
+  try {
+    const depth = Math.min(args.depth || 3, 10);
+    const tree = this.dependencyAnalyzer.getDependencyTree(args.filePath, depth);
+    
+    const formatTree = (node: any, indent: string = '', isLast: boolean = true): string => {
+      const prefix = isLast ? '└── ' : '├── ';
+      const icon = node.isExternal ? '📦' : node.isCyclic ? '🔄' : '📄';
+      let result = `${indent}${prefix}${icon} ${node.file}${node.isCyclic ? ' (circular)' : ''}\n`;
+      
+      if (node.imports && node.imports.length > 0) {
+        const newIndent = indent + (isLast ? '    ' : '│   ');
+        node.imports.forEach((child: any, i: number) => {
+          result += formatTree(child, newIndent, i === node.imports.length - 1);
+        });
+      }
+      
+      return result;
+    };
+    
+    let response = `🌲 Dependency Tree (depth: ${depth})\n\n`;
+    response += formatTree(tree);
+    
+    return {
+      content: [{ type: 'text', text: response }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error getting dependency tree: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }],
+    };
+  }
+}
+
+private handleFindImporters(args: any) {
+  if (!this.dependencyAnalyzer) {
+    return {
+      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
+    };
+  }
+
+  try {
+    const importers = this.dependencyAnalyzer.findImporters(args.filePath);
+    
+    if (importers.length === 0) {
+      return {
+        content: [{
+          type: 'text',
+          text: `No files import ${args.filePath}\n\nThis file is either:\n- Not imported anywhere (unused)\n- An entry point\n- Only imported by external packages`,
+        }],
+      };
+    }
+    
+    let response = `👥 Files that import ${args.filePath} (${importers.length}):\n\n`;
+    
+    importers.forEach((file, i) => {
+      const relativePath = file.replace(this.dependencyAnalyzer!['workspacePath'], '').replace(/^[\\\/]/, '');
+      response += `${i + 1}. ${relativePath}\n`;
+    });
+    
+    return {
+      content: [{ type: 'text', text: response }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error finding importers: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }],
+    };
+  }
+}
+
+private handleDetectCircularDeps(args: any) {
+  if (!this.dependencyAnalyzer) {
+    return {
+      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
+    };
+  }
+
+  try {
+    const cycles = this.dependencyAnalyzer.detectCircularDependencies(args.filePath);
+    
+    if (cycles.length === 0) {
+      return {
+        content: [{
+          type: 'text',
+          text: `✅ No circular dependencies detected for ${args.filePath}`,
+        }],
+      };
+    }
+    
+    let response = `⚠️  Circular Dependencies Detected (${cycles.length}):\n\n`;
+    
+    cycles.forEach((cycle, i) => {
+      response += `${i + 1}. ${cycle.description}\n`;
+      response += `   Path: ${cycle.cycle.map(f => {
+        return f.replace(this.dependencyAnalyzer!['workspacePath'], '').replace(/^[\\\/]/, '');
+      }).join(' → ')}\n\n`;
+    });
+    
+    response += `\n💡 Tip: Circular dependencies can cause:\n`;
+    response += `- Module initialization issues\n`;
+    response += `- Bundler problems\n`;
+    response += `- Harder to understand code\n`;
+    response += `\nConsider refactoring by extracting shared code to a separate module.`;
+    
+    return {
+      content: [{ type: 'text', text: response }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error detecting circular dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }],
+    };
+  }
+} 
+
+// ========== V0.4.0 HANDLERS - CALL GRAPH ANALYSIS ==========
+
+private handleAnalyzeCallGraph(args: any) {
+  if (!this.callGraphAnalyzer) {
+    return {
+      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
+    };
+  }
+
+  try {
+    const graph = this.callGraphAnalyzer.analyzeCallGraph(args.functionName);
+    
+    if (!graph) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Function "${args.functionName}" not found in workspace.`,
+        }],
+      };
+    }
+
+    let response = `📊 Call Graph Analysis: ${graph.function.name}\n\n`;
+    
+    // Function info
+    response += `📍 Location: ${this.getRelativePath(graph.function.filePath)}:${graph.function.line}\n`;
+    response += `🔧 Type: ${graph.function.type}`;
+    if (graph.function.className) {
+      response += ` (in class ${graph.function.className})`;
+    }
+    response += `\n`;
+    response += `📊 Call depth: ${graph.callDepth}\n`;
+    if (graph.isRecursive) {
+      response += `🔄 Recursive: Yes\n`;
+    }
+    response += `\n`;
+
+    // Callers (who calls this function)
+    if (graph.callers.length > 0) {
+      response += `👥 Called by (${graph.callers.length} functions):\n`;
+      graph.callers.slice(0, 10).forEach(caller => {
+        const file = this.getRelativePath(caller.filePath);
+        const asyncMark = caller.isAsync ? ' (async)' : '';
+        response += `  • ${caller.caller}${asyncMark} - ${file}:${caller.line}\n`;
+      });
+      if (graph.callers.length > 10) {
+        response += `  ... and ${graph.callers.length - 10} more\n`;
+      }
+      response += `\n`;
+    } else {
+      response += `👥 Not called by any function (entry point or unused)\n\n`;
+    }
+
+    // Callees (what this function calls)
+    if (graph.callees.length > 0) {
+      response += `📞 Calls (${graph.callees.length} functions):\n`;
+      graph.callees.slice(0, 10).forEach(callee => {
+        const file = this.getRelativePath(callee.filePath);
+        const asyncMark = callee.isAsync ? ' (await)' : '';
+        response += `  • ${callee.callee}${asyncMark} - ${file}:${callee.line}\n`;
+      });
+      if (graph.callees.length > 10) {
+        response += `  ... and ${graph.callees.length - 10} more\n`;
+      }
+    } else {
+      response += `📞 Doesn't call any functions (leaf function)\n`;
+    }
+
+    return {
+      content: [{ type: 'text', text: response }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error analyzing call graph: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }],
+    };
+  }
+}
+
+private handleFindCallers(args: any) {
+  if (!this.callGraphAnalyzer) {
+    return {
+      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
+    };
+  }
+
+  try {
+    const callers = this.callGraphAnalyzer.findCallers(args.functionName);
+    
+    if (callers.length === 0) {
+      return {
+        content: [{
+          type: 'text',
+          text: `No functions call "${args.functionName}".\n\nThis function might be:\n- An entry point\n- Unused code\n- Only called externally`,
+        }],
+      };
+    }
+
+    let response = `👥 Functions that call "${args.functionName}" (${callers.length}):\n\n`;
+    
+    callers.forEach((caller, i) => {
+      const file = this.getRelativePath(caller.filePath);
+      const asyncMark = caller.isAsync ? '⏳' : '  ';
+      response += `${i + 1}. ${asyncMark} ${caller.caller}\n`;
+      response += `   📍 ${file}:${caller.line}\n`;
+      response += `   💬 ${caller.callExpression}\n\n`;
+    });
+
+    return {
+      content: [{ type: 'text', text: response }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error finding callers: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }],
+    };
+  }
+}
+
+private handleTraceExecutionPath(args: any) {
+  if (!this.callGraphAnalyzer) {
+    return {
+      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
+    };
+  }
+
+  try {
+    const paths = this.callGraphAnalyzer.traceExecutionPath(
+      args.startFunction,
+      args.endFunction,
+      args.maxDepth || 10
+    );
+
+    if (paths.length === 0) {
+      return {
+        content: [{
+          type: 'text',
+          text: `No execution path found from "${args.startFunction}" to "${args.endFunction}".\n\nPossible reasons:\n- Functions are not connected\n- Path exceeds max depth\n- One or both functions don't exist`,
+        }],
+      };
+    }
+
+    let response = `🛤️  Execution Paths: ${args.startFunction} → ${args.endFunction}\n\n`;
+    response += `Found ${paths.length} possible path(s):\n\n`;
+
+    paths.forEach((path, i) => {
+      const asyncMark = path.isAsync ? ' ⏳ (async)' : '';
+      response += `Path ${i + 1} (depth: ${path.depth})${asyncMark}:\n`;
+      response += `  ${path.description}\n\n`;
+    });
+
+    if (paths.length > 1) {
+      response += `💡 Multiple paths exist. Consider:\n`;
+      response += `- Which path is most commonly used?\n`;
+      response += `- Are all paths intentional?\n`;
+      response += `- Could the code be simplified?\n`;
+    }
+
+    return {
+      content: [{ type: 'text', text: response }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error tracing execution path: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }],
+    };
+  }
+}
+
+private handleGetCallTree(args: any) {
+  if (!this.callGraphAnalyzer) {
+    return {
+      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
+    };
+  }
+
+  try {
+    const depth = Math.min(args.depth || 3, 5);
+    const tree = this.callGraphAnalyzer.getCallTree(args.functionName, depth);
+
+    if (!tree) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Function "${args.functionName}" not found in workspace.`,
+        }],
+      };
+    }
+
+    const formatTree = (node: any, indent: string = '', isLast: boolean = true): string => {
+      const prefix = isLast ? '└── ' : '├── ';
+      const asyncMark = node.isAsync ? '⏳ ' : '';
+      const recursiveMark = node.isRecursive ? '🔄 ' : '';
+      let result = `${indent}${prefix}${asyncMark}${recursiveMark}${node.function} (${node.file}:${node.line})\n`;
+      
+      if (node.calls && node.calls.length > 0 && !node.isRecursive) {
+        const newIndent = indent + (isLast ? '    ' : '│   ');
+        node.calls.forEach((child: any, i: number) => {
+          result += formatTree(child, newIndent, i === node.calls.length - 1);
+        });
+      }
+      
+      return result;
+    };
+
+    let response = `🌲 Call Tree (depth: ${depth})\n\n`;
+    response += formatTree(tree);
+    response += `\n`;
+    response += `Legend:\n`;
+    response += `⏳ = async function\n`;
+    response += `🔄 = recursive call\n`;
+
+    return {
+      content: [{ type: 'text', text: response }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error getting call tree: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }],
+    };
+  }
+}
+
+// ========== V0.4.0 HANDLERS - TYPE ANALYSIS ==========
+
+private handleFindTypeDefinition(args: any) {
+  if (!this.typeAnalyzer) {
+    return {
+      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
+    };
+  }
+
+  try {
+    const definition = this.typeAnalyzer.findTypeDefinition(args.typeName);
+    
+    if (!definition) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Type "${args.typeName}" not found in workspace.\n\nMake sure:\n- The type is defined in a .ts or .tsx file\n- The type name is spelled correctly\n- The file is in the workspace`,
+        }],
+      };
+    }
+
+    const file = this.getRelativePath(definition.filePath);
+    let response = `📘 Type Definition: ${definition.name}\n\n`;
+    response += `🏷️  Kind: ${definition.kind}\n`;
+    response += `📍 Location: ${file}:${definition.line}\n`;
+    response += `📤 Exported: ${definition.isExported ? 'Yes' : 'No'}\n\n`;
+    response += `Raw definition:\n\`\`\`typescript\n${definition.raw}\n\`\`\``;
+
+    return {
+      content: [{ type: 'text', text: response }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error finding type definition: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }],
+    };
+  }
+}
+
+private handleGetTypeInfo(args: any) {
+  if (!this.typeAnalyzer) {
+    return {
+      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
+    };
+  }
+
+  try {
+    const info = this.typeAnalyzer.getTypeInfo(args.typeName);
+    
+    if (!info) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Type "${args.typeName}" not found in workspace.`,
+        }],
+      };
+    }
+
+    const file = this.getRelativePath(info.definition.filePath);
+    let response = `📘 Complete Type Information: ${info.definition.name}\n\n`;
+    response += `📍 ${file}:${info.definition.line}\n`;
+    response += `🏷️  ${info.definition.kind}\n\n`;
+
+    // Type-specific details
+    const details = info.details;
+
+    if (details.kind === 'interface') {
+      if (details.extends && details.extends.length > 0) {
+        response += `🔗 Extends: ${details.extends.join(', ')}\n\n`;
+      }
+
+      if (details.properties.length > 0) {
+        response += `📦 Properties (${details.properties.length}):\n`;
+        details.properties.forEach(prop => {
+          const optional = prop.optional ? '?' : '';
+          const readonly = prop.readonly ? 'readonly ' : '';
+          response += `  • ${readonly}${prop.name}${optional}: ${prop.type}\n`;
+        });
+        response += `\n`;
+      }
+
+      if (details.methods.length > 0) {
+        response += `⚙️  Methods (${details.methods.length}):\n`;
+        details.methods.forEach(method => {
+          const params = method.params.map(p => `${p.name}: ${p.type || 'any'}`).join(', ');
+          response += `  • ${method.name}(${params}): ${method.returnType || 'void'}\n`;
+        });
+        response += `\n`;
+      }
+    } else if (details.kind === 'type') {
+      response += `📝 Definition:\n  ${details.definition}\n\n`;
+    } else if (details.kind === 'class') {
+      if (details.extends) {
+        response += `🔗 Extends: ${details.extends}\n`;
+      }
+      if (details.implements && details.implements.length > 0) {
+        response += `🔗 Implements: ${details.implements.join(', ')}\n`;
+      }
+      response += `\n`;
+
+      if (details.constructor) {
+        const params = details.constructor.params.map(p => `${p.name}: ${p.type || 'any'}`).join(', ');
+        response += `🏗️  Constructor(${params})\n\n`;
+      }
+
+      if (details.properties.length > 0) {
+        response += `📦 Properties (${details.properties.length}):\n`;
+        details.properties.forEach(prop => {
+          const optional = prop.optional ? '?' : '';
+          const readonly = prop.readonly ? 'readonly ' : '';
+          response += `  • ${readonly}${prop.name}${optional}: ${prop.type}\n`;
+        });
+        response += `\n`;
+      }
+
+      if (details.methods.length > 0) {
+        response += `⚙️  Methods (${details.methods.length}):\n`;
+        details.methods.forEach(method => {
+          const vis = method.visibility || 'public';
+          const stat = method.isStatic ? 'static ' : '';
+          const async = method.isAsync ? 'async ' : '';
+          response += `  • ${vis} ${stat}${async}${method.name}()\n`;
+        });
+        response += `\n`;
+      }
+    } else if (details.kind === 'enum') {
+      response += `📋 Members (${details.members.length}):\n`;
+      details.members.forEach(member => {
+        const value = member.value !== undefined ? ` = ${member.value}` : '';
+        response += `  • ${member.name}${value}\n`;
+      });
+      response += `\n`;
+    }
+
+    // Related types
+    if (info.relatedTypes.length > 0) {
+      response += `🔗 Related Types: ${info.relatedTypes.join(', ')}\n\n`;
+    }
+
+    // Usage count
+    response += `📊 Used in ${info.usages.length} location(s)\n`;
+
+    return {
+      content: [{ type: 'text', text: response }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error getting type info: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }],
+    };
+  }
+}
+
+private handleFindTypeUsages(args: any) {
+  if (!this.typeAnalyzer) {
+    return {
+      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
+    };
+  }
+
+  try {
+    const usages = this.typeAnalyzer.findTypeUsages(args.typeName);
+    
+    if (usages.length === 0) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Type "${args.typeName}" is not used anywhere.\n\nThis type might be:\n- Newly defined\n- Exported but not used\n- Dead code (consider removing)`,
+        }],
+      };
+    }
+
+    let response = `📊 Usage of type "${args.typeName}" (${usages.length} locations):\n\n`;
+
+    // Group by file
+    const byFile = new Map<string, typeof usages>();
+    usages.forEach(usage => {
+      const file = this.getRelativePath(usage.filePath);
+      if (!byFile.has(file)) {
+        byFile.set(file, []);
+      }
+      byFile.get(file)!.push(usage);
+    });
+
+    byFile.forEach((fileUsages, file) => {
+      response += `📄 ${file} (${fileUsages.length} usages):\n`;
+      fileUsages.slice(0, 5).forEach(usage => {
+        const icon = usage.usageType === 'variable' ? '📦' :
+                     usage.usageType === 'parameter' ? '⚙️' :
+                     usage.usageType === 'return' ? '↩️' :
+                     usage.usageType === 'generic' ? '<>' :
+                     usage.usageType === 'implements' ? '🔗' :
+                     usage.usageType === 'extends' ? '🔗' : '•';
+        response += `  ${icon} Line ${usage.line}: ${usage.context}\n`;
+      });
+      if (fileUsages.length > 5) {
+        response += `  ... and ${fileUsages.length - 5} more\n`;
+      }
+      response += `\n`;
+    });
+
+    return {
+      content: [{ type: 'text', text: response }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error finding type usages: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }],
+    };
+  }
+}
+
+private getRelativePath(filePath: string): string {
+  if (!this.dependencyAnalyzer) return filePath;
+  return filePath.replace(this.dependencyAnalyzer['workspacePath'], '').replace(/^[\\\/]/, '');
+}
+
+    // ========== V0.5.0 HANDLERS - PLATFORM SYNC ==========
+
+    private handleSwitchPlatform(args: { fromPlatform: AIPlatform; toPlatform: AIPlatform }) {
+      const handoff = this.platformSync.createHandoff(args.fromPlatform, args.toPlatform);
+
+      if (!handoff) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'No active project. Initialize a project first to enable platform handoff.',
+          }],
+        };
+      }
+
+      this.platformSync.setPlatform(args.toPlatform);
+
+      return {
+        content: [{
+          type: 'text',
+          text: handoff.summary,
+        }],
+      };
+    }
+
+   private handleGetPlatformStatus() {
+      const status = PlatformSync.getPlatformStatus();
+      const current = this.platformSync.getPlatform();
+
+      let response = `📱 Platform Configuration Status\n\n`;
+      response += `Current Platform: ${current}\n\n`;
+      response += `Configuration Status:\n`;
+      response += `  ${status.claude ? '✅' : '❌'} Claude Desktop\n`;
+      response += `  ${status.cursor ? '✅' : '❌'} Cursor\n`;
+      response += `  ${status.copilot ? '✅' : '❌'} GitHub Copilot (coming soon)\n\n`;
+
+      if (!status.cursor) {
+        response += `💡 To configure Cursor, use the setup_cursor tool or manually configure:\n`;
+        response += PlatformSync.getInstallInstructions('cursor');
+      }
+
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+    }
+
+    private handleGetPlatformContext(args: { platform?: AIPlatform }) {
+      const platform = args.platform || this.platformSync.getPlatform();
+      const context = this.platformSync.getPlatformContext(platform);
+
+      return {
+        content: [{ type: 'text', text: context }],
+      };
+    }
+
+    private handleSetupCursor() {
+      const paths = PlatformSync.getConfigPaths();
+      const cursorPath = paths.cursor;
+      const instructions = PlatformSync.getInstallInstructions('cursor');
+
+      let response = `🚀 Cursor Setup Instructions\n\n`;
+      response += instructions;
+      response += `\n\n📄 Configuration File: ${cursorPath}\n\n`;
+      response += `⚠️  Note: You'll need to manually edit the configuration file and restart Cursor.`;
+
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+    }
+    
+
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     
-    console.error('Context Sync MCP server v0.3.0 running on stdio');
+    console.error('Context Sync MCP server v0.4.0 running on stdio');
   }
 
   close(): void {
