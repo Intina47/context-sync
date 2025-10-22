@@ -11,7 +11,7 @@ export function createTodoHandlers(todoManager: TodoManager) {
     /**
      * Create a new todo item
      */
-    'todo:create': async (params: CreateTodoInput) => {
+    'todo_create': async (params: CreateTodoInput) => {
       const todo = todoManager.createTodo(params);
       return {
         content: [
@@ -26,7 +26,7 @@ export function createTodoHandlers(todoManager: TodoManager) {
     /**
      * Get a specific todo by ID
      */
-    'todo:get': async (params: { id: string }) => {
+    'todo_get': async (params: { id: string }) => {
       const todo = todoManager.getTodo(params.id);
       
       if (!todo) {
@@ -54,7 +54,7 @@ export function createTodoHandlers(todoManager: TodoManager) {
     /**
      * List todos with optional filters
      */
-    'todo:list': async (params?: TodoFilter) => {
+    'todo_list': async (params?: TodoFilter) => {
       const todos = todoManager.listTodos(params);
       
       if (todos.length === 0) {
@@ -133,7 +133,7 @@ export function createTodoHandlers(todoManager: TodoManager) {
     /**
      * Update a todo
      */
-    'todo:update': async (params: UpdateTodoInput) => {
+    'todo_update': async (params: UpdateTodoInput) => {
       const todo = todoManager.updateTodo(params);
       
       if (!todo) {
@@ -161,7 +161,7 @@ export function createTodoHandlers(todoManager: TodoManager) {
     /**
      * Delete a todo
      */
-    'todo:delete': async (params: { id: string }) => {
+    'todo_delete': async (params: { id: string }) => {
       const success = todoManager.deleteTodo(params.id);
       
       if (!success) {
@@ -189,7 +189,7 @@ export function createTodoHandlers(todoManager: TodoManager) {
     /**
      * Mark todo as completed
      */
-    'todo:complete': async (params: { id: string }) => {
+    'todo_complete': async (params: { id: string }) => {
       const todo = todoManager.completeTodo(params.id);
       
       if (!todo) {
@@ -217,7 +217,7 @@ export function createTodoHandlers(todoManager: TodoManager) {
     /**
      * Get todo statistics
      */
-    'todo:stats': async (params?: { projectId?: string }) => {
+    'todo_stats': async (params?: { projectId?: string }) => {
       const stats = todoManager.getStats(params?.projectId);
       
       let output = `📊 Todo Statistics\n\n`;
@@ -256,7 +256,7 @@ export function createTodoHandlers(todoManager: TodoManager) {
     /**
      * Get all tags
      */
-    'todo:tags': async () => {
+    'todo_tags': async () => {
       const tags = todoManager.getAllTags();
       
       if (tags.length === 0) {

@@ -46,7 +46,7 @@ export class ContextSyncServer {
     this.server = new Server(
       {
         name: 'context-sync',
-        version: '0.4.0',
+        version: '0.5.1',
       },
       {
         capabilities: {
@@ -217,7 +217,7 @@ export class ContextSyncServer {
       if (name === 'get_platform_context') return this.handleGetPlatformContext(args as any);
       if (name === 'setup_cursor') return this.handleSetupCursor();
       // V0.4.0 - Todo Management Tools (ADD THESE)
-      if (name.startsWith('todo:')) {
+      if (name.startsWith('todo_')) {
         const handler = this.todoHandlers[name as keyof typeof this.todoHandlers];
         if (handler) {
           return await handler(args as any);
@@ -2066,7 +2066,7 @@ private getRelativePath(filePath: string): string {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     
-    console.error('Context Sync MCP server v0.4.0 running on stdio');
+    console.error('Context Sync MCP server v0.5.1 running on stdio');
   }
 
   close(): void {

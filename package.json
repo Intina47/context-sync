@@ -1,6 +1,6 @@
 {
   "name": "@context-sync/server",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "MCP server for AI context sync with persistent memory, workspace file access, and intelligent code operations",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,7 +14,7 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "watch": "tsx watch src/index.ts",
-    "test": "node -e \"console.log('✅ Context Sync v0.5.0 - All systems ready!')\"",
+    "test": "node -e \"console.log('✅ Context Sync v0.5.1 - All systems ready!')\"",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [

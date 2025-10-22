@@ -5,7 +5,7 @@
 
 export const todoToolDefinitions = [
   {
-    name: 'todo:create',
+    name: 'todo_create',
     description: 'Create a new todo item in the global todo list',
     inputSchema: {
       type: 'object',
@@ -41,7 +41,7 @@ export const todoToolDefinitions = [
     }
   },
   {
-    name: 'todo:get',
+    name: 'todo_get',
     description: 'Get a specific todo item by ID',
     inputSchema: {
       type: 'object',
@@ -55,7 +55,7 @@ export const todoToolDefinitions = [
     }
   },
   {
-    name: 'todo:list',
+    name: 'todo_list',
     description: 'List todos with optional filters. Returns todos grouped by priority.',
     inputSchema: {
       type: 'object',
@@ -105,7 +105,7 @@ export const todoToolDefinitions = [
     }
   },
   {
-    name: 'todo:update',
+    name: 'todo_update',
     description: 'Update a todo item. Only provided fields will be updated.',
     inputSchema: {
       type: 'object',
@@ -150,7 +150,7 @@ export const todoToolDefinitions = [
     }
   },
   {
-    name: 'todo:delete',
+    name: 'todo_delete',
     description: 'Delete a todo item',
     inputSchema: {
       type: 'object',
@@ -164,7 +164,7 @@ export const todoToolDefinitions = [
     }
   },
   {
-    name: 'todo:complete',
+    name: 'todo_complete',
     description: 'Mark a todo as completed (shortcut for updating status)',
     inputSchema: {
       type: 'object',
@@ -178,7 +178,7 @@ export const todoToolDefinitions = [
     }
   },
   {
-    name: 'todo:stats',
+    name: 'todo_stats',
     description: 'Get statistics about todos (counts by status, priority, overdue, etc.)',
     inputSchema: {
       type: 'object',
@@ -191,7 +191,7 @@ export const todoToolDefinitions = [
     }
   },
   {
-    name: 'todo:tags',
+    name: 'todo_tags',
     description: 'Get a list of all unique tags used in todos',
     inputSchema: {
       type: 'object',
