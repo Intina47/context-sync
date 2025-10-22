@@ -10,6 +10,7 @@ import type {
   ContextSummary,
   StorageInterface,
 } from './types.js';
+import {createTodoTable} from './todo-schema.js';
 
 export class Storage implements StorageInterface {
   private db: Database.Database;
@@ -27,6 +28,7 @@ export class Storage implements StorageInterface {
 
     this.db = new Database(actualPath);
     this.initDatabase();
+    createTodoTable(this.db);
   }
 
   private initDatabase(): void {
@@ -267,6 +269,10 @@ export class Storage implements StorageInterface {
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };
+  }
+
+  getDb(): Database.Database {
+    return this.db;
   }
 
   close(): void {

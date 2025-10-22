@@ -29,6 +29,7 @@ Thumbs.db
 coverage/
 .nyc_output/
 setup_test/
+local/
 
 # Database
 *.db

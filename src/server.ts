@@ -16,6 +16,9 @@ import { DependencyAnalyzer } from './dependency-analyzer.js';
 import { CallGraphAnalyzer } from './call-graph-analyzer.js';  
 import { TypeAnalyzer } from './type-analyzer.js';
 import { PlatformSync, type AIPlatform } from './platform-sync.js';   
+import { TodoManager } from './todo-manager.js';
+import { createTodoHandlers } from './todo-handlers.js';
+import { todoToolDefinitions } from './todo-tools.js';
 
 export class ContextSyncServer {
   private server: Server;
@@ -29,8 +32,11 @@ export class ContextSyncServer {
   private callGraphAnalyzer: CallGraphAnalyzer | null = null;
   private typeAnalyzer: TypeAnalyzer | null = null;
   private platformSync: PlatformSync;
+  private todoManager: TodoManager;
+  private todoHandlers: ReturnType<typeof createTodoHandlers>;
 
   constructor(storagePath?: string) {
+
     this.storage = new Storage(storagePath);
     this.projectDetector = new ProjectDetector(this.storage);
     this.workspaceDetector = new WorkspaceDetector(this.storage, this.projectDetector);
@@ -51,7 +57,8 @@ export class ContextSyncServer {
     );
 
     this.platformSync = new PlatformSync(this.storage);
-    
+    this.todoManager = new TodoManager(this.storage.getDb());
+    this.todoHandlers = createTodoHandlers(this.todoManager);
     // Auto-detect platform
     const detectedPlatform = PlatformSync.detectPlatform();
     this.platformSync.setPlatform(detectedPlatform);
@@ -209,6 +216,14 @@ export class ContextSyncServer {
       if (name === 'get_platform_status') return this.handleGetPlatformStatus();
       if (name === 'get_platform_context') return this.handleGetPlatformContext(args as any);
       if (name === 'setup_cursor') return this.handleSetupCursor();
+      // V0.4.0 - Todo Management Tools (ADD THESE)
+      if (name.startsWith('todo:')) {
+        const handler = this.todoHandlers[name as keyof typeof this.todoHandlers];
+        if (handler) {
+          return await handler(args as any);
+        }
+      }
+
       throw new Error(`Unknown tool: ${name}`);
     });
   }
@@ -703,6 +718,8 @@ export class ContextSyncServer {
           properties: {},
         },
       },
+      // V0.4.0 - Todo Management Tools (ADD THESE)
+      ...todoToolDefinitions,
     ];
   }
 

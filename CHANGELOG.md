@@ -2,6 +2,165 @@
 
 All notable changes to Context Sync will be documented in this file.
 
+
+## [0.5.0] - 2025-10-22
+
+### 🎉 Major Feature Release: Global Todo List Management
+
+**Task Management Meets AI Context:**
+Context Sync now includes a powerful todo list system that works across both Claude Desktop and Cursor IDE. Manage your development tasks without leaving your AI conversation!
+
+**From context sync to complete project management - track your work alongside your code.**
+
+### ✨ New Features
+
+#### ✅ Global Todo List System
+- **Full CRUD Operations** - Create, read, update, delete todos
+- **Priority Management** - Urgent, high, medium, low priority levels
+- **Status Tracking** - Pending, in progress, completed, cancelled
+- **Smart Filtering** - Filter by status, priority, tags, dates, and text search
+- **Due Date Tracking** - Set deadlines with automatic overdue detection
+- **Tag Organization** - Organize todos with custom tags
+- **Project Linking** - Associate todos with specific projects
+- **Statistics & Insights** - Get comprehensive todo analytics
+
+#### 🎯 Smart Features
+- **Overdue Detection** - Automatically identifies overdue tasks
+- **Due Soon Alerts** - Warns about tasks due within 24 hours
+- **Organized Display** - Color-coded priorities with emoji indicators
+- **Tag Management** - List all available tags for organization
+- **Project-Specific Views** - Filter todos by project
+- **Full-Text Search** - Search in titles and descriptions
+
+### 🛠️ New MCP Tools
+
+#### Todo Management Tools
+- `todo:create` - Create a new todo item with all options
+- `todo:get` - Get a specific todo by ID
+- `todo:list` - List todos with advanced filtering (status, priority, tags, dates)
+- `todo:update` - Update any field of an existing todo
+- `todo:delete` - Delete a todo permanently
+- `todo:complete` - Quick shortcut to mark todo as completed
+- `todo:stats` - Get comprehensive statistics (counts, overdue, due soon)
+- `todo:tags` - List all unique tags used across todos
+
+### 🏗️ Architecture Changes
+
+- **New Classes:** `TodoManager` for business logic
+- **New Database Table:** `todos` with indexes for performance
+- **New Handlers:** `createTodoHandlers` for MCP tool responses
+- **New Types:** Complete TypeScript type definitions for todos
+- **Enhanced Storage:** Added `getDatabase()` method for external access
+
+### 📖 Documentation
+
+- **NEW:** [TODO_INTEGRATION.md](documentation/TODO_INTEGRATION.md) - Integration guide
+- **NEW:** [COMPLETE_TECHNICAL_OVERVIEW.md](documentation/COMPLETE_TECHNICAL_OVERVIEW.md) - Full system documentation
+- Updated README with todo management examples
+
+### 🎯 Use Cases Unlocked
+
+1. **Daily Planning** - "What's on my plate today?" → See all pending tasks
+2. **Sprint Management** - "Show urgent items" → Filter by priority
+3. **Bug Tracking** - Create todos tagged with 'bug' and link to project
+4. **Feature Planning** - Track features with due dates and priorities
+5. **Cross-Platform Tasks** - Create in Claude Desktop, check in Cursor IDE
+
+### 🔧 Technical Details
+
+**Database Schema:**
+```sql
+CREATE TABLE todos (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  priority TEXT NOT NULL DEFAULT 'medium',
+  tags TEXT,  -- JSON array
+  due_date TEXT,  -- ISO 8601
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT,
+  project_id TEXT,
+  FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+```
+
+**Features:**
+- Indexed on: status, priority, due_date, project_id, created_at
+- Auto-timestamps on create/update
+- Cascade delete on project removal
+- JSON tag storage for flexibility
+
+**Display Format:**
+- 🔴 Urgent tasks highlighted
+- 🟠 High priority visible
+- 🟡 Medium priority (default)
+- 🟢 Low priority for later
+- Status emojis: ⏳ pending, 🔄 in progress, ✅ completed, ❌ cancelled
+
+### 🐛 Bug Fixes
+
+- Fixed TypeScript type inference in todo handlers
+- Improved error handling for missing todos
+- Better validation for date formats
+
+### 📦 Dependencies
+
+No new dependencies! Todo system uses existing infrastructure:
+- SQLite for storage
+- TypeScript for type safety
+- Existing MCP server architecture
+
+### 🚀 Migration Guide
+
+**No breaking changes!** Existing projects continue to work.
+
+**New capabilities:**
+```bash
+# Create a todo
+todo:create {
+  "title": "Implement user authentication",
+  "priority": "high",
+  "tags": ["backend", "security"],
+  "dueDate": "2025-10-30T17:00:00Z"
+}
+
+# List high priority tasks
+todo:list {
+  "priority": ["high", "urgent"],
+  "status": "pending"
+}
+
+# Get statistics
+todo:stats
+```
+
+### 🎬 Demo
+
+**Todo management workflow:**
+1. Create todos → Set priorities and due dates
+2. Filter by status → Focus on what matters
+3. Track progress → Move from pending to completed
+4. View statistics → Understand your workload
+5. Cross-platform → Access from Claude or Cursor
+
+### 🙏 Acknowledgments
+
+- Community feedback on wanting task management
+- Contributors who tested the todo system
+- Users who requested priority and tag features
+
+### 📈 Stats
+
+- **8 new MCP tools** added
+- **5 new source files** (types, schema, manager, handlers, tools)
+- **1 new database table** with 5 indexes
+- **~1000 lines** of todo management code
+- **Cross-platform sync** works out of the box
+
+---
+
 ## [0.4.0] - 2025-01-XX
 
 ### 🎉 Major Feature Release: Advanced Code Analysis & Cross-Platform Sync
