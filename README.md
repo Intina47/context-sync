@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/intina47-context-sync-badge.png)](https://mseep.ai/app/intina47-context-sync)
+
 # Context Sync 🧠
 
 > **The MCP server that gives AI assistants perfect memory across all your projects.**
