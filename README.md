@@ -175,6 +175,50 @@ node setup.js
 
 ---
 
+## 🔀 Cursor IDE Setup
+
+Want to use Context Sync with Cursor? Super easy!
+
+### **Quick Setup (Recommended)**
+
+1. **Install Context Sync** (if you haven't already):
+   ```bash
+   npm install -g @context-sync/server
+   ```
+
+2. **In Claude Desktop, type:**
+   ```
+   setup cursor
+   ```
+   
+   Claude will give you exact setup instructions for your OS! ✨
+
+### **Manual Setup**
+
+1. Open Cursor: `Settings → MCP`
+
+2. Add Context Sync:
+   ```json
+   {
+     "mcpServers": {
+       "context-sync": {
+         "command": "npx",
+         "args": ["-y", "@context-sync/server"]
+       }
+     }
+   }
+   ```
+
+3. Refresh MCP servers
+
+### **Test It**
+
+In Cursor: `"What's my current project?"`
+
+If connected, it'll know your projects! 🎉
+
+---
+
 ## 🎬 Demo
 
 ### **Cross-Chat Memory**
