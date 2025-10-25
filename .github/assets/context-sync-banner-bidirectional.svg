@@ -1,0 +1,254 @@
+<svg width="1200" height="400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Define gradients -->
+  <defs>
+    <!-- Background gradient -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#1e293b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Accent gradient for sync lines -->
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00D4AA;stop-opacity:0.3" />
+      <stop offset="50%" style="stop-color:#6366f1;stop-opacity:0.5" />
+      <stop offset="100%" style="stop-color:#00D4AA;stop-opacity:0.3" />
+    </linearGradient>
+    
+    <!-- Glow effect -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Strong glow for data packets -->
+    <filter id="strongGlow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Animated pulse -->
+    <linearGradient id="pulseGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00D4AA;stop-opacity:0">
+        <animate attributeName="stop-opacity" values="0;1;0" dur="2s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="50%" style="stop-color:#6366f1;stop-opacity:0">
+        <animate attributeName="stop-opacity" values="0;0.8;0" dur="2s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#00D4AA;stop-opacity:0">
+        <animate attributeName="stop-opacity" values="0;1;0" dur="2s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="400" fill="url(#bgGradient)"/>
+  
+  <!-- Decorative grid pattern -->
+  <g opacity="0.1">
+    <line x1="0" y1="100" x2="1200" y2="100" stroke="#00D4AA" stroke-width="1"/>
+    <line x1="0" y1="200" x2="1200" y2="200" stroke="#6366f1" stroke-width="1"/>
+    <line x1="0" y1="300" x2="1200" y2="300" stroke="#00D4AA" stroke-width="1"/>
+    <line x1="300" y1="0" x2="300" y2="400" stroke="#00D4AA" stroke-width="1"/>
+    <line x1="600" y1="0" x2="600" y2="400" stroke="#6366f1" stroke-width="1"/>
+    <line x1="900" y1="0" x2="900" y2="400" stroke="#00D4AA" stroke-width="1"/>
+  </g>
+  
+  <!-- Left Platform Box - Cursor -->
+  <g transform="translate(80, 140)">
+    <!-- Box -->
+    <rect width="200" height="120" rx="12" fill="#1e293b" stroke="#00D4AA" stroke-width="2" opacity="0.9"/>
+    
+    <!-- Cursor Logo Icon (simplified) -->
+    <circle cx="100" cy="40" r="20" fill="#00D4AA" opacity="0.2"/>
+    <path d="M 95,30 L 105,40 L 95,50 Z" fill="#00D4AA" filter="url(#glow)"/>
+    
+    <!-- Text -->
+    <text x="100" y="85" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#00D4AA" text-anchor="middle">Cursor</text>
+    <text x="100" y="105" font-family="Arial, sans-serif" font-size="12" fill="#94a3b8" text-anchor="middle">IDE</text>
+  </g>
+  
+  <!-- Right Platform Box - Claude Desktop -->
+  <g transform="translate(920, 140)">
+    <!-- Box -->
+    <rect width="200" height="120" rx="12" fill="#1e293b" stroke="#6366f1" stroke-width="2" opacity="0.9"/>
+    
+    <!-- Claude Logo Icon (simplified) -->
+    <circle cx="100" cy="40" r="20" fill="#6366f1" opacity="0.2"/>
+    <path d="M 85,35 Q 100,25 115,35 Q 115,45 100,50 Q 85,45 85,35 Z" fill="#6366f1" filter="url(#glow)"/>
+    
+    <!-- Text -->
+    <text x="100" y="85" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#6366f1" text-anchor="middle">Claude Desktop</text>
+    <text x="100" y="105" font-family="Arial, sans-serif" font-size="12" fill="#94a3b8" text-anchor="middle">AI Assistant</text>
+  </g>
+  
+  <!-- Center - Context Sync Hub -->
+  <g transform="translate(500, 120)">
+    <!-- Central circle with glow -->
+    <circle cx="100" cy="80" r="60" fill="#1e293b" stroke="url(#accentGradient)" stroke-width="3" opacity="0.9" filter="url(#glow)"/>
+    <circle cx="100" cy="80" r="50" fill="none" stroke="url(#pulseGradient)" stroke-width="2"/>
+    
+    <!-- Sync icon in center -->
+    <g transform="translate(100, 80)">
+      <!-- Rotating arrows -->
+      <path d="M -20,-10 A 25 25 0 1 1 -20,10" fill="none" stroke="#00D4AA" stroke-width="3" stroke-linecap="round">
+        <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="3s" repeatCount="indefinite"/>
+      </path>
+      <path d="M 20,10 A 25 25 0 1 1 20,-10" fill="none" stroke="#6366f1" stroke-width="3" stroke-linecap="round">
+        <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="3s" repeatCount="indefinite"/>
+      </path>
+      <!-- Arrow heads -->
+      <polygon points="-20,-10 -25,-15 -15,-15" fill="#00D4AA">
+        <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="3s" repeatCount="indefinite"/>
+      </polygon>
+      <polygon points="20,10 25,15 15,15" fill="#6366f1">
+        <animateTransform attributeName="transform" type="rotate" from="0 0 0" dur="3s" repeatCount="indefinite"/>
+      </polygon>
+    </g>
+    
+    <!-- "Database" indicator inside hub -->
+    <g transform="translate(100, 80)" opacity="0.3">
+      <rect x="-8" y="-12" width="16" height="3" rx="1" fill="#00D4AA"/>
+      <rect x="-8" y="-6" width="16" height="3" rx="1" fill="#6366f1"/>
+      <rect x="-8" y="0" width="16" height="3" rx="1" fill="#00D4AA"/>
+      <rect x="-8" y="6" width="16" height="3" rx="1" fill="#6366f1"/>
+    </g>
+  </g>
+  
+  <!-- Connection paths with CLEAR bi-directional flow -->
+  <g>
+    <!-- LEFT SIDE (Cursor) -->
+    
+    <!-- Upper curved path: Cursor SAVES to Hub -->
+    <path d="M 280,180 Q 390,160 500,180" 
+          fill="none" 
+          stroke="#00D4AA" 
+          stroke-width="2.5" 
+          stroke-dasharray="6,4" 
+          opacity="0.5"/>
+    
+    <!-- Lower curved path: Hub LOADS to Cursor -->
+    <path d="M 500,220 Q 390,240 280,220" 
+          fill="none" 
+          stroke="#00D4AA" 
+          stroke-width="2.5" 
+          stroke-dasharray="6,4" 
+          opacity="0.5"/>
+    
+    <!-- Animated data packet: Cursor → Hub (SAVE) -->
+    <g>
+      <circle cx="280" cy="180" r="5" fill="#00D4AA" filter="url(#strongGlow)">
+        <animate attributeName="cx" values="280;320;360;400;440;480;500" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="180;175;170;167;168;172;180" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;1;1;1;1;0" keyTimes="0;0.1;0.3;0.5;0.7;0.9;1" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <!-- Arrow pointing right -->
+      <polygon points="0,0 -6,-4 -6,4" fill="#00D4AA" filter="url(#strongGlow)">
+        <animate attributeName="transform" values="translate(280,180);translate(320,175);translate(360,170);translate(400,167);translate(440,168);translate(480,172);translate(500,180)" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;1;1;1;1;0" keyTimes="0;0.1;0.3;0.5;0.7;0.9;1" dur="2s" repeatCount="indefinite"/>
+      </polygon>
+    </g>
+    
+    <!-- Animated data packet: Hub → Cursor (LOAD) -->
+    <g>
+      <circle cx="500" cy="220" r="5" fill="#00D4AA" filter="url(#strongGlow)">
+        <animate attributeName="cx" values="500;460;420;380;340;300;280" begin="1s" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="220;228;232;235;234;228;220" begin="1s" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;1;1;1;1;0" keyTimes="0;0.1;0.3;0.5;0.7;0.9;1" begin="1s" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <!-- Arrow pointing left -->
+      <polygon points="0,0 6,-4 6,4" fill="#00D4AA" filter="url(#strongGlow)">
+        <animate attributeName="transform" values="translate(500,220);translate(460,228);translate(420,232);translate(380,235);translate(340,234);translate(300,228);translate(280,220)" begin="1s" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;1;1;1;1;0" keyTimes="0;0.1;0.3;0.5;0.7;0.9;1" begin="1s" dur="2s" repeatCount="indefinite"/>
+      </polygon>
+    </g>
+    
+    <!-- RIGHT SIDE (Claude Desktop) -->
+    
+    <!-- Upper curved path: Claude QUERIES Hub -->
+    <path d="M 920,180 Q 810,160 700,180" 
+          fill="none" 
+          stroke="#6366f1" 
+          stroke-width="2.5" 
+          stroke-dasharray="6,4" 
+          opacity="0.5"/>
+    
+    <!-- Lower curved path: Hub RESPONDS to Claude -->
+    <path d="M 700,220 Q 810,240 920,220" 
+          fill="none" 
+          stroke="#6366f1" 
+          stroke-width="2.5" 
+          stroke-dasharray="6,4" 
+          opacity="0.5"/>
+    
+    <!-- Animated data packet: Claude → Hub (QUERY) -->
+    <g>
+      <circle cx="920" cy="180" r="5" fill="#6366f1" filter="url(#strongGlow)">
+        <animate attributeName="cx" values="920;880;840;800;760;720;700" begin="0.5s" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="180;175;170;167;168;172;180" begin="0.5s" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;1;1;1;1;0" keyTimes="0;0.1;0.3;0.5;0.7;0.9;1" begin="0.5s" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <!-- Arrow pointing left -->
+      <polygon points="0,0 6,-4 6,4" fill="#6366f1" filter="url(#strongGlow)">
+        <animate attributeName="transform" values="translate(920,180);translate(880,175);translate(840,170);translate(800,167);translate(760,168);translate(720,172);translate(700,180)" begin="0.5s" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;1;1;1;1;0" keyTimes="0;0.1;0.3;0.5;0.7;0.9;1" begin="0.5s" dur="2s" repeatCount="indefinite"/>
+      </polygon>
+    </g>
+    
+    <!-- Animated data packet: Hub → Claude (RESPONSE) -->
+    <g>
+      <circle cx="700" cy="220" r="5" fill="#6366f1" filter="url(#strongGlow)">
+        <animate attributeName="cx" values="700;740;780;820;860;900;920" begin="1.5s" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="220;228;232;235;234;228;220" begin="1.5s" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;1;1;1;1;0" keyTimes="0;0.1;0.3;0.5;0.7;0.9;1" begin="1.5s" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <!-- Arrow pointing right -->
+      <polygon points="0,0 -6,-4 -6,4" fill="#6366f1" filter="url(#strongGlow)">
+        <animate attributeName="transform" values="translate(700,220);translate(740,228);translate(780,232);translate(820,235);translate(860,234);translate(900,228);translate(920,220)" begin="1.5s" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;1;1;1;1;0" keyTimes="0;0.1;0.3;0.5;0.7;0.9;1" begin="1.5s" dur="2s" repeatCount="indefinite"/>
+      </polygon>
+    </g>
+  </g>
+  
+  <!-- Flow labels -->
+  <g opacity="0.6" font-family="Arial, sans-serif" font-size="11" font-weight="600">
+    <!-- Left side -->
+    <text x="350" y="165" fill="#00D4AA" text-anchor="middle">SAVE</text>
+    <text x="350" y="247" fill="#00D4AA" text-anchor="middle">LOAD</text>
+    
+    <!-- Right side -->
+    <text x="850" y="165" fill="#6366f1" text-anchor="middle">QUERY</text>
+    <text x="850" y="247" fill="#6366f1" text-anchor="middle">RESPONSE</text>
+  </g>
+  
+  <!-- Title -->
+  <g transform="translate(600, 50)">
+    <text x="0" y="0" font-family="'Segoe UI', Arial, sans-serif" font-size="48" font-weight="bold" fill="white" text-anchor="middle" filter="url(#glow)">
+      Context Sync
+    </text>
+    <text x="0" y="35" font-family="'Segoe UI', Arial, sans-serif" font-size="16" fill="#94a3b8" text-anchor="middle">
+      Your AI remembers everything, everywhere
+    </text>
+  </g>
+  
+  <!-- Bottom tagline -->
+  <g transform="translate(600, 350)">
+    <text x="0" y="0" font-family="Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="middle">
+      Build in Cursor • Continue in Claude Desktop • Never lose context
+    </text>
+  </g>
+  
+  <!-- Tech badge -->
+  <g transform="translate(550, 300)">
+    <rect width="100" height="24" rx="12" fill="#1e293b" opacity="0.8"/>
+    <text x="50" y="16" font-family="Arial, sans-serif" font-size="11" fill="#00D4AA" text-anchor="middle">
+      MCP Powered
+    </text>
+  </g>
+</svg>
