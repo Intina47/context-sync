@@ -46,7 +46,7 @@ export class ContextSyncServer {
     this.server = new Server(
       {
         name: 'context-sync',
-        version: '0.5.1',
+        version: '0.5.2',
       },
       {
         capabilities: {
@@ -216,6 +216,7 @@ export class ContextSyncServer {
       if (name === 'get_platform_status') return this.handleGetPlatformStatus();
       if (name === 'get_platform_context') return this.handleGetPlatformContext(args as any);
       if (name === 'setup_cursor') return this.handleSetupCursor();
+      if (name === 'get_started') return this.handleGetStarted();
       // V0.4.0 - Todo Management Tools (ADD THESE)
       if (name.startsWith('todo_')) {
         const handler = this.todoHandlers[name as keyof typeof this.todoHandlers];
@@ -713,6 +714,14 @@ export class ContextSyncServer {
       {
         name: 'setup_cursor',
         description: 'Get instructions for setting up Context Sync in Cursor IDE',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'get_started',
+        description: 'Get started with Context Sync - shows installation status, current state, and guided next steps',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -2060,13 +2069,85 @@ private getRelativePath(filePath: string): string {
         content: [{ type: 'text', text: response }],
       };
     }
+
+  private async handleGetStarted() {
+    // Check installation status - if we're here, Context Sync is working
+    const isWorking = true;
     
+    // Get current state
+    const currentProject = this.storage.getCurrentProject();
+    // For now, we'll just check if there's a current project
+    const hasProjects = currentProject !== null;
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    const platform = this.platformSync.getPlatform();
+    
+    // Build response
+    let response = `🎉 **Context Sync is working!**\n\n`;
+    
+    // Current status
+    response += `📊 **Current Status:**\n`;
+    response += `• Projects: ${hasProjects ? '1+' : '0'}\n`;
+    response += `• Active Project: ${currentProject ? currentProject.name : 'None'}\n`;
+    response += `• Workspace: ${workspace ? 'Set' : 'Not set'}\n`;
+    response += `• Platform: ${platform}\n\n`;
+    
+    // Next steps based on current state
+    response += `🚀 **Quick Start Options:**\n\n`;
+    
+    if (!hasProjects) {
+      response += `1️⃣ **Start a new project**\n`;
+      response += `   → "Initialize project 'my-awesome-app'"\n\n`;
+    } else if (!currentProject) {
+      response += `1️⃣ **Switch to existing project**\n`;
+      response += `   → "What projects do I have?"\n\n`;
+    }
+    
+    if (!workspace) {
+      response += `2️⃣ **Set up workspace**\n`;
+      response += `   → "Set workspace to /path/to/your/project"\n\n`;
+    } else {
+      response += `2️⃣ **Explore your workspace**\n`;
+      response += `   → "Scan workspace" or "Get project structure"\n\n`;
+    }
+    
+    response += `3️⃣ **Explore features**\n`;
+    response += `   → "Show me what Context Sync can do"\n\n`;
+    
+    // Add platform-specific tips
+    if (platform === 'cursor') {
+      response += `💡 **Cursor IDE Tips:**\n`;
+      response += `• I can read your files automatically\n`;
+      response += `• Try: "Analyze dependencies for src/components/App.tsx"\n`;
+      response += `• Use: "Create todo: Fix authentication bug"\n\n`;
+    } else if (platform === 'claude') {
+      response += `💡 **Claude Desktop Tips:**\n`;
+      response += `• Set workspace to see your actual code\n`;
+      response += `• I'll remember everything across chats\n`;
+      response += `• Try: "Set workspace to /Users/you/your-project"\n\n`;
+    }
+    
+    response += `🔧 **Need help?**\n`;
+    response += `• "Setup cursor" - Get Cursor IDE instructions\n`;
+    response += `• "Check platform status" - Verify configuration\n`;
+    response += `• "Show features" - See all available tools\n\n`;
+    
+    response += `**Ready to get started?** Choose an option above! 🚀`;
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: response
+        }
+      ]
+    };
+  }
 
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     
-    console.error('Context Sync MCP server v0.5.1 running on stdio');
+    console.error('Context Sync MCP server v0.5.2 running on stdio');
   }
 
   close(): void {

@@ -243,14 +243,13 @@ function printNextSteps(osType) {
   }
   
   console.log('');
-  console.log('2. Check Settings → Features → Model Context Protocol');
-  console.log('   You should see "context-sync" with a green indicator');
+  console.log('2. Check Settings → Developer → Local MCP servers');
+  console.log('   You should see "context-sync" running');
   console.log('');
-  console.log('3. Test it! Try saying:');
-  console.log('   "Initialize a project called test-app"');
+  console.log('3. Test it! Type:');
+  console.log('   "help context-sync"');
   console.log('');
-  console.log('4. Then ask:');
-  console.log('   "What\'s my current project?"');
+  console.log('4. Follow the guided setup!');
   console.log('');
   
   const dataDir = path.join(os.homedir(), '.context-sync');
