@@ -1,11 +1,10 @@
+# Context Sync 🧠
 <div align="center">
 
 <!-- HERO BANNER -->
 <img src=".github/assets/context-sync-banner-bidirectional.svg" alt="Context Sync - AI Context Management" width="100%">
 
 <br><br>
-
-# Context Sync 🧠
 
 ### **Build in Cursor. Continue in Claude Desktop. Your AI remembers everything.**
 
