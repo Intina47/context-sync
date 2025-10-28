@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as chokidar from 'chokidar';
 
 // Types for dependency analysis
 export interface ImportInfo {
@@ -45,11 +46,78 @@ export class DependencyAnalyzer {
   private workspacePath: string;
   private fileCache: Map<string, string>;
   private dependencyCache: Map<string, DependencyGraph>;
+  private fileWatcher: chokidar.FSWatcher | null = null;
+  
+  // File size limits to prevent OOM crashes
+  private readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB - prevents OOM crashes
+  private readonly WARN_FILE_SIZE = 1 * 1024 * 1024; // 1MB - warn but still process
   
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
     this.fileCache = new Map();
     this.dependencyCache = new Map();
+    this.setupFileWatcher();
+  }
+
+  /**
+   * Set up file watcher for cache invalidation
+   */
+  private setupFileWatcher(): void {
+    const watchPatterns = [
+      path.join(this.workspacePath, '**/*.{ts,tsx,js,jsx,mjs,cjs}'),
+    ];
+
+    this.fileWatcher = chokidar.watch(watchPatterns, {
+      ignored: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/dist/**',
+        '**/build/**',
+        '**/.next/**',
+        '**/out/**',
+        '**/coverage/**'
+      ],
+      ignoreInitial: true,
+      persistent: true,
+      awaitWriteFinish: {
+        stabilityThreshold: 100,
+        pollInterval: 50
+      }
+    });
+
+    this.fileWatcher
+      .on('change', (filePath) => {
+        this.invalidateCache(filePath);
+      })
+      .on('add', (filePath) => {
+        this.invalidateCache(filePath);
+      })
+      .on('unlink', (filePath) => {
+        this.invalidateCache(filePath);
+      })
+      .on('error', (error) => {
+        console.error('Dependency analyzer file watcher error:', error);
+      });
+  }
+
+  /**
+   * Invalidate caches for a specific file
+   */
+  private invalidateCache(filePath: string): void {
+    // Remove file from cache
+    this.fileCache.delete(filePath);
+    
+    // Remove dependency graph from cache
+    this.dependencyCache.delete(filePath);
+    
+    // Also invalidate any dependent files (files that import this file)
+    for (const [cachedFile, graph] of this.dependencyCache.entries()) {
+      if (graph.dependencies.includes(filePath) || graph.importers.includes(filePath)) {
+        this.dependencyCache.delete(cachedFile);
+      }
+    }
+    
+    console.error(`🔄 Dependency cache invalidated: ${path.relative(this.workspacePath, filePath)}`);
   }
 
   /**
@@ -229,10 +297,10 @@ export class DependencyAnalyzer {
   /**
    * Find all files that import the given file
    */
-  public findImporters(filePath: string): string[] {
+  public findImporters(filePath: string, maxFiles: number = 1000): string[] {
     const absolutePath = this.resolveFilePath(filePath);
     const importers: string[] = [];
-    const allFiles = this.getAllProjectFiles();
+    const allFiles = this.getAllProjectFiles(maxFiles);
 
     for (const file of allFiles) {
       if (file === absolutePath) continue;
@@ -348,6 +416,18 @@ export class DependencyAnalyzer {
     }
     
     try {
+      // Check file size first to prevent OOM crashes
+      const stats = fs.statSync(filePath);
+      
+      if (stats.size > this.MAX_FILE_SIZE) {
+        console.error(`⚠️  File too large for dependency analysis (${(stats.size / 1024 / 1024).toFixed(1)}MB), skipping: ${path.relative(this.workspacePath, filePath)}`);
+        return '';
+      }
+      
+      if (stats.size > this.WARN_FILE_SIZE) {
+        console.error(`⚠️  Large file in dependency analysis (${(stats.size / 1024 / 1024).toFixed(1)}MB): ${path.relative(this.workspacePath, filePath)}`);
+      }
+      
       const content = fs.readFileSync(filePath, 'utf-8');
       this.fileCache.set(filePath, content);
       return content;
@@ -405,15 +485,27 @@ export class DependencyAnalyzer {
     return null;
   }
 
-  private getAllProjectFiles(): string[] {
+  private getAllProjectFiles(maxFiles: number = 1000): string[] {
     const files: string[] = [];
     const extensions = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
+    let fileCount = 0;
     
     const walk = (dir: string) => {
+      // Stop if we've hit the file limit
+      if (fileCount >= maxFiles) {
+        return;
+      }
+      
       try {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         
         for (const entry of entries) {
+          // Check limit again in the loop
+          if (fileCount >= maxFiles) {
+            console.warn(`⚠️  File limit reached (${maxFiles} files). Stopping scan to prevent hangs.`);
+            return;
+          }
+          
           const fullPath = path.join(dir, entry.name);
           
           // Skip node_modules, dist, build, etc.
@@ -425,6 +517,7 @@ export class DependencyAnalyzer {
             const ext = path.extname(entry.name);
             if (extensions.includes(ext)) {
               files.push(fullPath);
+              fileCount++;
             }
           }
         }
@@ -434,6 +527,11 @@ export class DependencyAnalyzer {
     };
 
     walk(this.workspacePath);
+    
+    if (fileCount >= maxFiles) {
+      console.warn(`📊 Scanned ${maxFiles} files (limit reached). Use smaller projects or increase limit for complete analysis.`);
+    }
+    
     return files;
   }
 
@@ -443,5 +541,16 @@ export class DependencyAnalyzer {
   public clearCache() {
     this.fileCache.clear();
     this.dependencyCache.clear();
+  }
+
+  /**
+   * Dispose resources (cleanup file watcher)
+   */
+  public dispose(): void {
+    if (this.fileWatcher) {
+      this.fileWatcher.close();
+      this.fileWatcher = null;
+      console.error('📁 Dependency analyzer file watcher disposed');
+    }
   }
 }

@@ -39,3 +39,21 @@ local/
 # Logs
 logs/
 *.log
+
+# Local performance tooling (do not commit)
+performance-log.json
+performance-monitor.js
+QUICK_PERFORMANCE_CHECK.md
+PERFORMANCE_MONITORING.md
+PERFORMANCE_OPTIMIZATION_PLAN.md
+OPTIMIZATION_TODO.md
+RELEASE_CHECKLIST.md
+TESTING_PLAN.md
+
+# Local/testing artifacts
+setup_test/
+local/
+
+# VSCode extension build output and pack
+vscode-extension/dist/
+vscode-extension/*.vsix

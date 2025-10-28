@@ -1,6 +1,7 @@
 // Automatic project detection from filesystem
 
 import * as fs from 'fs';
+import { promises as fsAsync } from 'fs';
 import * as path from 'path';
 import type { Storage } from './storage.js';
 
@@ -14,12 +15,23 @@ export interface ProjectMetadata {
 export class ProjectDetector {
   constructor(private storage: Storage) {}
 
+  private async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fsAsync.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Detect project from a directory path
    */
-  detectFromPath(projectPath: string): ProjectMetadata | null {
+  async detectFromPath(projectPath: string): Promise<ProjectMetadata | null> {
     // Check if path exists
-    if (!fs.existsSync(projectPath)) {
+    try {
+      await fsAsync.access(projectPath);
+    } catch {
       return null;
     }
 
@@ -35,8 +47,11 @@ export class ProjectDetector {
 
     for (const marker of markers) {
       const markerPath = path.join(projectPath, marker.file);
-      if (fs.existsSync(markerPath)) {
-        return this.extractMetadata(projectPath, marker.file, marker.type);
+      try {
+        await fsAsync.access(markerPath);
+        return await this.extractMetadata(projectPath, marker.file, marker.type);
+      } catch {
+        // File doesn't exist, continue to next marker
       }
     }
 
@@ -46,11 +61,11 @@ export class ProjectDetector {
   /**
    * Extract project metadata from marker file
    */
-  private extractMetadata(
+  private async extractMetadata(
     projectPath: string,
     markerFile: string,
     type: ProjectMetadata['type']
-  ): ProjectMetadata {
+  ): Promise<ProjectMetadata> {
     let name = path.basename(projectPath);
     let techStack: string[] = [];
     let architecture: string | undefined;
@@ -58,25 +73,25 @@ export class ProjectDetector {
     try {
       if (markerFile === 'package.json') {
         const pkgPath = path.join(projectPath, 'package.json');
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        const pkg = JSON.parse(await fsAsync.readFile(pkgPath, 'utf8'));
         
         name = pkg.name || name;
-        techStack = this.detectNodeTechStack(pkg, projectPath);
+        techStack = await this.detectNodeTechStack(pkg, projectPath);
         architecture = this.inferArchitecture(techStack);
       } else if (markerFile === 'Cargo.toml') {
         const cargoPath = path.join(projectPath, 'Cargo.toml');
-        const cargo = fs.readFileSync(cargoPath, 'utf8');
+        const cargo = await fsAsync.readFile(cargoPath, 'utf8');
         const nameMatch = cargo.match(/name\s*=\s*"(.+)"/);
         name = nameMatch ? nameMatch[1] : name;
         techStack = ['Rust'];
       } else if (markerFile === 'go.mod') {
         const goPath = path.join(projectPath, 'go.mod');
-        const goMod = fs.readFileSync(goPath, 'utf8');
+        const goMod = await fsAsync.readFile(goPath, 'utf8');
         const nameMatch = goMod.match(/module\s+(.+)/);
         name = nameMatch ? path.basename(nameMatch[1]) : name;
         techStack = ['Go'];
       } else if (markerFile === 'requirements.txt' || markerFile === 'pyproject.toml') {
-        techStack = this.detectPythonTechStack(projectPath);
+        techStack = await this.detectPythonTechStack(projectPath);
       }
     } catch (error) {
       console.error('Error extracting metadata:', error);
@@ -93,7 +108,7 @@ export class ProjectDetector {
   /**
    * Detect tech stack from package.json
    */
-  private detectNodeTechStack(pkg: any, projectPath: string): string[] {
+  private async detectNodeTechStack(pkg: any, projectPath: string): Promise<string[]> {
     const stack: string[] = [];
     const deps = {
       ...pkg.dependencies,
@@ -128,7 +143,8 @@ export class ProjectDetector {
     }
 
     // Detect languages
-    if (deps['typescript'] || fs.existsSync(path.join(projectPath, 'tsconfig.json'))) {
+    const hasTypeScript = deps['typescript'] || await this.fileExists(path.join(projectPath, 'tsconfig.json'));
+    if (hasTypeScript) {
       stack.push('TypeScript');
     }
 
@@ -197,13 +213,13 @@ export class ProjectDetector {
   /**
    * Detect Python tech stack
    */
-  private detectPythonTechStack(projectPath: string): string[] {
+  private async detectPythonTechStack(projectPath: string): Promise<string[]> {
     const stack: string[] = ['Python'];
 
     // Try to read requirements.txt
     const reqPath = path.join(projectPath, 'requirements.txt');
-    if (fs.existsSync(reqPath)) {
-      const requirements = fs.readFileSync(reqPath, 'utf8');
+    if (await this.fileExists(reqPath)) {
+      const requirements = await fsAsync.readFile(reqPath, 'utf8');
       
       const frameworks = {
         'django': 'Django',
@@ -250,8 +266,8 @@ export class ProjectDetector {
   /**
    * Create or update project in storage
    */
-  createOrUpdateProject(projectPath: string): void {
-    const metadata = this.detectFromPath(projectPath);
+  async createOrUpdateProject(projectPath: string): Promise<void> {
+    const metadata = await this.detectFromPath(projectPath);
     
     if (!metadata) {
       console.error('❌ No project detected at:', projectPath);

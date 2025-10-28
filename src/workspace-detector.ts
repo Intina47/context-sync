@@ -1,7 +1,9 @@
 // IDE Workspace Detection and File Reading
 
 import * as fs from 'fs';
+import { promises as fsAsync } from 'fs';
 import * as path from 'path';
+import * as chokidar from 'chokidar';
 import type { Storage } from './storage.js';
 import { ProjectDetector } from './project-detector.js';
 
@@ -22,6 +24,11 @@ export interface ProjectSnapshot {
 export class WorkspaceDetector {
   private currentWorkspace: string | null = null;
   private fileCache: Map<string, FileContent> = new Map();
+  private fileWatcher: chokidar.FSWatcher | null = null;
+  
+  // File size limits to prevent OOM crashes
+  private readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB - prevents OOM crashes
+  private readonly WARN_FILE_SIZE = 1 * 1024 * 1024; // 1MB - warn but still process
 
   constructor(
     private storage: Storage,
@@ -32,13 +39,84 @@ export class WorkspaceDetector {
    * Set the current workspace (called when IDE opens a folder)
    */
   setWorkspace(workspacePath: string): void {
+    // Dispose existing watcher
+    if (this.fileWatcher) {
+      this.fileWatcher.close();
+    }
+    
     this.currentWorkspace = workspacePath;
     this.fileCache.clear();
     
-    // Auto-detect and initialize project
-    this.projectDetector.createOrUpdateProject(workspacePath);
+    // Set up file watcher to invalidate cache on changes
+    this.setupFileWatcher(workspacePath);
+    
+    // Auto-detect and initialize project (async, but don't block)
+    this.projectDetector.createOrUpdateProject(workspacePath).catch(error => {
+      console.error('Error auto-detecting project:', error);
+    });
     
     console.error(`📂 Workspace set: ${workspacePath}`);
+  }
+
+  /**
+   * Set up file watcher for cache invalidation
+   */
+  private setupFileWatcher(workspacePath: string): void {
+    const watchPatterns = [
+      path.join(workspacePath, '**/*.{ts,tsx,js,jsx,json,md}'),
+    ];
+
+    this.fileWatcher = chokidar.watch(watchPatterns, {
+      ignored: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/dist/**',
+        '**/build/**',
+        '**/.next/**',
+        '**/out/**',
+        '**/coverage/**'
+      ],
+      ignoreInitial: true,
+      persistent: true,
+      awaitWriteFinish: {
+        stabilityThreshold: 100,
+        pollInterval: 50
+      }
+    });
+
+    this.fileWatcher
+      .on('change', (filePath) => {
+        this.invalidateFileCache(filePath);
+      })
+      .on('add', (filePath) => {
+        this.invalidateFileCache(filePath);
+      })
+      .on('unlink', (filePath) => {
+        this.invalidateFileCache(filePath);
+      })
+      .on('error', (error) => {
+        console.error('File watcher error:', error);
+      });
+
+    console.error('📁 File watcher active for cache invalidation');
+  }
+
+  /**
+   * Invalidate cached file content
+   */
+  private invalidateFileCache(filePath: string): void {
+    // Remove from file cache
+    if (this.fileCache.has(filePath)) {
+      this.fileCache.delete(filePath);
+      console.error(`🔄 Cache invalidated: ${path.relative(this.currentWorkspace || '', filePath)}`);
+    }
+
+    // Also remove any related cached files (for relative path variations)
+    const relativePath = this.currentWorkspace ? path.relative(this.currentWorkspace, filePath) : filePath;
+    const fullPath = this.currentWorkspace ? path.join(this.currentWorkspace, relativePath) : filePath;
+    
+    this.fileCache.delete(relativePath);
+    this.fileCache.delete(fullPath);
   }
 
   /**
@@ -51,7 +129,7 @@ export class WorkspaceDetector {
   /**
    * Read a file from the workspace
    */
-  readFile(relativePath: string): FileContent | null {
+  async readFile(relativePath: string): Promise<FileContent | null> {
     if (!this.currentWorkspace) {
       return null;
     }
@@ -63,12 +141,26 @@ export class WorkspaceDetector {
       return this.fileCache.get(fullPath)!;
     }
 
-    if (!fs.existsSync(fullPath)) {
+    try {
+      await fsAsync.access(fullPath);
+    } catch {
       return null;
     }
 
     try {
-      const content = fs.readFileSync(fullPath, 'utf8');
+      // Check file size first to prevent OOM crashes
+      const stats = await fsAsync.stat(fullPath);
+      
+      if (stats.size > this.MAX_FILE_SIZE) {
+        console.error(`⚠️  File too large (${(stats.size / 1024 / 1024).toFixed(1)}MB), skipping: ${relativePath}`);
+        return null;
+      }
+      
+      if (stats.size > this.WARN_FILE_SIZE) {
+        console.error(`⚠️  Large file detected (${(stats.size / 1024 / 1024).toFixed(1)}MB): ${relativePath}`);
+      }
+      
+      const content = await fsAsync.readFile(fullPath, 'utf8');
       const language = this.detectLanguage(fullPath);
       const size = Buffer.byteLength(content);
 
@@ -92,27 +184,27 @@ export class WorkspaceDetector {
   /**
    * Get project structure (file tree)
    */
-  getProjectStructure(maxDepth: number = 3): string {
+  async getProjectStructure(maxDepth: number = 3): Promise<string> {
     if (!this.currentWorkspace) {
       return 'No workspace open';
     }
 
     const structure: string[] = [];
-    this.buildStructure(this.currentWorkspace, '', 0, maxDepth, structure);
+    await this.buildStructure(this.currentWorkspace, '', 0, maxDepth, structure);
     return structure.join('\n');
   }
 
-  private buildStructure(
+  private async buildStructure(
     dirPath: string,
     prefix: string,
     depth: number,
     maxDepth: number,
     output: string[]
-  ): void {
+  ): Promise<void> {
     if (depth > maxDepth) return;
 
     try {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      const entries = await fsAsync.readdir(dirPath, { withFileTypes: true });
       
       // Filter out common ignore patterns
       const filtered = entries.filter(entry => {
@@ -120,7 +212,8 @@ export class WorkspaceDetector {
         return !this.shouldIgnore(name);
       });
 
-      filtered.forEach((entry, index) => {
+      for (let index = 0; index < filtered.length; index++) {
+        const entry = filtered[index];
         const isLast = index === filtered.length - 1;
         const marker = isLast ? '└── ' : '├── ';
         const fullPath = path.join(dirPath, entry.name);
@@ -128,12 +221,12 @@ export class WorkspaceDetector {
         if (entry.isDirectory()) {
           output.push(`${prefix}${marker}📁 ${entry.name}/`);
           const newPrefix = prefix + (isLast ? '    ' : '│   ');
-          this.buildStructure(fullPath, newPrefix, depth + 1, maxDepth, output);
+          await this.buildStructure(fullPath, newPrefix, depth + 1, maxDepth, output);
         } else {
           const icon = this.getFileIcon(entry.name);
           output.push(`${prefix}${marker}${icon} ${entry.name}`);
         }
-      });
+      }
     } catch (error) {
       // Ignore errors (permission denied, etc.)
     }
@@ -142,7 +235,7 @@ export class WorkspaceDetector {
   /**
    * Scan important files (main entry points, configs, etc.)
    */
-  scanImportantFiles(): FileContent[] {
+  async scanImportantFiles(): Promise<FileContent[]> {
     if (!this.currentWorkspace) {
       return [];
     }
@@ -164,7 +257,7 @@ export class WorkspaceDetector {
     const files: FileContent[] = [];
 
     for (const pattern of importantPatterns) {
-      const file = this.readFile(pattern);
+      const file = await this.readFile(pattern);
       if (file) {
         files.push(file);
       }
@@ -176,9 +269,9 @@ export class WorkspaceDetector {
   /**
    * Create a snapshot of the project for context
    */
-  createSnapshot(): ProjectSnapshot {
-    const structure = this.getProjectStructure(3);
-    const files = this.scanImportantFiles();
+  async createSnapshot(): Promise<ProjectSnapshot> {
+    const structure = await this.getProjectStructure(3);
+    const files = await this.scanImportantFiles();
     
     // Create summary
     const summary = this.generateSummary(files);
@@ -303,26 +396,26 @@ export class WorkspaceDetector {
   /**
    * Search for files matching a pattern
    */
-  searchFiles(pattern: string, maxResults: number = 20): FileContent[] {
+  async searchFiles(pattern: string, maxResults: number = 20): Promise<FileContent[]> {
     if (!this.currentWorkspace) {
       return [];
     }
 
     const results: FileContent[] = [];
-    this.searchRecursive(this.currentWorkspace, pattern, results, maxResults);
+    await this.searchRecursive(this.currentWorkspace, pattern, results, maxResults);
     return results;
   }
 
-  private searchRecursive(
+  private async searchRecursive(
     dirPath: string,
     pattern: string,
     results: FileContent[],
     maxResults: number
-  ): void {
+  ): Promise<void> {
     if (results.length >= maxResults) return;
 
     try {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      const entries = await fsAsync.readdir(dirPath, { withFileTypes: true });
 
       for (const entry of entries) {
         if (results.length >= maxResults) break;
@@ -331,10 +424,10 @@ export class WorkspaceDetector {
         const fullPath = path.join(dirPath, entry.name);
 
         if (entry.isDirectory()) {
-          this.searchRecursive(fullPath, pattern, results, maxResults);
+          await this.searchRecursive(fullPath, pattern, results, maxResults);
         } else if (entry.name.toLowerCase().includes(pattern.toLowerCase())) {
           const relativePath = path.relative(this.currentWorkspace!, fullPath);
-          const file = this.readFile(relativePath);
+          const file = await this.readFile(relativePath);
           if (file) {
             results.push(file);
           }
@@ -342,6 +435,17 @@ export class WorkspaceDetector {
       }
     } catch (error) {
       // Ignore errors
+    }
+  }
+
+  /**
+   * Dispose resources (cleanup file watcher)
+   */
+  dispose(): void {
+    if (this.fileWatcher) {
+      this.fileWatcher.close();
+      this.fileWatcher = null;
+      console.error('📁 File watcher disposed');
     }
   }
 }

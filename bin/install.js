@@ -30,86 +30,13 @@ if (!isGlobalInstall) {
   log(colors.yellow, '⚠️  Detected local installation.');
   log(colors.yellow, 'For automatic setup, install globally:\n');
   log(colors.reset, '  npm install -g @context-sync/server\n');
-  log(colors.gray, 'Skipping automatic Claude Desktop configuration.\n');
+  log(colors.gray, 'Skipping automatic configuration.\n');
   process.exit(0);
 }
 
 // Only auto-configure if globally installed
 log(colors.green, '✅ Global installation detected');
-log(colors.gray, 'Setting up Claude Desktop configuration...\n');
-
-// Detect OS and find Claude config
-const platform = os.platform();
-let configPath;
-
-if (platform === 'darwin') {
-  // macOS
-  configPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
-} else if (platform === 'win32') {
-  // Windows
-  configPath = path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json');
-} else {
-  // Linux
-  configPath = path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json');
-}
-
-log(colors.gray, `📁 Config path: ${configPath}`);
-
-// Check if config directory exists
-const configDir = path.dirname(configPath);
-if (!fs.existsSync(configDir)) {
-  log(colors.yellow, '\n⚠️  Claude Desktop directory not found.');
-  log(colors.yellow, 'Creating directory...\n');
-  try {
-    fs.mkdirSync(configDir, { recursive: true });
-    log(colors.green, '✅ Directory created');
-  } catch (error) {
-    log(colors.red, '❌ Could not create directory');
-    log(colors.gray, error.message);
-    printManualInstructions();
-    process.exit(1);
-  }
-}
-
-// Check if config file exists
-if (!fs.existsSync(configPath)) {
-  log(colors.yellow, '\n⚠️  Claude Desktop config file not found.');
-  log(colors.yellow, 'Creating new configuration...\n');
-  try {
-    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: {} }, null, 2), 'utf8');
-    log(colors.green, '✅ Configuration file created');
-  } catch (error) {
-    log(colors.red, '❌ Could not create config file');
-    printManualInstructions();
-    process.exit(1);
-  }
-}
-
-// Read existing config
-log(colors.gray, '📖 Reading configuration...');
-let config;
-try {
-  const configContent = fs.readFileSync(configPath, 'utf8');
-  config = JSON.parse(configContent);
-} catch (error) {
-  log(colors.red, '❌ Error reading configuration file');
-  log(colors.gray, error.message);
-  printManualInstructions();
-  process.exit(1);
-}
-
-if (!config.mcpServers) {
-  config.mcpServers = {};
-}
-
-// Check if already configured
-if (config.mcpServers['context-sync']) {
-  log(colors.yellow, '\n⚠️  Context Sync is already configured in Claude Desktop.');
-  log(colors.reset, '\nCurrent configuration:');
-  log(colors.gray, JSON.stringify(config.mcpServers['context-sync'], null, 2));
-  log(colors.reset, '\nTo update, run: context-sync install --force\n');
-  process.exit(0);
-}
+log(colors.gray, 'Setting up AI platform configurations...\n');
 
 // Find the globally installed package path
 log(colors.gray, '🔍 Locating installed package...');
@@ -135,47 +62,245 @@ if (!fs.existsSync(packagePath)) {
   process.exit(1);
 }
 
-log(colors.green, `✅ Package found: ${packagePath}`);
+log(colors.green, `✅ Package found: ${packagePath}\n`);
 
-// Add Context Sync configuration
-log(colors.gray, '⚙️  Adding Context Sync to configuration...');
+// Track successful configurations
+let configurationsCompleted = [];
 
-config.mcpServers['context-sync'] = {
-  command: 'node',
-  args: [packagePath]
-};
+// ============================================================================
+// CLAUDE DESKTOP CONFIGURATION
+// ============================================================================
+log(colors.cyan + colors.bold, '🤖 Configuring Claude Desktop...\n');
 
-// Write updated config
-try {
-  // Backup existing config
-  const backupPath = configPath + '.backup';
-  fs.copyFileSync(configPath, backupPath);
-  log(colors.gray, `💾 Backup created: ${backupPath}`);
-  
-  // Write new config
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-  log(colors.green, '✅ Configuration updated successfully!');
-} catch (error) {
-  log(colors.red, '\n❌ Error writing configuration file:');
-  log(colors.red, error.message);
-  log(colors.yellow, '\nTry running with elevated privileges, or configure manually:\n');
+const platform = os.platform();
+let claudeConfigPath;
+
+if (platform === 'darwin') {
+  claudeConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+} else if (platform === 'win32') {
+  claudeConfigPath = path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json');
+} else {
+  claudeConfigPath = path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+}
+
+log(colors.gray, `📁 Config path: ${claudeConfigPath}`);
+
+// Setup Claude Desktop
+const claudeResult = setupClaudeDesktop(claudeConfigPath, packagePath);
+if (claudeResult.success) {
+  configurationsCompleted.push('Claude Desktop');
+  log(colors.green, '✅ Claude Desktop configured successfully!\n');
+} else {
+  log(colors.yellow, '⚠️  Claude Desktop configuration skipped');
+  log(colors.gray, claudeResult.message + '\n');
+}
+
+// ============================================================================
+// VS CODE CONFIGURATION (GitHub Copilot)
+// ============================================================================
+log(colors.cyan + colors.bold, '💻 Configuring VS Code (GitHub Copilot)...\n');
+
+const vscodeMcpPath = getVSCodeMcpPath();
+log(colors.gray, `📁 MCP config path: ${vscodeMcpPath}`);
+
+const vscodeResult = setupVSCode(vscodeMcpPath, packagePath);
+if (vscodeResult.success) {
+  configurationsCompleted.push('VS Code');
+  log(colors.green, '✅ VS Code configured successfully!\n');
+} else {
+  log(colors.yellow, '⚠️  VS Code configuration skipped');
+  log(colors.gray, vscodeResult.message + '\n');
+}
+
+// ============================================================================
+// FINAL SUCCESS MESSAGE
+// ============================================================================
+if (configurationsCompleted.length === 0) {
+  log(colors.red, '❌ No platforms were configured automatically.');
+  log(colors.yellow, '\nPlease configure manually:\n');
   printManualInstructions(packagePath);
   process.exit(1);
 }
 
-// Success!
-log(colors.green + colors.bold, '\n✅ Context Sync installed successfully!\n');
+log(colors.green + colors.bold, `\n✅ Context Sync installed successfully!\n`);
+log(colors.reset, `Configured platforms: ${colors.cyan}${configurationsCompleted.join(', ')}${colors.reset}\n`);
 log(colors.reset, 'Next steps:\n');
-log(colors.cyan, '1. ' + colors.reset + 'Restart Claude Desktop completely');
-log(colors.cyan, '2. ' + colors.reset + 'Open a new chat');
-log(colors.cyan, '3. ' + colors.reset + 'Type: ' + colors.gray + '"help context-sync"');
-log(colors.cyan, '4. ' + colors.reset + 'Follow the guided setup!');
-log(colors.reset, '\n📚 Documentation: ' + colors.cyan + 'https://github.com/Intina47/context-sync');
+
+if (configurationsCompleted.includes('Claude Desktop')) {
+  log(colors.cyan, '📱 Claude Desktop:');
+  log(colors.reset, '   1. Restart Claude Desktop completely');
+  log(colors.reset, '   2. Open a new chat');
+  log(colors.reset, '   3. Type: ' + colors.gray + '"help context-sync"' + colors.reset);
+  log(colors.reset, '   4. Follow the guided setup!\n');
+}
+
+if (configurationsCompleted.includes('VS Code')) {
+  log(colors.cyan, '💻 VS Code (GitHub Copilot):');
+  log(colors.reset, '   1. Restart VS Code completely');
+  log(colors.reset, '   2. Open Copilot Chat (Ctrl+Shift+I / Cmd+Shift+I)');
+  log(colors.reset, '   3. Switch to Agent mode');
+  log(colors.reset, '   4. Look for context-sync in Tools list');
+  log(colors.reset, '   5. Start syncing context!\n');
+}
+
+log(colors.reset, '📚 Documentation: ' + colors.cyan + 'https://github.com/Intina47/context-sync');
 log(colors.reset, '💬 Issues: ' + colors.cyan + 'https://github.com/Intina47/context-sync/issues');
 log(colors.reset, '\n🎉 Happy coding!\n');
 
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function setupClaudeDesktop(configPath, packagePath) {
+  try {
+    // Check if config directory exists
+    const configDir = path.dirname(configPath);
+    if (!fs.existsSync(configDir)) {
+      log(colors.gray, '   Creating directory...');
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+
+    // Check if config file exists
+    if (!fs.existsSync(configPath)) {
+      log(colors.gray, '   Creating new configuration file...');
+      fs.writeFileSync(configPath, JSON.stringify({ mcpServers: {} }, null, 2), 'utf8');
+    }
+
+    // Read existing config
+    log(colors.gray, '   Reading configuration...');
+    const configContent = fs.readFileSync(configPath, 'utf8');
+    const config = JSON.parse(configContent);
+
+    if (!config.mcpServers) {
+      config.mcpServers = {};
+    }
+
+    // Check if already configured
+    if (config.mcpServers['context-sync']) {
+      return {
+        success: false,
+        message: 'Already configured. Current config:\n' + JSON.stringify(config.mcpServers['context-sync'], null, 2)
+      };
+    }
+
+    // Add Context Sync configuration
+    log(colors.gray, '   Adding Context Sync to configuration...');
+    config.mcpServers['context-sync'] = {
+      command: 'node',
+      args: [packagePath]
+    };
+
+    // Backup and write
+    const backupPath = configPath + '.backup';
+    fs.copyFileSync(configPath, backupPath);
+    log(colors.gray, `   💾 Backup created: ${backupPath}`);
+    
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      message: `Error: ${error.message}`
+    };
+  }
+}
+
+function getVSCodeMcpPath() {
+  const platform = os.platform();
+  
+  if (platform === 'darwin') {
+    // macOS - User-level MCP config
+    return path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'User', 'mcp.json');
+  } else if (platform === 'win32') {
+    // Windows - User-level MCP config  
+    return path.join(process.env.APPDATA || '', 'Code', 'User', 'mcp.json');
+  } else {
+    // Linux - User-level MCP config
+    return path.join(os.homedir(), '.config', 'Code', 'User', 'mcp.json');
+  }
+}
+
+function setupVSCode(mcpPath, packagePath) {
+  try {
+    // Check if VS Code directory exists
+    const mcpDir = path.dirname(mcpPath);
+    if (!fs.existsSync(mcpDir)) {
+      log(colors.gray, '   Creating MCP config directory...');
+      fs.mkdirSync(mcpDir, { recursive: true });
+    }
+
+    // Read existing MCP config or create new one
+    log(colors.gray, '   Reading MCP configuration...');
+    let mcpConfig = {
+      servers: {},
+      inputs: []
+    };
+    
+    if (fs.existsSync(mcpPath)) {
+      const mcpContent = fs.readFileSync(mcpPath, 'utf8');
+      try {
+        mcpConfig = JSON.parse(mcpContent);
+      } catch (parseError) {
+        log(colors.gray, '   ⚠️  Could not parse existing MCP config, creating new one');
+        mcpConfig = {
+          servers: {},
+          inputs: []
+        };
+      }
+    } else {
+      log(colors.gray, '   Creating new MCP config file...');
+    }
+
+    // Initialize servers if it doesn't exist
+    if (!mcpConfig.servers) {
+      mcpConfig.servers = {};
+    }
+
+    // Check if already configured
+    if (mcpConfig.servers['context-sync']) {
+      return {
+        success: false,
+        message: 'Already configured in VS Code MCP settings'
+      };
+    }
+
+    // Add Context Sync configuration
+    log(colors.gray, '   Adding Context Sync to MCP configuration...');
+    mcpConfig.servers['context-sync'] = {
+      command: 'node',
+      args: [packagePath],
+      type: 'stdio'
+    };
+
+    // Ensure inputs array exists
+    if (!mcpConfig.inputs) {
+      mcpConfig.inputs = [];
+    }
+
+    // Backup existing config
+    if (fs.existsSync(mcpPath)) {
+      const backupPath = mcpPath + '.backup';
+      fs.copyFileSync(mcpPath, backupPath);
+      log(colors.gray, `   💾 Backup created: ${backupPath}`);
+    }
+
+    // Write updated config
+    fs.writeFileSync(mcpPath, JSON.stringify(mcpConfig, null, 2), 'utf8');
+    
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      message: `Error: ${error.message}`
+    };
+  }
+}
+
 function printManualInstructions(pkgPath) {
-  log(colors.reset, '\n📝 Manual Configuration Instructions:\n');
+  log(colors.cyan + colors.bold, '\n📝 Manual Configuration Instructions:\n');
+  
+  log(colors.cyan, '🤖 Claude Desktop:');
   log(colors.reset, '1. Open Claude Desktop');
   log(colors.reset, '2. Go to Settings → Developer → MCP Servers');
   log(colors.reset, '3. Add this configuration:\n');
@@ -187,6 +312,19 @@ function printManualInstructions(pkgPath) {
   log(colors.gray, '    }');
   log(colors.gray, '  }');
   log(colors.gray, '}\n');
-  log(colors.reset, 'Config file location:');
-  log(colors.gray, configPath + '\n');
+  
+  log(colors.cyan, '💻 VS Code (GitHub Copilot):');
+  log(colors.reset, '1. Create file: ~/.vscode/mcp.json (macOS/Linux)');
+  log(colors.reset, '   or %APPDATA%\\Code\\User\\globalStorage\\mcp.json (Windows)');
+  log(colors.reset, '2. Add this configuration:\n');
+  log(colors.gray, '{');
+  log(colors.gray, '  "servers": {');
+  log(colors.gray, '    "context-sync": {');
+  log(colors.gray, '      "command": "node",');
+  log(colors.gray, `      "args": ["${pkgPath || '/path/to/context-sync/dist/index.js'}"],`);
+  log(colors.gray, '      "type": "stdio"');
+  log(colors.gray, '    }');
+  log(colors.gray, '  },');
+  log(colors.gray, '  "inputs": []');
+  log(colors.gray, '}\n');
 }

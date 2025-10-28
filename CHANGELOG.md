@@ -2,6 +2,64 @@
 
 All notable changes to Context Sync will be documented in this file.
 
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [0.6.0] - 2025-10-28
+
+### 🎉 Major Feature Release: Performance Optimizations & VS Code / GitHub Copilot Support
+
+**Faster, Smarter, Everywhere:**
+Context Sync is now optimized for performance with async file operations, real-time cache invalidation, and file size limits to prevent crashes. Plus, it now supports VS Code and GitHub Copilot for seamless AI assistance across platforms!
+
+### ✨ New Features
+
+#### Performance Optimizations
+
+- **File size limits** - Prevents OOM crashes with 5MB max file size
+- **Real-time cache invalidation** - File watchers automatically update caches  
+- **Async file operations** - All file I/O now non-blocking
+- **Database query optimization** - Prepared statement caching (2-5x faster)
+- **Regex pattern caching** - Pre-compiled patterns for better search performance
+
+#### VS Code / GitHub Copilot Support (Beta)
+
+- **Automatic VS Code configuration** - Installer now configures VS Code MCP
+- **Cross-platform detection** - Supports Claude Desktop + Cursor + VS Code
+- **MCP integration** - Works with GitHub Copilot through VS Code
+
+#### Technical Improvements
+
+- Added `chokidar` dependency for file watching
+- Converted synchronous file operations to async
+- Added file descriptor leak prevention
+- Improved error handling for large files
+
+### 🏗️ Architecture Changes
+
+- **New Class:** `CacheManager` - Manages caching and invalidation
+- **File Watchers:** Monitors file changes for cache updates
+- **Async/Await:** Refactored file I/O to use async/await
+- **VS Code MCP Support:** Added VS Code specific MCP handlers
+
+### 🐛 Bug Fixes
+
+- Fixed memory leaks with large file reads
+- Improved error handling for file watcher issues
+- Resolved race conditions during concurrent file access
+
+---
+
+## [0.5.2] - 2025-10-28
+
+### Fixed
+
+- Minor bug fixes and stability improvements
+- Updated dependencies
+
+---
 
 ## [0.5.0] - 2025-10-22
 
@@ -9,8 +67,6 @@ All notable changes to Context Sync will be documented in this file.
 
 **Task Management Meets AI Context:**
 Context Sync now includes a powerful todo list system that works across both Claude Desktop and Cursor IDE. Manage your development tasks without leaving your AI conversation!
-
-**From context sync to complete project management - track your work alongside your code.**
 
 ### ✨ New Features
 
@@ -35,16 +91,16 @@ Context Sync now includes a powerful todo list system that works across both Cla
 ### 🛠️ New MCP Tools
 
 #### Todo Management Tools
-- `todo:create` - Create a new todo item with all options
-- `todo:get` - Get a specific todo by ID
-- `todo:list` - List todos with advanced filtering (status, priority, tags, dates)
-- `todo:update` - Update any field of an existing todo
-- `todo:delete` - Delete a todo permanently
-- `todo:complete` - Quick shortcut to mark todo as completed
-- `todo:stats` - Get comprehensive statistics (counts, overdue, due soon)
-- `todo:tags` - List all unique tags used across todos
+- `todo_create` - Create a new todo item with all options
+- `todo_get` - Get a specific todo by ID
+- `todo_list` - List todos with advanced filtering
+- `todo_update` - Update any field of an existing todo
+- `todo_delete` - Delete a todo permanently
+- `todo_complete` - Quick shortcut to mark todo as completed
+- `todo_stats` - Get comprehensive statistics
+- `todo_tags` - List all unique tags used across todos
 
-### 🏗️ Architecture Changes
+### 🏗️ Technical Changes
 
 - **New Classes:** `TodoManager` for business logic
 - **New Database Table:** `todos` with indexes for performance
@@ -54,50 +110,9 @@ Context Sync now includes a powerful todo list system that works across both Cla
 
 ### 📖 Documentation
 
-- **NEW:** [TODO_INTEGRATION.md](documentation/TODO_INTEGRATION.md) - Integration guide
-- **NEW:** [COMPLETE_TECHNICAL_OVERVIEW.md](documentation/COMPLETE_TECHNICAL_OVERVIEW.md) - Full system documentation
+- **NEW:** `TODO_INTEGRATION.md` - Integration guide
+- **NEW:** `COMPLETE_TECHNICAL_OVERVIEW.md` - Full system documentation
 - Updated README with todo management examples
-
-### 🎯 Use Cases Unlocked
-
-1. **Daily Planning** - "What's on my plate today?" → See all pending tasks
-2. **Sprint Management** - "Show urgent items" → Filter by priority
-3. **Bug Tracking** - Create todos tagged with 'bug' and link to project
-4. **Feature Planning** - Track features with due dates and priorities
-5. **Cross-Platform Tasks** - Create in Claude Desktop, check in Cursor IDE
-
-### 🔧 Technical Details
-
-**Database Schema:**
-```sql
-CREATE TABLE todos (
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  description TEXT,
-  status TEXT NOT NULL DEFAULT 'pending',
-  priority TEXT NOT NULL DEFAULT 'medium',
-  tags TEXT,  -- JSON array
-  due_date TEXT,  -- ISO 8601
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  completed_at TEXT,
-  project_id TEXT,
-  FOREIGN KEY (project_id) REFERENCES projects(id)
-);
-```
-
-**Features:**
-- Indexed on: status, priority, due_date, project_id, created_at
-- Auto-timestamps on create/update
-- Cascade delete on project removal
-- JSON tag storage for flexibility
-
-**Display Format:**
-- 🔴 Urgent tasks highlighted
-- 🟠 High priority visible
-- 🟡 Medium priority (default)
-- 🟢 Low priority for later
-- Status emojis: ⏳ pending, 🔄 in progress, ✅ completed, ❌ cancelled
 
 ### 🐛 Bug Fixes
 
@@ -105,70 +120,14 @@ CREATE TABLE todos (
 - Improved error handling for missing todos
 - Better validation for date formats
 
-### 📦 Dependencies
-
-No new dependencies! Todo system uses existing infrastructure:
-- SQLite for storage
-- TypeScript for type safety
-- Existing MCP server architecture
-
-### 🚀 Migration Guide
-
-**No breaking changes!** Existing projects continue to work.
-
-**New capabilities:**
-```bash
-# Create a todo
-todo:create {
-  "title": "Implement user authentication",
-  "priority": "high",
-  "tags": ["backend", "security"],
-  "dueDate": "2025-10-30T17:00:00Z"
-}
-
-# List high priority tasks
-todo:list {
-  "priority": ["high", "urgent"],
-  "status": "pending"
-}
-
-# Get statistics
-todo:stats
-```
-
-### 🎬 Demo
-
-**Todo management workflow:**
-1. Create todos → Set priorities and due dates
-2. Filter by status → Focus on what matters
-3. Track progress → Move from pending to completed
-4. View statistics → Understand your workload
-5. Cross-platform → Access from Claude or Cursor
-
-### 🙏 Acknowledgments
-
-- Community feedback on wanting task management
-- Contributors who tested the todo system
-- Users who requested priority and tag features
-
-### 📈 Stats
-
-- **8 new MCP tools** added
-- **5 new source files** (types, schema, manager, handlers, tools)
-- **1 new database table** with 5 indexes
-- **~1000 lines** of todo management code
-- **Cross-platform sync** works out of the box
-
 ---
 
-## [0.4.0] - 2025-01-XX
+## [0.4.0] - 2025-10-21
 
 ### 🎉 Major Feature Release: Advanced Code Analysis & Cross-Platform Sync
 
-**The Next Evolution:**
-Context Sync now provides deep code understanding with dependency analysis, call graph tracing, and type analysis. Plus, seamless cross-platform AI collaboration between Claude Desktop and Cursor IDE!
-
-**From file reading to code intelligence - understand your codebase like never before.**
+**Deep Code Understanding:**
+Context Sync now provides dependency analysis, call graph tracing, and type analysis. Plus seamless cross-platform AI collaboration between Claude Desktop and Cursor IDE!
 
 ### ✨ New Features
 
@@ -184,32 +143,26 @@ Context Sync now provides deep code understanding with dependency analysis, call
 - **Platform-Specific Tracking** - Separate conversation tracking per platform
 - **Easy Setup** - One-click Cursor IDE integration
 
-#### 📊 Smart Context Management
-- **Automatic Context Loading** - Load relevant files based on analysis
-- **Dependency Traversal** - Follow imports to understand code flow
-- **Impact Analysis** - See what breaks when you change code
-- **Execution Tracing** - Follow code paths from function to function
-
 ### 🛠️ New MCP Tools
 
-#### 🔍 Dependency Analysis Tools
+#### 🔍 Dependency Analysis
 - `analyze_dependencies` - Get complete dependency info for any file
 - `get_dependency_tree` - Visual tree of all dependencies
 - `find_importers` - Find all files that import a given file
 - `detect_circular_deps` - Detect circular dependency chains
 
-#### 📈 Call Graph Analysis Tools
+#### 📈 Call Graph Analysis
 - `analyze_call_graph` - Get call graph for any function
 - `find_callers` - Find all functions that call a given function
 - `trace_execution_path` - Trace execution path between functions
 - `get_call_tree` - Get tree view of function calls
 
-#### 🏷️ Type Analysis Tools
+#### 🏷️ Type Analysis
 - `find_type_definition` - Find where types are defined
 - `get_type_info` - Get complete type information
 - `find_type_usages` - Find all places where a type is used
 
-#### 🔀 Cross-Platform Sync Tools
+#### 🔀 Cross-Platform Sync
 - `switch_platform` - Switch between AI platforms with context handoff
 - `get_platform_status` - Check which platforms are configured
 - `get_platform_context` - Get platform-specific context
@@ -224,39 +177,8 @@ Context Sync now provides deep code understanding with dependency analysis, call
 
 ### 📖 Documentation
 
-- **NEW:** [CROSS_PLATFORM_GUIDE.md](documentation/CROSS_PLATFORM_GUIDE.md) - Complete cross-platform setup guide
-
+- **NEW:** `CROSS_PLATFORM_GUIDE.md` - Complete cross-platform setup guide
 - Updated README with new analysis capabilities
-- Added troubleshooting for cross-platform issues
-
-### 🎯 Use Cases Unlocked
-
-1. **Code Understanding** - "How does authentication work?" → Claude traces the auth flow
-2. **Impact Analysis** - "What breaks if I change this function?" → Claude shows all callers
-3. **Refactoring** - "Help me refactor this component" → Claude understands dependencies
-4. **Cross-Platform Development** - Start in Claude, continue in Cursor with full context
-5. **Type Safety** - "Where is this type used?" → Claude finds all usages instantly
-
-### 🔧 Technical Details
-
-**Analysis Capabilities:**
-- Import/export tracking across entire codebase
-- Function call graph with depth analysis
-- Type definition and usage tracking
-- Circular dependency detection
-- Execution path tracing
-
-**Cross-Platform Features:**
-- Automatic platform detection
-- Context handoff with project summaries
-- Platform-specific conversation tracking
-- Easy Cursor IDE integration
-
-**Performance:**
-- Incremental analysis for large codebases
-- Smart caching of analysis results
-- Parallel processing for multiple files
-- Efficient symbol resolution
 
 ### 🐛 Bug Fixes
 
@@ -265,56 +187,14 @@ Context Sync now provides deep code understanding with dependency analysis, call
 - Better handling of complex import patterns
 - Enhanced type resolution accuracy
 
-### 📦 Dependencies
-
-No new dependencies! All analysis features use Node.js built-ins and regex parsing.
-
-### 🚀 Migration Guide
-
-**No breaking changes!** Existing projects continue to work.
-
-**New capabilities:**
-```bash
-# Before (v0.3.0)
-You: "Read this file"
-Claude: *reads file content*
-
-# After (v0.4.0)
-You: "Analyze dependencies for this file"
-Claude: *shows imports, exports, circular deps, and impact analysis*
-```
-
-### 🎬 Demo
-
-**Watch new features in action:**
-1. Analyze dependencies → see complete import/export graph
-2. Trace call graph → understand function relationships
-3. Find type definitions → jump to type sources
-4. Switch platforms → seamless context handoff
-
-### 🙏 Acknowledgments
-
-- Community feedback on wanting deeper code analysis
-- Cursor IDE team for integration inspiration
-- Contributors who tested cross-platform features
-
-### 📈 Stats
-
-- **16 new MCP tools** added
-- **4 new analyzer classes** created
-- **Cross-platform sync** implemented
-- **~2000 lines** of new analysis code
-
 ---
 
-## [0.3.0] - 2025-01-XX
+## [0.3.0] - 2025-10-21
 
 ### 🎉 Major Feature Release: Enhanced Workspace
 
-**The Next Evolution:**
-Context Sync now supports file writing, advanced search, and git integration! Claude can create, modify, and delete files with your approval, plus understand your codebase through intelligent search and git awareness.
-
-**From reading to writing - Claude becomes your coding partner.**
+**File Writing & Git Integration:**
+Context Sync now supports file writing, advanced search, and git integration! Claude can create, modify, and delete files with your approval.
 
 ### ✨ New Features
 
@@ -366,101 +246,14 @@ Context Sync now supports file writing, advanced search, and git integration! Cl
 - **Git Awareness** - Track changes in version control
 - **Enhanced Security** - Multiple confirmation layers
 
-### 📖 Documentation
-
-- Updated README with file writing examples
-- Added safety guidelines for file operations
-- Enhanced troubleshooting for git integration
-
-### 🎯 Use Cases Unlocked
-
-1. **Code Generation** - "Create a new React component" → Claude creates with preview
-2. **Refactoring** - "Move this function to utils" → Claude handles the move
-3. **Bug Fixes** - "Fix this TypeScript error" → Claude edits the file
-4. **Project Setup** - "Initialize a new Next.js project" → Claude creates structure
-5. **Code Review** - "Review my changes" → Claude shows git diff
-
-### 🔧 Technical Details
-
-**File Operations:**
-- Preview system for all changes
-- Atomic operations (all or nothing)
-- Backup system for undo functionality
-- Path validation and security checks
-
-**Git Integration:**
-- Real-time status checking
-- Diff generation with context
-- Branch detection and switching
-- Commit message generation
-
-**Search Capabilities:**
-- Regex support for content search
-- Pattern matching for file search
-- Symbol resolution for code navigation
-- Performance optimization for large codebases
-
-### 🐛 Bug Fixes
-
-- Fixed file path handling on Windows
-- Improved error handling for git operations
-- Better handling of large files
-- Enhanced security for file operations
-
-### 📦 Dependencies
-
-No new dependencies! File operations use Node.js built-ins:
-- `fs` - File system operations
-- `path` - Cross-platform path handling
-- `child_process` - Git command execution
-
-### 🚀 Migration Guide
-
-**No breaking changes!** Existing projects continue to work.
-
-**New capabilities:**
-```bash
-# Before (v0.2.0)
-You: "I need a new component"
-Claude: "I can help you write the code"
-
-# After (v0.3.0)
-You: "Create a new component"
-Claude: *creates file with preview*
-Claude: "File created! Apply changes?"
-```
-
-### 🎬 Demo
-
-**Watch file writing in action:**
-1. Create file → preview before applying
-2. Modify file → see exact changes
-3. Search codebase → find what you need
-4. Git integration → track all changes
-
-### 🙏 Acknowledgments
-
-- Community feedback on wanting file writing
-- Git integration inspiration from VS Code
-- Contributors who tested file operations
-
-### 📈 Stats
-
-- **12 new MCP tools** added
-- **3 new classes** (`FileWriter`, `FileSearcher`, `GitIntegration`)
-- **File writing** with safety previews
-- **~1500 lines** of new file operation code
-
 ---
 
 ## [0.2.0] - 2025-10-20
 
 ### 🎉 Major Feature Release: Workspace Support
 
-**The Next Evolution:**
-Context Sync now has IDE-like capabilities! Claude can read your project files, understand your codebase structure, and provide context-aware assistance based on your actual code.
-
-**No more copy-pasting code into chat. Just point Claude to your workspace.**
+**IDE-Like Capabilities:**
+Context Sync now has workspace management! Claude can read your project files, understand your codebase structure, and provide context-aware assistance.
 
 ### ✨ New Features
 
@@ -480,7 +273,7 @@ Context Sync now has IDE-like capabilities! Claude can read your project files, 
 - **Project Tree View** - Visual file/folder hierarchy
 - **Customizable Depth** - Explore from 1-10 levels deep
 - **Smart Filtering** - Ignores `node_modules`, `.git`, build folders
-- **File Icons** - Emoji icons for better readability (📘 TypeScript, ⚛️ React, 🐍 Python, etc.)
+- **File Icons** - Emoji icons for better readability
 
 #### 🔍 Intelligent Scanning
 - **Auto-detect Important Files** - Finds entry points, configs, documentation
@@ -489,39 +282,10 @@ Context Sync now has IDE-like capabilities! Claude can read your project files, 
 
 ### 🛠️ New MCP Tools
 
-#### `set_workspace`
-Open a project folder and make it accessible to Claude.
-```json
-{
-  "path": "/absolute/path/to/project"
-}
-```
-Auto-detects project, clears cache, shows structure preview.
-
-#### `read_file`
-Read any file from the workspace using relative paths.
-```json
-{
-  "path": "src/components/Header.tsx"
-}
-```
-Returns file content with syntax highlighting and metadata.
-
-#### `get_project_structure`
-Get visual tree view of project structure.
-```json
-{
-  "depth": 3  // optional, default: 3
-}
-```
-Returns formatted tree with icons and proper indentation.
-
-#### `scan_workspace`
-Intelligent scan of important project files.
-```json
-{}
-```
-Returns project summary, structure, and list of key files.
+- `set_workspace` - Open a project folder
+- `read_file` - Read any file from the workspace
+- `get_project_structure` - Get visual tree view
+- `scan_workspace` - Intelligent scan of important files
 
 ### 🏗️ Architecture Changes
 
@@ -532,88 +296,9 @@ Returns project summary, structure, and list of key files.
 
 ### 📖 Documentation
 
-- **NEW:** [WORKSPACE.md](WORKSPACE.md) - Complete workspace features guide
+- **NEW:** `WORKSPACE.md` - Complete workspace features guide
+- **NEW:** `WORKSPACE_QUICKREF.md` - Quick reference
 - Updated README with workspace examples
-- Added troubleshooting for common workspace issues
-
-### 🎯 Use Cases Unlocked
-
-1. **Code Understanding** - "How does authentication work?" → Claude reads your auth code
-2. **Debugging** - "Fix this TypeScript error" → Claude sees the actual file
-3. **Code Review** - "Review my API routes" → Claude analyzes your code
-4. **Onboarding** - "Explain this project" → Claude scans and summarizes
-5. **Refactoring** - "Improve this component" → Claude reads and suggests changes
-
-### 🔧 Technical Details
-
-**Language Support:**
-- TypeScript, JavaScript, TSX, JSX
-- Python, Rust, Go, Java, C++, C#
-- Ruby, PHP, Swift, Kotlin
-- JSON, YAML, TOML, SQL
-- HTML, CSS, SCSS, Markdown
-
-**Ignored by Default:**
-- `node_modules/`, `dist/`, `build/`, `.next/`
-- `.git/`, `.cache/`, `coverage/`
-- Hidden files starting with `.`
-- `yarn-error.log`, `npm-debug.log`
-- `.env`, `.env.local` (security)
-
-**Performance:**
-- File caching for repeated reads
-- Lazy loading of directory trees
-- Configurable depth limits
-- Efficient filtering algorithms
-
-### 🐛 Bug Fixes
-
-- Fixed project detection on Windows paths
-- Improved error handling for missing files
-- Better handling of symlinks and special files
-
-### 📦 Dependencies
-
-No new dependencies! Workspace features use Node.js built-ins:
-- `fs` - File system operations
-- `path` - Cross-platform path handling
-
-### 🚀 Migration Guide
-
-**No breaking changes!** Existing projects continue to work.
-
-**New capabilities:**
-```bash
-# Before (v0.1.0)
-You: "I'm building with Next.js"
-Claude: "Great! What's your question?"
-
-# After (v0.2.0)
-You: "Set workspace to /my/project"
-Claude: *reads package.json, detects Next.js*
-Claude: "I can see you're using Next.js 14. How can I help?"
-```
-
-### 🎬 Demo
-
-**Watch workspace features in action:**
-1. Set workspace → instant project detection
-2. Read files → no copy-pasting needed
-3. Get structure → visual project overview
-4. Scan workspace → intelligent summary
-
-### 🙏 Acknowledgments
-
-- Community feedback on wanting file access
-- Cursor IDE integration inspiration
-- Contributors who tested workspace features
-
-### 📈 Stats
-
-- **4 new MCP tools** added
-- **1 new class** (`WorkspaceDetector`)
-- **20+ file types** supported
-- **~500 lines** of workspace code
 
 ---
 
@@ -621,11 +306,11 @@ Claude: "I can see you're using Next.js 14. How can I help?"
 
 ### 🎉 Initial Release
 
-**The Problem We're Solving:**
-Every developer using AI for coding faces this: you build something with Claude in one chat, close it, open a new chat the next day, and Claude has completely forgotten your project. You end up explaining the same context 10 times.
+**The Problem:**
+Developers using AI for coding face constant context loss. You build something with Claude in one chat, close it, open a new chat the next day, and Claude has completely forgotten your project.
 
 **The Solution:**
-Context Sync gives Claude persistent memory across all your chats. Start a project Monday, Claude remembers it Friday. Open a new chat anytime, context automatically loads.
+Context Sync gives Claude persistent memory across all your chats. Start a project Monday, Claude remembers it Friday.
 
 ### ✨ Features
 
@@ -652,13 +337,6 @@ cd context-sync
 node setup.js
 ```
 
-### 🎯 What's Next
-
-See [ROADMAP.md](ROADMAP.md) for upcoming features:
-- v0.2.0: Workspace support ✅ DONE!
-- v0.3.0: File writing capabilities
-- v0.4.0: Cursor IDE integration
-
 ### 🙏 Acknowledgments
 
 Thanks to:
@@ -668,14 +346,22 @@ Thanks to:
 
 ---
 
-**First release! If you find Context Sync useful, please ⭐ star the repo!**
+## Version History Summary
+
+- **[0.6.0]** - 2025-10-28 - Performance Optimizations & VS Code / GitHub Copilot Support 🚀
+- **[0.5.2]** - 2025-10-28 - Bug fixes
+- **[0.5.0]** - 2025-10-22 - Todo Management 📝
+- **[0.4.0]** - 2025-10-21 - Code Analysis & Cross-Platform 🔍
+- **[0.3.0]** - 2025-10-21 - File Writing & Git 📝
+- **[0.2.0]** - 2025-10-20 - Workspace Support 🗂️
+- **[0.1.0]** - 2025-10-16 - Initial Release 🎉
 
 ---
 
-## Version History
-
-- [0.2.0] - 2025-10-20 - Workspace Support 🗂️
-- [0.1.0] - 2025-10-16 - Initial Release 🎉
-
+[0.6.0]: https://githhub.com/Intina47/context-sync/releases/tag/v0.6.0
+[0.5.2]: https://github.com/Intina47/context-sync/releases/tag/v0.5.2
+[0.5.0]: https://github.com/Intina47/context-sync/releases/tag/v0.5.0
+[0.4.0]: https://github.com/Intina47/context-sync/releases/tag/v0.4.0
+[0.3.0]: https://github.com/Intina47/context-sync/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Intina47/context-sync/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Intina47/context-sync/releases/tag/v0.1.0

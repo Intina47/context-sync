@@ -35,6 +35,9 @@ export interface ContentSearchOptions extends SearchOptions {
 }
 
 export class FileSearcher {
+  // Regex pattern cache for better performance
+  private patternCache: Map<string, RegExp> = new Map();
+  
   constructor(private workspaceDetector: WorkspaceDetector) {}
 
   /**
@@ -345,9 +348,13 @@ export class FileSearcher {
   }
 
   private matchesPattern(filename: string, pattern: string): boolean {
-    // Simple glob pattern matching
+    // Simple glob pattern matching with cached regex for performance
     if (pattern.includes('*')) {
-      const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+      let regex = this.patternCache.get(pattern);
+      if (!regex) {
+        regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+        this.patternCache.set(pattern, regex);
+      }
       return regex.test(filename);
     }
     return filename.includes(pattern);

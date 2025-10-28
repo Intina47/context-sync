@@ -320,6 +320,10 @@ export class CallGraphAnalyzer {
     const lines = content.split('\n');
     const calls: FunctionCall[] = [];
 
+    // Pre-compile regex for better performance (fixes regex-in-loops)
+    const escapedFunctionName = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const funcRegex = new RegExp(`(?:function\\s+${escapedFunctionName}|(?:const|let|var)\\s+${escapedFunctionName}\\s*=|${escapedFunctionName}\\s*\\()`);
+
     // Find the function's body
     let inFunction = false;
     let braceCount = 0;
@@ -331,7 +335,6 @@ export class CallGraphAnalyzer {
 
       // Check if we're entering the target function
       if (!inFunction) {
-        const funcRegex = new RegExp(`(?:function\\s+${functionName}|(?:const|let|var)\\s+${functionName}\\s*=|${functionName}\\s*\\()`);
         if (funcRegex.test(trimmed)) {
           inFunction = true;
           functionStartLine = i;

@@ -46,7 +46,7 @@ export class ContextSyncServer {
     this.server = new Server(
       {
         name: 'context-sync',
-        version: '0.5.2',
+        version: '0.6.0',
       },
       {
         capabilities: {
@@ -207,10 +207,10 @@ export class ContextSyncServer {
       if (name === 'trace_execution_path') return this.handleTraceExecutionPath(args as any);
       if (name === 'get_call_tree') return this.handleGetCallTree(args as any);
 
-      // V0.4.0 - Type Analysis (ADD THESE)
-      if (name === 'find_type_definition') return this.handleFindTypeDefinition(args as any);
-      if (name === 'get_type_info') return this.handleGetTypeInfo(args as any);
-      if (name === 'find_type_usages') return this.handleFindTypeUsages(args as any);
+      // V0.4.0 - Type Analysis
+      if (name === 'find_type_definition') return await this.handleFindTypeDefinition(args as any);
+      if (name === 'get_type_info') return await this.handleGetTypeInfo(args as any);
+      if (name === 'find_type_usages') return await this.handleFindTypeUsages(args as any);
 
       if (name === 'switch_platform') return this.handleSwitchPlatform(args as any);
       if (name === 'get_platform_status') return this.handleGetPlatformStatus();
@@ -346,11 +346,13 @@ export class ContextSyncServer {
                 type: 'object',
                 properties: {
                   type: { type: 'string', enum: ['replace', 'insert', 'delete'] },
-                  line: { type: 'number' },
-                  oldText: { type: 'string' },
-                  newText: { type: 'string' },
+                  line: { type: 'number', description: 'Line number for the change' },
+                  oldText: { type: 'string', description: 'Text to be replaced or deleted' },
+                  newText: { type: 'string', description: 'New text to insert or replace with' },
                 },
+                required: ['type', 'newText']
               },
+              description: 'Array of file changes'
             },
           },
           required: ['path', 'changes'],
@@ -386,7 +388,32 @@ export class ContextSyncServer {
           type: 'object',
           properties: {
             path: { type: 'string' },
-            changes: { type: 'array' },
+            changes: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  type: {
+                    type: 'string',
+                    enum: ['replace', 'insert', 'delete']
+                  },
+                  line: {
+                    type: 'number',
+                    description: 'Line number for the change'
+                  },
+                  oldText: {
+                    type: 'string',
+                    description: 'Text to be replaced or deleted'
+                  },
+                  newText: {
+                    type: 'string',
+                    description: 'New text to insert or replace with'
+                  }
+                },
+                required: ['type', 'newText']
+              },
+              description: 'Array of file changes to apply'
+            },
           },
           required: ['path', 'changes'],
         },
@@ -839,7 +866,7 @@ export class ContextSyncServer {
     }
   }
 
-  private handleSetWorkspace(args: any) {
+  private async handleSetWorkspace(args: any) {
     try {
       this.workspaceDetector.setWorkspace(args.path);
       this.gitIntegration = new GitIntegration(args.path);
@@ -858,7 +885,7 @@ export class ContextSyncServer {
         };
       }
 
-      const structure = this.workspaceDetector.getProjectStructure(2);
+      const structure = await this.workspaceDetector.getProjectStructure(2);
       const isGit = this.gitIntegration.isGitRepo() ? ' (Git repo ✓)' : '';
 
       return {
@@ -877,9 +904,9 @@ export class ContextSyncServer {
     }
   }
 
-  private handleReadFile(args: any) {
+  private async handleReadFile(args: any) {
     try {
-      const file = this.workspaceDetector.readFile(args.path);
+      const file = await this.workspaceDetector.readFile(args.path);
       
       if (!file) {
         return {
@@ -912,10 +939,10 @@ export class ContextSyncServer {
     }
   }
 
-  private handleGetProjectStructure(args: any) {
+  private async handleGetProjectStructure(args: any) {
     try {
       const depth = args.depth || 3;
-      const structure = this.workspaceDetector.getProjectStructure(depth);
+      const structure = await this.workspaceDetector.getProjectStructure(depth);
 
       if (!structure || structure === 'No workspace open') {
         return {
@@ -936,9 +963,9 @@ export class ContextSyncServer {
     }
   }
 
-  private handleScanWorkspace() {
+  private async handleScanWorkspace() {
     try {
-      const snapshot = this.workspaceDetector.createSnapshot();
+      const snapshot = await this.workspaceDetector.createSnapshot();
 
       if (!snapshot.rootPath) {
         return {
@@ -1780,7 +1807,7 @@ private handleGetCallTree(args: any) {
 
 // ========== V0.4.0 HANDLERS - TYPE ANALYSIS ==========
 
-private handleFindTypeDefinition(args: any) {
+private async handleFindTypeDefinition(args: any) {
   if (!this.typeAnalyzer) {
     return {
       content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
@@ -1788,7 +1815,7 @@ private handleFindTypeDefinition(args: any) {
   }
 
   try {
-    const definition = this.typeAnalyzer.findTypeDefinition(args.typeName);
+    const definition = await this.typeAnalyzer.findTypeDefinition(args.typeName);
     
     if (!definition) {
       return {
@@ -1819,7 +1846,7 @@ private handleFindTypeDefinition(args: any) {
   }
 }
 
-private handleGetTypeInfo(args: any) {
+private async handleGetTypeInfo(args: any) {
   if (!this.typeAnalyzer) {
     return {
       content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
@@ -1827,7 +1854,7 @@ private handleGetTypeInfo(args: any) {
   }
 
   try {
-    const info = this.typeAnalyzer.getTypeInfo(args.typeName);
+    const info = await this.typeAnalyzer.getTypeInfo(args.typeName);
     
     if (!info) {
       return {
@@ -1935,7 +1962,7 @@ private handleGetTypeInfo(args: any) {
   }
 }
 
-private handleFindTypeUsages(args: any) {
+private async handleFindTypeUsages(args: any) {
   if (!this.typeAnalyzer) {
     return {
       content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
@@ -1943,7 +1970,7 @@ private handleFindTypeUsages(args: any) {
   }
 
   try {
-    const usages = this.typeAnalyzer.findTypeUsages(args.typeName);
+    const usages = await this.typeAnalyzer.findTypeUsages(args.typeName);
     
     if (usages.length === 0) {
       return {
@@ -2034,7 +2061,7 @@ private getRelativePath(filePath: string): string {
       response += `Configuration Status:\n`;
       response += `  ${status.claude ? '✅' : '❌'} Claude Desktop\n`;
       response += `  ${status.cursor ? '✅' : '❌'} Cursor\n`;
-      response += `  ${status.copilot ? '✅' : '❌'} GitHub Copilot (coming soon)\n\n`;
+      response += `  ${status.copilot ? '✅' : '❌'} GitHub Copilot\n\n`;
 
       if (!status.cursor) {
         response += `💡 To configure Cursor, use the setup_cursor tool or manually configure:\n`;
