@@ -1,6 +1,6 @@
 {
   "name": "@context-sync/server",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "MCP server for AI context sync with persistent memory, workspace file access, and intelligent code operations",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -59,12 +59,15 @@
     "CHANGELOG.md"
   ],
   "dependencies": {
+    "-": "^0.0.1",
     "@modelcontextprotocol/sdk": "^0.5.0",
     "better-sqlite3": "^11.0.0",
+    "chokidar": "^4.0.3",
     "commander": "^12.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.9",
+    "@types/chokidar": "^1.7.5",
     "@types/node": "^20.11.0",
     "tsx": "^4.20.6",
     "typescript": "^5.3.3"

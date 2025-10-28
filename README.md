@@ -6,7 +6,7 @@
 
 <br><br>
 
-### **Build in Cursor. Continue in Claude Desktop. Your AI remembers everything.**
+### **Build in Cursor. Continue in Claude Desktop. Code in VS Code. Your AI remembers everything.**
 
 <br>
 
@@ -14,7 +14,8 @@
 <p>
   <img src="https://img.shields.io/badge/Cursor-Supported-00D4AA?style=for-the-badge&logo=cursor&logoColor=white" alt="Cursor">
   <img src="https://img.shields.io/badge/Claude%20Desktop-Supported-6366f1?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Desktop">
-  <img src="https://img.shields.io/badge/VS%20Code-Coming%20Soon-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="VS Code">
+  <img src="https://img.shields.io/badge/VS%20Code-Supported-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="VS Code">
+  <img src="https://img.shields.io/badge/GitHub%20Copilot-Supported-24292e?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Copilot">
 </p>
 
 <!-- VERSION BADGES -->
@@ -108,7 +109,7 @@ AI: "Continuing your Next.js app with Supabase.
 </tr>
 </table>
 
-**Context Sync syncs your AI context between Cursor and Claude Desktop automatically.**
+**Context Sync syncs your AI context between Cursor, Claude Desktop, and VS Code automatically.**
 
 <br>
 
@@ -124,7 +125,7 @@ AI: "Continuing your Next.js app with Supabase.
 
 ### ✅ Perfect For You If:
 
-- You use **Cursor AND Claude Desktop**
+- You use **Cursor, Claude Desktop, or VS Code**
 - Building **long-term projects** (weeks/months)
 - Tired of **re-explaining context**
 - Switch between AI tools frequently
@@ -137,7 +138,7 @@ AI: "Continuing your Next.js app with Supabase.
 ### ❌ Not For You If:
 
 - Only use AI for one-off questions
-- Don't use Cursor or Claude Desktop
+- Don't use Cursor, Claude Desktop, or VS Code
 - Happy manually copying context
 - Casual AI user (not building projects)
 - Prefer cloud-based solutions
@@ -210,12 +211,30 @@ Follow the guided setup!
 **Complete beginner setup:**
 
 1. **Install:** `npm install -g @context-sync/server`
-2. **Restart Claude Desktop:**
-   - Mac: `⌘ + Q` (force quit from menu)
-   - Windows: Right-click tray icon → Exit
-3. **In Claude Desktop, type:** `"help context-sync"`
-4. **Follow the guided setup!** ✅ You're done!
+2. **Choose your platform:**
+   - **Claude Desktop:** Restart app → type `"help context-sync"`
+   - **VS Code + Copilot:** Restart VS Code → open Copilot Chat → look for context-sync tools
+   - **Cursor:** Refresh MCP → test with `"help context-sync"`
+3. **Follow the guided setup!** ✅ You're done!
 <br>
+
+### 🔧 Setup for VS Code + GitHub Copilot
+
+<details>
+<summary><b>Quick Setup for VS Code (30 seconds)</b></summary>
+<br>
+
+After installing Context Sync globally:
+
+1. **Restart VS Code** completely
+2. **Open Copilot Chat** (Ctrl+Shift+I / Cmd+Shift+I)
+3. **Switch to Agent mode** (if available)
+4. **Look for context-sync** in the Tools list
+5. **Test:** Ask Copilot `"help me get started with context-sync"`
+
+Context Sync should appear in available tools! ✨
+
+</details>
 
 ### 🔧 Setup for Cursor
 
@@ -253,7 +272,7 @@ Claude will give you OS-specific instructions! ✨
 
 3. Refresh MCP servers
 
-4. Test: `"What's my current project?"`
+4. Test: `"Help me get started with context-sync"`
 
 Done! ✅
 
@@ -301,19 +320,25 @@ Done! ✅
 
 <table>
 <tr>
-<td align="center" width="33%">
+<td align="center" width="25%">
   <h2>🔄</h2>
   <h3>Cross-Platform Sync</h3>
-  <p>Start in Cursor, continue in Claude Desktop. Context follows you automatically.</p>
-  <sub><strong>This is the main feature</strong></sub>
+  <p>Cursor ↔ Claude Desktop ↔ VS Code. Context follows you everywhere.</p>
+  <sub><strong>Works across all platforms</strong></sub>
 </td>
-<td align="center" width="33%">
+<td align="center" width="25%">
   <h2>🧠</h2>
   <h3>Perfect Memory</h3>
   <p>Close everything. Come back next week. AI remembers your entire project.</p>
   <sub><strong>Never re-explain again</strong></sub>
 </td>
-<td align="center" width="33%">
+<td align="center" width="25%">
+  <h2>⚡</h2>
+  <h3>Fast & Safe</h3>
+  <p>Async operations, file size limits, cache invalidation. Built for performance.</p>
+  <sub><strong>v0.6.0 optimizations</strong></sub>
+</td>
+<td align="center" width="25%">
   <h2>🔒</h2>
   <h3>Local & Private</h3>
   <p>SQLite database on your machine. No cloud. No tracking. You own everything.</p>
@@ -340,6 +365,15 @@ Think of it like:
 - ✅ An IDE that loads files as you need them
 
 Context Sync stores **structured summaries**. AI queries for details on-demand. You never saturate the context window.
+
+### ⚡ Performance Optimizations (v0.6.0):
+
+**Faster, safer, more reliable:**
+- 🔒 **File size limits** - Prevents crashes with 5MB max file size
+- 🔄 **Real-time cache invalidation** - File watchers automatically update caches  
+- ⚡ **Async operations** - All file I/O is non-blocking
+- 🗄️ **Database query optimization** - Prepared statements (2-5x faster)
+- 🎯 **Smart file handling** - Skips large files, warns on potential issues
 
 <br>
 
@@ -539,16 +573,19 @@ You never saturate because you're not copying conversations - you're giving AI a
 <summary><b>Does this work with VS Code?</b></summary>
 <br>
 
-**Coming in v0.6.0!** (Next 6-8 weeks)
+**Yes! Available in v0.6.0!** 🎉
 
-VS Code extension is our **most requested feature** from launch day.
+VS Code with GitHub Copilot is now fully supported through MCP integration.
 
-Want to be notified when it's ready?
-- ⭐ Star the repo
-- 👀 Watch releases
-- 💬 Join discussions
+**Setup instructions:**
+1. Install Context Sync: `npm install -g @context-sync/server`
+2. Restart VS Code
+3. Open Copilot Chat
+4. Switch to Agent mode
+5. Look for context-sync in Tools list
 
 **Currently works with:**
+- ✅ VS Code + GitHub Copilot (new!)
 - ✅ Cursor IDE (full support)
 - ✅ Claude Desktop (full support)
 
@@ -679,24 +716,24 @@ AI: "Analyzing cart code... found 2 potential improvements..."
 <table>
 <tr>
 <td align="center" width="33%">
-  <h3>✅ v0.5.0 - Current</h3>
+  <h3>✅ v0.6.0 - Current</h3>
   <sub>Released October 2025</sub>
   <br><br>
-  ✓ Cross-platform sync<br>
-  ✓ TODO management<br>
-  ✓ Code analysis tools<br>
-  ✓ Git integration<br>
-  ✓ 50+ MCP tools
+  ✓ VS Code & GitHub Copilot support<br>
+  ✓ Performance optimizations<br>
+  ✓ Async file operations<br>
+  ✓ File size limits & safety<br>
+  ✓ Real-time cache invalidation
 </td>
 <td align="center" width="33%">
-  <h3>🔄 v0.6.0 - Next</h3>
+  <h3>🔄 v0.7.0 - Next</h3>
   <sub>6-8 weeks</sub>
   <br><br>
-  • VS Code extension<br>
-  • Claude Code CLI<br>
-  • Better onboarding<br>
-  • Improved docs<br>
-  • Performance optimization
+  • Claude Code CLI support<br>
+  • Enhanced VS Code integration<br>
+  • Better onboarding flow<br>
+  • Improved documentation<br>
+  • Additional performance optimizations
 </td>
 <td align="center" width="33%">
   <h3>🔮 Future</h3>
@@ -705,7 +742,7 @@ AI: "Analyzing cart code... found 2 potential improvements..."
   • Mobile support<br>
   • Team collaboration<br>
   • Analytics dashboard<br>
-  • More platforms<br>
+  • More AI platforms<br>
   • Advanced features
 </td>
 </tr>
@@ -1023,7 +1060,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 <br>
 
-[⬆ Back to Top](#-context-sync)
+[⬆ Back to Top](#context-sync-)
 
 <br>
 

@@ -1,6 +1,7 @@
 // File Writing Operations with Safety Controls
 
 import * as fs from 'fs';
+import { promises as fsAsync } from 'fs';
 import * as path from 'path';
 import { WorkspaceDetector } from './workspace-detector.js';
 import type { Storage } from './storage.js';
@@ -69,7 +70,15 @@ export class FileWriter {
     const fullPath = path.join(workspace, relativePath);
 
     // Check if file exists
-    if (fs.existsSync(fullPath) && !overwrite) {
+    let fileExists = false;
+    try {
+      await fsAsync.access(fullPath);
+      fileExists = true;
+    } catch {
+      fileExists = false;
+    }
+
+    if (fileExists && !overwrite) {
       return {
         success: false,
         path: relativePath,
@@ -120,12 +129,14 @@ export class FileWriter {
     try {
       // Create directory if doesn't exist
       const dir = path.dirname(fullPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      try {
+        await fsAsync.access(dir);
+      } catch {
+        await fsAsync.mkdir(dir, { recursive: true });
       }
 
       // Write file
-      fs.writeFileSync(fullPath, content, 'utf8');
+      await fsAsync.writeFile(fullPath, content, 'utf8');
 
       // Log decision
       const project = this.storage.getCurrentProject();
@@ -175,7 +186,9 @@ export class FileWriter {
     const fullPath = path.join(workspace, relativePath);
 
     // Check if file exists
-    if (!fs.existsSync(fullPath)) {
+    try {
+      await fsAsync.access(fullPath);
+    } catch {
       return {
         success: false,
         path: relativePath,
@@ -186,7 +199,7 @@ export class FileWriter {
 
     try {
       // Read current content
-      const originalContent = fs.readFileSync(fullPath, 'utf8');
+      const originalContent = await fsAsync.readFile(fullPath, 'utf8');
 
       // Create backup
       this.createBackup(relativePath, originalContent);
@@ -234,11 +247,11 @@ export class FileWriter {
     const fullPath = path.join(workspace, relativePath);
 
     try {
-      const originalContent = fs.readFileSync(fullPath, 'utf8');
+      const originalContent = await fsAsync.readFile(fullPath, 'utf8');
       const newContent = this.applyChanges(originalContent, changes);
 
       // Write modified file
-      fs.writeFileSync(fullPath, newContent, 'utf8');
+      await fsAsync.writeFile(fullPath, newContent, 'utf8');
 
       // Log decision
       const project = this.storage.getCurrentProject();
@@ -301,7 +314,7 @@ export class FileWriter {
       const fullPath = path.join(workspace, relativePath);
 
       // Restore the backup
-      fs.writeFileSync(fullPath, backup.content, 'utf8');
+      await fsAsync.writeFile(fullPath, backup.content, 'utf8');
 
       // Remove undone items from stack
       backups.splice(-steps);
@@ -340,7 +353,9 @@ export class FileWriter {
 
     const fullPath = path.join(workspace, relativePath);
 
-    if (!fs.existsSync(fullPath)) {
+    try {
+      await fsAsync.access(fullPath);
+    } catch {
       return {
         success: false,
         path: relativePath,
@@ -350,7 +365,7 @@ export class FileWriter {
     }
 
     // Create backup before deletion
-    const content = fs.readFileSync(fullPath, 'utf8');
+    const content = await fsAsync.readFile(fullPath, 'utf8');
     this.createBackup(relativePath, content);
 
     const preview = `⚠️  WARNING: This will DELETE the file!\n\nFile: ${relativePath}\nSize: ${(Buffer.byteLength(content) / 1024).toFixed(1)}KB\n\nThis action can be undone with undo_file_change.`;

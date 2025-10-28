@@ -226,6 +226,15 @@ export class PlatformSync {
     // Cursor config
     paths.cursor = path.join(homeDir, '.cursor', 'mcp.json');
 
+    // GitHub Copilot / VS Code config
+    if (platform === 'win32') {
+      paths.copilot = path.join(homeDir, 'AppData', 'Roaming', 'Code', 'User', 'settings.json');
+    } else if (platform === 'darwin') {
+      paths.copilot = path.join(homeDir, 'Library', 'Application Support', 'Code', 'User', 'settings.json');
+    } else {
+      paths.copilot = path.join(homeDir, '.config', 'Code', 'User', 'settings.json');
+    }
+
     return paths;
   }
 
@@ -247,6 +256,13 @@ export class PlatformSync {
         return config.mcpServers && config.mcpServers['context-sync'] !== undefined;
       } else if (platform === 'cursor') {
         return config.mcpServers && config.mcpServers['context-sync'] !== undefined;
+      } else if (platform === 'copilot') {
+        // Check if VS Code has Context Sync MCP extension configured
+        // This checks for MCP settings in VS Code (requires MCP extension for VS Code/Copilot)
+        return (
+          config['mcp.servers'] &&
+          config['mcp.servers']['context-sync'] !== undefined
+        );
       }
       
       return false;
@@ -262,7 +278,7 @@ export class PlatformSync {
     return {
       claude: PlatformSync.isConfigured('claude'),
       cursor: PlatformSync.isConfigured('cursor'),
-      copilot: false, // Not yet supported
+      copilot: PlatformSync.isConfigured('copilot'),
       other: false,
     };
   }
@@ -293,6 +309,19 @@ export class PlatformSync {
       instructions += `  "args": ["-y", "@context-sync/server"]\n`;
       instructions += `}\n\n`;
       instructions += `3. Refresh MCP servers in Cursor settings\n`;
+    } else if (platform === 'copilot') {
+      instructions += `1. Install the Context Sync VS Code extension\n`;
+      instructions += `2. Install MCP extension for VS Code (if not already installed)\n`;
+      instructions += `3. Open VS Code settings: ${configPath}\n`;
+      instructions += `4. Add this to your settings.json:\n\n`;
+      instructions += `"mcp.servers": {\n`;
+      instructions += `  "context-sync": {\n`;
+      instructions += `    "command": "npx",\n`;
+      instructions += `    "args": ["-y", "@context-sync/server"]\n`;
+      instructions += `  }\n`;
+      instructions += `}\n\n`;
+      instructions += `5. Reload VS Code window\n`;
+      instructions += `\nNote: Context Sync for Copilot works through the VS Code extension.\n`;
     }
 
     return instructions;

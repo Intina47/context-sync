@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { promises as fsAsync } from 'fs';
 import * as path from 'path';
 
 // Types for type analysis
@@ -87,6 +88,10 @@ export class TypeAnalyzer {
   private fileCache: Map<string, string>;
   private typeCache: Map<string, TypeDefinition[]>;
   
+  // File size limits to prevent OOM crashes
+  private readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB - prevents OOM crashes
+  private readonly WARN_FILE_SIZE = 1 * 1024 * 1024; // 1MB - warn but still process
+  
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
     this.fileCache = new Map();
@@ -96,11 +101,11 @@ export class TypeAnalyzer {
   /**
    * Find type definition by name
    */
-  public findTypeDefinition(typeName: string): TypeDefinition | null {
-    const allFiles = this.getAllProjectFiles();
+  public async findTypeDefinition(typeName: string): Promise<TypeDefinition | null> {
+    const allFiles = await this.getAllProjectFiles();
 
     for (const file of allFiles) {
-      const types = this.extractTypes(file);
+      const types = await this.extractTypes(file);
       const found = types.find(t => t.name === typeName);
       if (found) return found;
     }
@@ -111,13 +116,13 @@ export class TypeAnalyzer {
   /**
    * Get complete information about a type
    */
-  public getTypeInfo(typeName: string): TypeInfo | null {
-    const definition = this.findTypeDefinition(typeName);
+  public async getTypeInfo(typeName: string): Promise<TypeInfo | null> {
+    const definition = await this.findTypeDefinition(typeName);
     if (!definition) return null;
 
-    const details = this.getTypeDetails(definition);
-    const usages = this.findTypeUsages(typeName);
-    const relatedTypes = this.extractRelatedTypes(definition);
+    const details = await this.getTypeDetails(definition);
+    const usages = await this.findTypeUsages(typeName);
+    const relatedTypes = await this.extractRelatedTypes(definition);
 
     return {
       definition,
@@ -130,26 +135,26 @@ export class TypeAnalyzer {
   /**
    * Get detailed information based on type kind
    */
-  private getTypeDetails(definition: TypeDefinition): InterfaceInfo | TypeAliasInfo | ClassInfo | EnumInfo {
-    const content = this.readFile(definition.filePath);
+  private async getTypeDetails(definition: TypeDefinition): Promise<InterfaceInfo | TypeAliasInfo | ClassInfo | EnumInfo> {
+    const content = await this.readFile(definition.filePath);
     const lines = content.split('\n');
 
     switch (definition.kind) {
       case 'interface':
-        return this.parseInterface(definition, lines);
+        return await this.parseInterface(definition, lines);
       case 'type':
-        return this.parseTypeAlias(definition, lines);
+        return await this.parseTypeAlias(definition, lines);
       case 'class':
-        return this.parseClass(definition, lines);
+        return await this.parseClass(definition, lines);
       case 'enum':
-        return this.parseEnum(definition, lines);
+        return await this.parseEnum(definition, lines);
     }
   }
 
   /**
    * Parse interface details
    */
-  private parseInterface(definition: TypeDefinition, lines: string[]): InterfaceInfo {
+  private async parseInterface(definition: TypeDefinition, lines: string[]): Promise<InterfaceInfo> {
     const properties: PropertyInfo[] = [];
     const methods: MethodInfo[] = [];
     let extendsTypes: string[] = [];
@@ -221,7 +226,7 @@ export class TypeAnalyzer {
   /**
    * Parse type alias details
    */
-  private parseTypeAlias(definition: TypeDefinition, lines: string[]): TypeAliasInfo {
+  private async parseTypeAlias(definition: TypeDefinition, lines: string[]): Promise<TypeAliasInfo> {
     const line = lines[definition.line - 1];
     const match = /type\s+\w+\s*=\s*(.+)/.exec(line);
     const typeDefinition = match ? match[1].trim() : '';
@@ -236,7 +241,7 @@ export class TypeAnalyzer {
   /**
    * Parse class details
    */
-  private parseClass(definition: TypeDefinition, lines: string[]): ClassInfo {
+  private async parseClass(definition: TypeDefinition, lines: string[]): Promise<ClassInfo> {
     const properties: PropertyInfo[] = [];
     const methods: MethodInfo[] = [];
     let constructorInfo: MethodInfo | undefined;
@@ -335,7 +340,7 @@ export class TypeAnalyzer {
   /**
    * Parse enum details
    */
-  private parseEnum(definition: TypeDefinition, lines: string[]): EnumInfo {
+  private async parseEnum(definition: TypeDefinition, lines: string[]): Promise<EnumInfo> {
     const members: EnumMember[] = [];
     let inEnum = false;
     let braceCount = 0;
@@ -379,12 +384,17 @@ export class TypeAnalyzer {
   /**
    * Find all usages of a type
    */
-  public findTypeUsages(typeName: string): TypeUsage[] {
+  public async findTypeUsages(typeName: string): Promise<TypeUsage[]> {
     const usages: TypeUsage[] = [];
-    const allFiles = this.getAllProjectFiles();
+    const allFiles = await this.getAllProjectFiles();
+    
+    // Pre-compile regex patterns for better performance (fixes regex-in-loops)
+    const escapedTypeName = typeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const variableRegex = new RegExp(`\\w+\\s*:\\s*${escapedTypeName}`);
+    const returnTypeRegex = new RegExp(`\\)\\s*:\\s*${escapedTypeName}`);
 
     for (const file of allFiles) {
-      const content = this.readFile(file);
+      const content = await this.readFile(file);
       const lines = content.split('\n');
 
       lines.forEach((line, lineNumber) => {
@@ -408,9 +418,9 @@ export class TypeAnalyzer {
             usageType = 'extends';
           } else if (trimmed.includes('<') && trimmed.includes(typeName)) {
             usageType = 'generic';
-          } else if (trimmed.match(new RegExp(`\\w+\\s*:\\s*${typeName}`))) {
+          } else if (trimmed.match(variableRegex)) {
             usageType = 'variable';
-          } else if (trimmed.match(new RegExp(`\\)\\s*:\\s*${typeName}`))) {
+          } else if (trimmed.match(returnTypeRegex)) {
             usageType = 'return';
           }
 
@@ -430,12 +440,12 @@ export class TypeAnalyzer {
   /**
    * Extract all type definitions from a file
    */
-  private extractTypes(filePath: string): TypeDefinition[] {
+  private async extractTypes(filePath: string): Promise<TypeDefinition[]> {
     if (this.typeCache.has(filePath)) {
       return this.typeCache.get(filePath)!;
     }
 
-    const content = this.readFile(filePath);
+    const content = await this.readFile(filePath);
     const types: TypeDefinition[] = [];
     const lines = content.split('\n');
 
@@ -505,8 +515,8 @@ export class TypeAnalyzer {
   /**
    * Extract related types referenced in this type
    */
-  private extractRelatedTypes(definition: TypeDefinition): string[] {
-    const content = this.readFile(definition.filePath);
+  private async extractRelatedTypes(definition: TypeDefinition): Promise<string[]> {
+    const content = await this.readFile(definition.filePath);
     const lines = content.split('\n');
     const relatedTypes = new Set<string>();
 
@@ -579,13 +589,25 @@ export class TypeAnalyzer {
 
   // Helper methods
 
-  private readFile(filePath: string): string {
+  private async readFile(filePath: string): Promise<string> {
     if (this.fileCache.has(filePath)) {
       return this.fileCache.get(filePath)!;
     }
     
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
+      // Check file size first to prevent OOM crashes
+      const stats = await fsAsync.stat(filePath);
+      
+      if (stats.size > this.MAX_FILE_SIZE) {
+        console.error(`⚠️  File too large for type analysis (${(stats.size / 1024 / 1024).toFixed(1)}MB), skipping: ${this.getRelativePath(filePath)}`);
+        return '';
+      }
+      
+      if (stats.size > this.WARN_FILE_SIZE) {
+        console.error(`⚠️  Large file in type analysis (${(stats.size / 1024 / 1024).toFixed(1)}MB): ${this.getRelativePath(filePath)}`);
+      }
+      
+      const content = await fsAsync.readFile(filePath, 'utf-8');
       this.fileCache.set(filePath, content);
       return content;
     } catch (error) {
@@ -597,20 +619,20 @@ export class TypeAnalyzer {
     return path.relative(this.workspacePath, filePath);
   }
 
-  private getAllProjectFiles(): string[] {
+  private async getAllProjectFiles(): Promise<string[]> {
     const files: string[] = [];
     const extensions = ['.ts', '.tsx'];  // Only TypeScript files for type analysis
     
-    const walk = (dir: string) => {
+    const walk = async (dir: string): Promise<void> => {
       try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        const entries = await fsAsync.readdir(dir, { withFileTypes: true });
         
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
           
           if (entry.isDirectory()) {
             if (!['node_modules', 'dist', 'build', '.git', '.next', 'out', 'coverage'].includes(entry.name)) {
-              walk(fullPath);
+              await walk(fullPath);
             }
           } else {
             const ext = path.extname(entry.name);
@@ -624,7 +646,7 @@ export class TypeAnalyzer {
       }
     };
 
-    walk(this.workspacePath);
+    await walk(this.workspacePath);
     return files;
   }
 
