@@ -1,234 +1,162 @@
-# Context Sync 🧠
-<div align="center">
-
-<!-- HERO BANNER -->
-<img src=".github/assets/context-sync-banner-bidirectional.svg" alt="Context Sync - AI Context Management" width="100%">
-
-<br><br>
-
-### **Build in Cursor. Continue in Claude Desktop. Code in VS Code. Your AI remembers everything.**
-
-<br>
-
-<!-- PLATFORM BADGES - PROMINENT -->
-<p>
-  <img src="https://img.shields.io/badge/Cursor-Supported-00D4AA?style=for-the-badge&logo=cursor&logoColor=white" alt="Cursor">
-  <img src="https://img.shields.io/badge/Claude%20Desktop-Supported-6366f1?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Desktop">
-  <img src="https://img.shields.io/badge/VS%20Code-Supported-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="VS Code">
-  <img src="https://img.shields.io/badge/GitHub%20Copilot-Supported-24292e?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Copilot">
-</p>
-
-<!-- VERSION BADGES -->
-<p>
-  <a href="https://www.npmjs.com/package/@context-sync/server">
-    <img src="https://img.shields.io/npm/v/@context-sync/server?color=cb3837&style=flat-square&logo=npm" alt="npm">
-  </a>
-  <a href="https://github.com/Intina47/context-sync/stargazers">
-    <img src="https://img.shields.io/github/stars/Intina47/context-sync?color=yellow&style=flat-square&logo=github" alt="stars">
-  </a>
-  <a href="https://www.npmjs.com/package/@context-sync/server">
-    <img src="https://img.shields.io/npm/dm/@context-sync/server?color=blue&style=flat-square" alt="downloads">
-  </a>
-  <img src="https://img.shields.io/badge/setup-2%20minutes-green?style=flat-square" alt="Setup time">
-  <img src="https://img.shields.io/badge/tokens-1--3K%20only-orange?style=flat-square" alt="Token usage">
-</p>
-
-<!-- SOCIAL PROOF -->
-<p>
-  <strong>20+ GitHub stars in 24 hours</strong> • <strong>400+ downloads Launch Week</strong> • <strong>#17 Product Hunt</strong>
-</p>
-
-<!-- PRODUCT HUNT -->
-
-<a href="https://www.producthunt.com/products/context-sync-local-mcp-server?embed=true&utm_source=badge-featured&utm_medium=badge&utm_source=badge-context&#0045;sync" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1029707&theme=dark&t=1761387366666" alt="Context&#0032;Sync - Persistent&#0032;AI&#0032;memory&#0032;across&#0032;Claude&#0032;Desktop&#0032;&#0038;&#0032;Cursor&#0032;IDE | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
-<br>
-
----
-
-**Stop re-explaining your projects to AI. Build seamlessly across Cursor and Claude Desktop.**
-
-<sub>Local-first • 2-minute setup • Works with your existing workflow</sub>
-
-</div>
-
-<br>
-
----
-
-<br>
-
-## 😤 You Know This Pain
-
-You're building with AI. You've explained your project architecture, tech stack, and design decisions. 
-
-**Then you hit a limit. New chat. Claude forgot everything.**
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-### ❌ Without Context Sync
-
-**Monday in Cursor:**
-```
-You: "Building TaskFlow - Next.js app with Supabase"
-AI: "Great! Let's start..."
-*3 hours of coding*
-```
-
-**Tuesday in Claude Desktop:**
-```
-You: "Continue TaskFlow"
-AI: "What's TaskFlow? Please explain your project"
-```
-
-**😡 You spend 30 minutes re-explaining. Every. Single. Day.**
-
-</td>
-<td width="50%" valign="top">
-
-### ✅ With Context Sync
-
-**Monday in Cursor:**
-```
-You: "Building TaskFlow - Next.js app with Supabase"
-AI: "Great! Let's start..."
-*3 hours of coding*
-```
-
-**Tuesday in Claude Desktop:**
-```
-You: "Continue TaskFlow"
-AI: "Continuing your Next.js app with Supabase.
-     What feature should we add next?"
-```
-
-**😊 AI just remembers. Works everywhere.**
-
-</td>
-</tr>
-</table>
-
-**Context Sync syncs your AI context between Cursor, Claude Desktop, and VS Code automatically.**
+# Context Sync
 
 <div align="center">
 
-### 🎉 **New in v0.6.1: Intelligent Onboarding**
+<h1>🧠 The Memory Layer for AI Development</h1>
 
-**Just type:** `"help me get started with context-sync"`
+**Finally, AI that remembers.**
 
-✨ **No more commands to memorize** • Get instant, personalized guidance in any AI tool
-
-</div>
+*Context Sync is the open-source infrastructure that gives AI systems persistent memory across all your development tools, sessions, and projects.*
 
 <br>
 
----
+[![npm version](https://img.shields.io/npm/v/@context-sync/server?color=cb3837&style=flat-square&logo=npm)](https://www.npmjs.com/package/@context-sync/server)
+[![GitHub stars](https://img.shields.io/github/stars/Intina47/context-sync?color=yellow&style=flat-square&logo=github)](https://github.com/Intina47/context-sync/stargazers)
+[![Downloads](https://img.shields.io/npm/dm/@context-sync/server?color=blue&style=flat-square)](https://www.npmjs.com/package/@context-sync/server)
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 
 <br>
-
-## 🎯 Who This Is For
-
-<table>
-<tr>
-<td width="50%">
-
-### ✅ Perfect For You If:
-
-- You use **Cursor, Claude Desktop, or VS Code**
-- Building **long-term projects** (weeks/months)
-- Tired of **re-explaining context**
-- Switch between AI tools frequently
-- Freelancer juggling multiple projects
-- Want AI that **actually remembers**
-
-</td>
-<td width="50%">
-
-### ❌ Not For You If:
-
-- Only use AI for one-off questions
-- Don't use Cursor, Claude Desktop, or VS Code
-- Happy manually copying context
-- Casual AI user (not building projects)
-- Prefer cloud-based solutions
-
-</td>
-</tr>
-</table>
-
-<br>
-
----
-
-<br>
-
-## 🚀 2-Minute Setup
-
-**No configuration files. No API keys. No complexity.**
-
-<table>
-<tr>
-<td align="center" width="33%">
-
-### 1️⃣ Install
-⏱️ 30 seconds
 
 ```bash
+# The future of AI-assisted development
 npm install -g @context-sync/server
 ```
 
-One command. Global install.
-
-</td>
-<td align="center" width="33%">
-
-### 2️⃣ Restart
-⏱️ 30 seconds
-
-**Claude Desktop:**
-- Mac: `⌘ + Q`
-- Windows: Right-click tray
-
-**Cursor:**
-- Refresh MCP servers
-
-</td>
-<td align="center" width="33%">
-
-### 3️⃣ Done! ✨
-⏱️ 1 minute
-
-```
-You: "help me get started with context-sync"
-```
-
-Context Sync is running!
-Get instant guidance!
-
-</td>
-</tr>
-</table>
-
-<div align="center">
-
-**Total time: 2 minutes • Zero configuration • Works immediately**
+*Local-first • Open source • Platform agnostic • Built by developers, for developers*
 
 </div>
+---
 
-### 👋 First Time? Start Here!
+## The Problem Every Developer Faces
 
-**Complete beginner setup:**
+AI systems lose context between conversations. You spend hours explaining your codebase, architecture decisions, and project context... then close the chat and start over tomorrow.
 
-1. **Install:** `npm install -g @context-sync/server`
-2. **Choose your platform:**
-   - **Claude Desktop:** Restart app → type `"help me get started with context-sync"`
-   - **VS Code + Copilot:** Restart VS Code → open Copilot Chat → type `"help me get started with context-sync"`
-   - **Cursor:** Refresh MCP → type `"help me get started with context-sync"`
-3. **Follow the intelligent guidance!** ✅ You're done!
-<br>
+**The memory loss problem affects everyone:**
+- Freelancers juggling multiple client projects
+- Teams building complex applications
+- Open source maintainers across different tools
+- Anyone using AI for serious development work
 
-### 🔧 Setup for VS Code + GitHub Copilot
+**This isn't just inconvenient - it's fundamentally broken.**
+
+---
+
+## Context Sync: GitHub for AI Memory
+
+Context Sync creates persistent, queryable memory for AI systems across all development environments.
+
+**Think of it as distributed version control for AI context:**
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Claude.ai     │    │   Cursor IDE    │    │   VS Code       │
+│   (Web & App)   │    │                 │    │   + Copilot     │
+└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
+          │                      │                      │
+          │           MCP Protocol (standardized)       │
+          │                      │                      │
+          └──────────────────────┼──────────────────────┘
+                                 │
+                     ┌───────────▼────────────┐
+                     │    Context Sync        │
+                     │   Memory Layer         │
+                     │                        │
+                     │  • Project Context     │
+                     │  • Code Understanding  │
+                     │  • Decision History    │
+                     │  • Architecture Maps   │
+                     │  • File Operations     │
+                     │  • Git Integration     │
+                     └────────────────────────┘
+```
+
+**Every AI tool gets the same shared memory.**
+
+---
+
+## Why Open Source?
+
+**AI memory shouldn't be controlled by corporations.**
+
+Context Sync is built by developers who were tired of:
+- Losing context between AI conversations
+- Being locked into single AI platforms
+- Having no control over their development data
+- Paying subscription fees for basic memory functionality
+
+**Our philosophy:**
+- **Local-first**: Your data stays on your machine
+- **Platform agnostic**: Works with any AI that supports MCP
+- **Community-driven**: Built for developers, by developers
+- **Extensible**: Open architecture for unlimited customization
+
+---
+
+## Quick Start
+
+```bash
+# Install globally
+npm install -g @context-sync/server
+
+# Restart your AI tool (Claude Desktop, Cursor, VS Code)
+# Then ask: "help me get started with context-sync"
+```
+
+**That's it.** Context Sync auto-configures and guides you through first-time setup with natural language instructions.
+
+**Supports:**
+- Claude Desktop (Mac/Windows/Linux)
+- Cursor IDE
+- VS Code + GitHub Copilot
+- Any MCP-compatible AI tool
+
+### 🎯 See the Problem in Action
+
+**Before Context Sync:**
+
+```
+Monday - Claude Desktop:
+You: "I'm building a React app with TypeScript, using Supabase for auth..."
+Claude: *helps for 2 hours*
+
+Tuesday - New chat:
+You: "Continue working on my React app"
+Claude: "What React app? Can you describe your project?"
+You: *spends 20 minutes re-explaining everything*
+```
+
+**After Context Sync:**
+
+```
+Monday - Claude Desktop:
+You: "I'm building a React app with TypeScript, using Supabase for auth..."
+Claude: *helps for 2 hours*
+
+Tuesday - New chat (or different AI tool):
+You: "Continue working on my React app"  
+Claude: "Continuing your TypeScript React app with Supabase auth. What should we work on next?"
+```
+
+**That's the power of persistent AI memory.**
+
+### 🚀 Get Started in 2 Minutes
+
+```bash
+# 1. Install Context Sync
+npm install -g @context-sync/server
+
+# 2. Restart your AI tool (Claude Desktop, Cursor, VS Code)
+
+# 3. Ask for help setting up
+"help me get started with context-sync"
+```
+
+Context Sync automatically detects your platform and guides you through setup with personalized instructions.
+
+### 🔧 Platform-Specific Setup
+
+<details>
+<summary>VS Code + GitHub Copilot</summary>
 
 <details>
 <summary><b>Quick Setup for VS Code (30 seconds)</b></summary>
@@ -294,96 +222,45 @@ Done! ✅
 
 <br>
 
-## 🔄 How It Works
+## How It Works: Distributed AI Memory
 
-<div align="center">
+Context Sync creates a **persistent knowledge layer** between you and AI systems using the Model Context Protocol (MCP).
+
+**Architecture:**
 
 ```
-┌─────────────┐                    ┌──────────────────┐                    ┌─────────────┐
-│   Cursor    │ ────────────────>  │  Context Sync    │ <──────────────── │   Claude    │
-│     IDE     │   Saves context    │   (Your Machine) │   Loads context   │   Desktop   │
-└─────────────┘                    └──────────────────┘                    └─────────────┘
-                                            │
-                                            │ SQLite Database
-                                            │ ~/.context-sync/
-                                            ▼
-                                    ┌──────────────────┐
-                                    │  • Projects      │
-                                    │  • Decisions     │
-                                    │  • Architecture  │
-                                    │  • TODOs         │
-                                    │  • Code Context  │
-                                    └──────────────────┘
+Your Development Environment
+┌─────────────────────────────────────────────────────────┐
+│  IDE/Editor        AI Tool           Browser/Web        │
+│  ┌───────────┐    ┌───────────┐     ┌─────────────┐    │
+│  │  Cursor   │    │  Claude   │     │ Claude.ai   │    │
+│  │  VS Code  │    │  Desktop  │     │  Web app    │    │
+│  │  Vim/etc  │    │  Copilot  │     │  Other AIs  │    │
+│  └─────┬─────┘    └─────┬─────┘     └──────┬──────┘    │
+└────────┼──────────────────┼─────────────────┼───────────┘
+         │                  │                 │
+         └──────────────────┼─────────────────┘
+                            │ MCP Protocol
+                            │
+┌───────────────────────────▼─────────────────────────────┐
+│              Context Sync (Open Source)                 │
+│                                                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐ │
+│  │   Memory    │  │   Files     │  │    Git & Code   │ │
+│  │  • Projects │  │  • Read     │  │  • Status       │ │
+│  │  • Context  │  │  • Write    │  │  • Diffs        │ │
+│  │  • History  │  │  • Search   │  │  • Analysis     │ │
+│  └─────────────┘  └─────────────┘  └─────────────────┘ │
+│                                                         │
+│            Local SQLite Database (~/.context-sync/)    │
+└─────────────────────────────────────────────────────────┘
 ```
 
-</div>
-
-**100% Local • You Own Your Data • No Cloud • Open Source**
-
-<br>
-
----
-
-<br>
-
-## ⚡ Key Features
-
-<table>
-<tr>
-<td align="center" width="25%">
-  <h2>🔄</h2>
-  <h3>Cross-Platform Sync</h3>
-  <p>Cursor ↔ Claude Desktop ↔ VS Code. Context follows you everywhere.</p>
-  <sub><strong>Works across all platforms</strong></sub>
-</td>
-<td align="center" width="25%">
-  <h2>🧠</h2>
-  <h3>Perfect Memory</h3>
-  <p>Close everything. Come back next week. AI remembers your entire project.</p>
-  <sub><strong>Never re-explain again</strong></sub>
-</td>
-<td align="center" width="25%">
-  <h2>⚡</h2>
-  <h3>Fast & Safe</h3>
-  <p>Async operations, file size limits, cache invalidation. Built for performance.</p>
-  <sub><strong>v0.6.0 optimizations</strong></sub>
-</td>
-<td align="center" width="25%">
-  <h2>🔒</h2>
-  <h3>Local & Private</h3>
-  <p>SQLite database on your machine. No cloud. No tracking. You own everything.</p>
-  <sub><strong>100% under your control</strong></sub>
-</td>
-</tr>
-</table>
-
-### 📦 What Gets Synced:
-
-- ✅ Project name, description, tech stack
-- ✅ Architecture decisions and reasoning
-- ✅ TODOs and task lists
-- ✅ Code context (files, dependencies, types)
-- ✅ Conversation summaries
-- ✅ Git status and branches
-
-### 💡 Smart Token Usage:
-
-**Uses only 1-3K tokens** (not full conversation dumps)
-
-Think of it like:
-- ❌ Loading your entire codebase into RAM
-- ✅ An IDE that loads files as you need them
-
-Context Sync stores **structured summaries**. AI queries for details on-demand. You never saturate the context window.
-
-### ⚡ Performance Optimizations (v0.6.1):
-
-**Faster, safer, more reliable:**
-- 🔒 **File size limits** - Prevents crashes with 5MB max file size
-- 🔄 **Real-time cache invalidation** - File watchers automatically update caches  
-- ⚡ **Async operations** - All file I/O is non-blocking
-- 🗄️ **Database query optimization** - Prepared statements (2-5x faster)
-- 🎯 **Smart file handling** - Skips large files, warns on potential issues
+**Key advantages:**
+- **Universal compatibility**: Works with any MCP-enabled AI
+- **Local ownership**: All data stays on your machine
+- **Zero vendor lock-in**: Open source and extensible
+- **Intelligent caching**: Only loads what AI needs when it needs it
 
 <br>
 
@@ -391,121 +268,85 @@ Context Sync stores **structured summaries**. AI queries for details on-demand. 
 
 <br>
 
-## 🆚 How Is This Different?
+## What Makes Context Sync Different
 
-### vs Claude's `/compact` command
+### 🌍 Universal AI Memory Layer
 
-<table>
-<tr>
-<td width="50%">
+**Context Sync isn't just another tool - it's infrastructure.**
 
-**`/compact` command:**
-- Compresses ONE conversation
-- Saves tokens in current chat
-- Stays in same conversation
-- Temporary solution
+**Like Git for code, Context Sync is version control for AI knowledge:**
 
-</td>
-<td width="50%">
+- **Distributed**: Every AI tool gets the same shared memory
+- **Local-first**: Your data, your control, your privacy
+- **Platform agnostic**: Works with any MCP-compatible AI
+- **Extensible**: Open source architecture for unlimited customization
 
-**Context Sync:**
-- Works across ALL conversations
-- Permanent memory forever
-- Works across platforms (Cursor ↔ Claude)
-- Complete solution
+**Current ecosystem support:**
+- ✅ Claude Desktop (Mac/Windows/Linux)
+- ✅ Cursor IDE
+- ✅ VS Code + GitHub Copilot
+- ✅ Any MCP-compatible AI tool
+- 🔄 More platforms added regularly via community contributions
 
-</td>
-</tr>
-</table>
+### 🧠 Intelligent Context Management
 
-**They're complementary!** Use `/compact` for long chats, Context Sync for project memory.
+**Smart memory that scales with your projects:**
 
----
+**Project-Aware Context:**
+- Automatic project detection and initialization
+- Tech stack recognition (TypeScript, React, Python, etc.)
+- Architecture decision tracking with reasoning
+- Code structure understanding and analysis
 
-### vs Claude Pro subscription
+**Efficient Memory Usage:**
+- **1-3K tokens per project** (not full conversation dumps)
+- On-demand querying (AI requests details as needed)
+- Structured summaries instead of raw chat logs
+- Never saturates context windows
 
-<table>
-<tr>
-<td width="50%">
+**Developer-Focused Features:**
+- File operations (read, write, search) with approval workflows
+- Git integration (status, diffs, branches)
+- Dependency analysis and call graph tracing
+- TODO management with cross-project tracking
+- Code symbol search and type analysis
 
-**Claude Pro ($20/month):**
-- ✅ More messages per day
-- ✅ Longer context window
-- ✅ Priority access
-- ❌ Still forgets between chats
+### 🔒 Privacy-First Architecture
 
-</td>
-<td width="50%">
+**Your code stays yours:**
 
-**Context Sync (Free):**
-- ✅ Permanent memory across chats
-- ✅ Cross-platform sync
-- ✅ Local storage (you own it)
-- ✅ Works with Pro or Free tier
+- **100% local storage** (SQLite database on your machine)
+- **No cloud dependencies** (optional git-based sync available)
+- **No tracking or analytics** (we don't even have servers!)
+- **Open source transparency** (audit every line of code)
+- **Zero vendor lock-in** (export your data anytime)
 
-</td>
-</tr>
-</table>
-
-**You need both:** Claude Pro for more messages, Context Sync for memory.
+<br>
 
 ---
 
-### vs basic-memory
+<br>
 
-<table>
-<tr>
-<td width="50%">
+## Context Sync vs. Existing Solutions
 
-**basic-memory:**
-- Simple context storage
-- Claude Desktop only
-- Basic features
+**The fundamental difference: Context Sync is infrastructure, not a product.**
 
-</td>
-<td width="50%">
+**Other approaches:**
+- **Chat-based solutions**: Store conversations → become bloated and slow
+- **Platform-specific tools**: Lock you into one AI tool
+- **Cloud-based services**: Your data on someone else's servers
+- **Proprietary solutions**: No customization, no transparency
 
-**Context Sync:**
-- ✅ Cross-platform (Cursor ↔ Claude)
-- ✅ Advanced code analysis
-- ✅ TODO management
-- ✅ Git integration
-- ✅ File operations
-- ✅ Active development
+**Context Sync approach:**
+- **Memory infrastructure**: Structured, queryable knowledge base
+- **Universal compatibility**: Works with any MCP-enabled AI
+- **Local-first**: Your data stays on your machine
+- **Open source**: Community-driven development and customization
 
-</td>
-</tr>
-</table>
-
-**Different needs:** basic-memory for simple storage, Context Sync for full dev workflow.
-
----
-
-### vs Traycer
-
-<table>
-<tr>
-<td width="50%">
-
-**Traycer:**
-- Web wrapper around Claude
-- Cloud-based
-- Self-contained app
-
-</td>
-<td width="50%">
-
-**Context Sync:**
-- ✅ Works with native tools (Cursor + Claude Desktop)
-- ✅ Local-first (your machine)
-- ✅ Cross-platform sync
-- ✅ Open source
-
-</td>
-</tr>
-</table>
-
-**Different approach:** Traycer = new interface, Context Sync = enhance existing tools.
+**Complementary, not competitive:**
+- Use with Claude Pro for more daily messages
+- Works alongside `/compact` for conversation compression
+- Enhances existing AI tools rather than replacing them
 
 <br>
 
@@ -841,72 +682,66 @@ AI: "Analyzing cart code... found 2 potential improvements..."
 
 <br>
 
-## 🤝 Contributing
+## Join the AI Infrastructure Revolution
 
-We love contributions! Here's how to help:
+**Context Sync is built by the developer community, for the developer community.**
 
-<table>
-<tr>
-<td align="center" width="25%">
-  <h3>🐛</h3>
-  <strong>Report Bugs</strong>
-  <br><br>
-  <a href="https://github.com/Intina47/context-sync/issues">Create Issue</a>
-</td>
-<td align="center" width="25%">
-  <h3>💡</h3>
-  <strong>Request Features</strong>
-  <br><br>
-  <a href="https://github.com/Intina47/context-sync/discussions">Start Discussion</a>
-</td>
-<td align="center" width="25%">
-  <h3>🛠️</h3>
-  <strong>Submit Code</strong>
-  <br><br>
-  <a href="CONTRIBUTING.md">See Guide</a>
-</td>
-<td align="center" width="25%">
-  <h3>📚</h3>
-  <strong>Improve Docs</strong>
-  <br><br>
-  <a href="https://github.com/Intina47/context-sync/tree/main/documentation">Help Here</a>
-</td>
-</tr>
-</table>
+### 🚀 Why Contribute?
 
-**See:** [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+**You're not just contributing to a tool - you're building the future of AI-assisted development.**
 
-<br>
+- **Shape AI tooling standards**: Help define how AI systems should handle persistent memory
+- **Solve your own problems**: Build features you need for your workflow  
+- **Learn cutting-edge tech**: Work with MCP, TypeScript, SQLite, and AI integrations
+- **Join a movement**: Be part of making AI development tools truly open and extensible
 
----
+### 🛠️ Ways to Contribute
 
-<br>
+**Code Contributions:**
+- Add support for new AI platforms (Gemini, Ollama, etc.)
+- Implement new analysis tools (Python dependency tracking, etc.)
+- Build integrations for more editors (Vim, Emacs, etc.)
+- Optimize performance and memory usage
 
-## 🌟 Community
+**Non-Code Contributions:**
+- Write documentation and tutorials
+- Test beta features and report bugs
+- Share use cases and workflows
+- Help other developers in discussions
+- Create example projects and templates
 
-<div align="center">
+**Community Building:**
+- Share Context Sync with fellow developers
+- Write blog posts about your experience
+- Speak at conferences or meetups
+- Contribute to roadmap planning
 
-<a href="https://github.com/Intina47/context-sync/discussions">
-  <img src="https://img.shields.io/badge/GitHub-Discussions-181717?style=for-the-badge&logo=github" alt="Discussions">
-</a>
-<a href="https://www.producthunt.com/posts/context-sync">
-  <img src="https://img.shields.io/badge/Product%20Hunt-Vote-orange?style=for-the-badge&logo=producthunt" alt="Product Hunt">
-</a>
-<a href="https://twitter.com/intent/tweet?text=Check%20out%20Context%20Sync%20-%20AI%20context%20sync%20for%20Cursor%20and%20Claude!&url=https://github.com/Intina47/context-sync">
-  <img src="https://img.shields.io/badge/Twitter-Share-1DA1F2?style=for-the-badge&logo=twitter" alt="Twitter">
-</a>
+### 📋 Current Priorities
 
-<br><br>
+**Help wanted on:**
+- [ ] **Python ecosystem support** - pip, poetry, requirements analysis
+- [ ] **Mobile/web integration** - React Native, Expo, web development workflows  
+- [ ] **Docker/containerization** - workspace detection for containerized apps
+- [ ] **More Git integrations** - PR analysis, commit message generation
+- [ ] **Performance optimizations** - faster workspace scanning, better caching
+- [ ] **UI/dashboard development** - web interface for memory management
 
-**Show your support:** Give us a ⭐ on GitHub!
+### 🎯 Get Started Contributing
 
-<br>
+1. **Star the repo** to show support
+2. **Join discussions** to share ideas and get help
+3. **Read [CONTRIBUTING.md](CONTRIBUTING.md)** for technical guidelines
+4. **Pick an issue** labeled `good-first-issue` or `help-wanted`
+5. **Submit a PR** - we review quickly and provide feedback
 
-<a href="https://github.com/Intina47/context-sync/stargazers">
-  <img src="https://img.shields.io/github/stars/Intina47/context-sync?style=social" alt="Star">
-</a>
+**New to open source?** We're beginner-friendly! Many contributors started here.
 
-</div>
+### 💬 Community Links
+
+- **GitHub Discussions**: Feature requests, questions, showcase
+- **Issues**: Bug reports and feature planning
+- **Pull Requests**: Code contributions welcome
+- **Roadmap**: [ROADMAP.md](ROADMAP.md) - see what's coming next
 
 <br>
 
@@ -1013,67 +848,69 @@ You: "Sync context to Cursor"
 
 <br>
 
-## 📄 License
+---
 
-MIT License - see [LICENSE](LICENSE) file for details.
+## License & Philosophy
 
-**TL;DR:** Use it however you want. Commercial, personal, modify, distribute. Just keep the license.
+**MIT License** - Use commercially, modify freely, redistribute openly.
 
-<br>
+Context Sync is **truly open source**:
+- No dual licensing schemes
+- No "enterprise" vs "community" versions  
+- No feature paywalls or subscription tiers
+- No proprietary extensions or locked ecosystem
+
+**Why MIT?** Because AI tooling infrastructure should belong to the developer community, not corporations.
 
 ---
 
-<br>
+## The Vision
 
-## 🙏 Acknowledgments
+**We're building the git of AI development.**
 
-**Built with:**
-- [Model Context Protocol](https://modelcontextprotocol.io/) by Anthropic
-- [TypeScript](https://www.typescriptlang.org/)
-- [SQLite](https://www.sqlite.org/)
+Just as git transformed how developers collaborate on code, Context Sync is transforming how developers collaborate with AI systems.
 
-**Special thanks:**
-- Every developer who gave feedback on launch day
-- Early adopters who believed in the vision
-- The Claude AI community
-- Contributors who helped build this
+**Current state**: AI tools are isolated, forgetful, and platform-locked
+**Our vision**: Universal, persistent, extensible AI memory layer
+**End goal**: AI that truly understands and remembers your development context across all tools and platforms
 
-**Built by developers tired of explaining the same thing 47 times.**
-
-<br>
+**This is bigger than Context Sync** - we're establishing standards and protocols that any tool can implement. Think of us as the Apache Foundation for AI development infrastructure.
 
 ---
 
-<br>
+## Star History & Community
+
+**Growing fast thanks to developers like you:**
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Intina47/context-sync&type=Date)](https://star-history.com/#Intina47/context-sync&Date)
+
+**Recent milestones:**
+- 🎉 26 stars in first 24 hours
+- 📦 400+ npm downloads in launch week  
+- 💬 Active community in GitHub Discussions
+- 🚀 Growing contributor base from 6 countries
+
+---
+
+## Spread the Word
+
+**Help other developers discover Context Sync:**
+
+- ⭐ **Star the repository** (most important!)
+- 🐦 **Share on social media** with your experience
+- � **Write about it** in blogs, newsletters, forums
+- 💬 **Tell colleagues** about the productivity gains
+- 🎤 **Present at meetups** or conferences
+- 🤝 **Contribute code or documentation**
+
+**Every developer who discovers Context Sync makes the AI development ecosystem a little more open and powerful.**
+
+---
 
 <div align="center">
 
-## 💝 Support the Project
+**Built by developers, for developers. Join the movement.**
 
-**If Context Sync saves you time:**
-
-- ⭐ Star the repo
-- 🐦 Share on Twitter
-- 👍 Upvote on Product Hunt
-- 💬 Tell other developers
-- 🛠️ Contribute code or docs
-
-**Every bit helps more developers discover this tool!**
-
-<br>
-
----
-
-<br>
-
-**Made with ❤️ by developers who were tired of re-explaining their projects**
-
-<br>
-
-[⬆ Back to Top](#context-sync-)
-
-<br>
-
-<sub>© 2025 Context Sync • Open Source • MIT License</sub>
+[⭐ Star on GitHub](https://github.com/Intina47/context-sync) • [📖 Documentation](documentation/) • [💬 Discussions](https://github.com/Intina47/context-sync/discussions) • [🐛 Issues](https://github.com/Intina47/context-sync/issues)
 
 </div>
