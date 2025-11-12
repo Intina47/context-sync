@@ -40,7 +40,10 @@ export interface StorageInterface {
   // Projects
   createProject(name: string, path?: string): ProjectContext;
   getProject(id: string): ProjectContext | null;
+  /** @deprecated Use session-based current project in ContextSyncServer instead */
   getCurrentProject(): ProjectContext | null;
+  /** @deprecated Use session-based current project in ContextSyncServer instead */
+  setCurrentProject(projectId: string): void;
   updateProject(id: string, updates: Partial<ProjectContext>): void;
   
   // Conversations

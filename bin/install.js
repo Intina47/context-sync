@@ -20,11 +20,23 @@ function log(color, message) {
   console.log(color + message + colors.reset);
 }
 
+// Get version from package.json
+function getVersion() {
+  try {
+    const packagePath = path.join(__dirname, '..', 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+    return packageJson.version;
+  } catch (error) {
+    return '0.6.1'; // Fallback version
+  }
+}
+
 // Detect if this is a global install
 const isGlobalInstall = process.env.npm_config_global === 'true' || 
                         process.env.npm_config_location === 'global';
 
-log(colors.cyan + colors.bold, '\n🧠 Context Sync MCP Server v0.3.1\n');
+const version = getVersion();
+log(colors.cyan + colors.bold, `\n🧠 Context Sync MCP Server v${version}\n`);
 
 if (!isGlobalInstall) {
   log(colors.yellow, '⚠️  Detected local installation.');

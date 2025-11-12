@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { promises as fsAsync } from 'fs';
 import * as path from 'path';
 import type { Storage } from './storage.js';
+import { PathNormalizer } from './path-normalizer.js';
 
 export interface ProjectMetadata {
   name: string;
@@ -28,9 +29,18 @@ export class ProjectDetector {
    * Detect project from a directory path
    */
   async detectFromPath(projectPath: string): Promise<ProjectMetadata | null> {
+    // Validate and normalize path
+    const validation = PathNormalizer.validatePath(projectPath);
+    if (!validation.valid) {
+      console.warn(`Invalid project path: ${validation.reason}`);
+      return null;
+    }
+
+    const normalizedPath = PathNormalizer.normalize(projectPath);
+    
     // Check if path exists
     try {
-      await fsAsync.access(projectPath);
+      await fsAsync.access(normalizedPath);
     } catch {
       return null;
     }
@@ -46,7 +56,7 @@ export class ProjectDetector {
     ];
 
     for (const marker of markers) {
-      const markerPath = path.join(projectPath, marker.file);
+      const markerPath = path.join(normalizedPath, marker.file);
       try {
         await fsAsync.access(markerPath);
         return await this.extractMetadata(projectPath, marker.file, marker.type);
@@ -267,15 +277,19 @@ export class ProjectDetector {
    * Create or update project in storage
    */
   async createOrUpdateProject(projectPath: string): Promise<void> {
-    const metadata = await this.detectFromPath(projectPath);
+    // Normalize path for consistent storage and lookup
+    const normalizedPath = PathNormalizer.normalize(projectPath);
+    const displayPath = PathNormalizer.getDisplayPath(projectPath);
+    
+    const metadata = await this.detectFromPath(normalizedPath);
     
     if (!metadata) {
-      console.error('❌ No project detected at:', projectPath);
+      console.error('❌ No project detected at:', displayPath);
       return;
     }
 
-    // Check if project already exists
-    const existing = this.storage.findProjectByPath(projectPath);
+    // Check if project already exists (using normalized path)
+    const existing = this.storage.findProjectByPath(normalizedPath);
 
     if (existing) {
       // Update tech stack if changed
@@ -284,10 +298,13 @@ export class ProjectDetector {
         techStack: newStack,
         architecture: metadata.architecture || existing.architecture,
       });
+      
+      // ✅ No longer setting current project - that's session state now!
       console.error(`🔄 Updated project: ${existing.name}`);
     } else {
-      // Create new project
-      const project = this.storage.createProject(metadata.name, projectPath);
+      // Create new project (using normalized path for storage)
+      const projectName = metadata.name || path.basename(normalizedPath);
+      const project = this.storage.createProject(projectName, normalizedPath);
       this.storage.updateProject(project.id, {
         techStack: metadata.techStack,
         architecture: metadata.architecture,

@@ -29,111 +29,99 @@ Context Sync aims to be the bridge between AI assistants and your development en
 - File caching for performance
 - Cross-platform path handling
 
+### ✅ v0.3.0 - File Writing & Git (Oct 21, 2025)
+- File create/modify/delete with preview-approve workflow
+- Advanced search (files, content, symbols)
+- Git integration (status, diff, branches)
+- Undo/redo functionality
+- Dependency analysis
+- Call graph analysis
+- Type analysis (TypeScript/JS)
+
+### ✅ v0.4.0 - Advanced Analysis (Oct 21, 2025)
+- Cross-platform sync (Claude ↔ Cursor ↔ VS Code)
+- Enhanced code analysis tools
+- Platform detection and configuration
+
+### ✅ v0.5.0 - Todo Management (Oct 22, 2025)
+- Global todo list system
+- Priority and status tracking
+- Tags and filtering
+- Statistics and insights
+
+### ✅ v0.6.0 - Performance & VS Code (Oct 28, 2025)
+- Performance optimizations (async I/O, caching)
+- File size limits (5MB max)
+- Real-time cache invalidation with chokidar
+- VS Code/GitHub Copilot support
+- Prepared statement caching (2-5x faster queries)
+- Database query optimization
+
 ---
 
 ## 🚧 In Progress
 
-### v0.3.0 - Enhanced Workspace (Q1 2025)
+### v0.6.1 - Storage Management (Dec 2025)
 
-**Theme:** "From reading to writing"
+**Theme:** "Clean up and organize"
 
-#### 🔍 Advanced File Operations
-- **File Search** - Find files by name, content, or pattern
-- **Symbol Search** - Jump to functions, classes, variables
-- **Content Search** - Grep-like search across codebase
-- **Dependency Analysis** - Understand imports and exports
+#### 💾 Project Lifecycle Management
+- **Project Namespacing** - Organize projects by status (active/archived/deleted)
+- **Automatic Archival** - Archive projects inactive for 6+ months
+- **Storage Dashboard** - See disk usage per project
+- **Smart Cleanup** - Safe deletion with dry-run preview
 
-#### ✍️ File Writing (Controlled)
-- **Create Files** - Let Claude create new files
-- **Modify Files** - Edit existing files with approval
-- **Safe Mode** - Preview changes before applying
-- **Undo/Redo** - Rollback changes if needed
-- **Git Integration** - Track changes in version control
+#### 🧹 Data Retention Controls
+- **Configurable Retention** - User-defined retention periods
+- **Conversation Pruning** - Keep recent full, older as decisions only
+- **Manual Archive Commands** - Explicitly archive/restore projects
+- **Storage Insights** - Identify space-hungry projects
 
-#### 🔄 Git Integration
-- **Status Checking** - See uncommitted changes
-- **Diff Viewing** - Compare current vs last commit
-- **Branch Awareness** - Know which branch you're on
-- **Commit Suggestions** - Claude suggests commit messages
+#### ⚡ Cleanup Daemon
+- **Background Processing** - Lightweight daemon for auto-cleanup
+- **Scheduled Tasks** - Daily storage checks
+- **Safe Defaults** - Conservative cleanup rules
+- **User Notifications** - Alert before major cleanups
 
-#### 🎯 Smart Context
-- **Automatic Context Loading** - Load relevant files automatically
-- **Dependency Traversal** - Follow imports to understand code flow
-- **Call Graph Analysis** - Understand function relationships
-- **Type Definition Lookup** - Jump to type definitions
-
-**Expected Release:** October 2025
+**Expected Release:** December 2025
 
 ---
 
 ## 🔮 Planned
 
-### v0.4.0 - IDE Integration (Q2 2025)
+### v0.6.5 - Cloud Backup (Q1 2026)
 
-**Theme:** "Native IDE experience"
+**Theme:** "Never lose context"
 
-#### 🔀 Cursor IDE Integration
-- **Native Extension** - Official Cursor integration
-- **Inline Assistance** - Claude suggests code in-editor
-- **Context Awareness** - Automatically knows what file you're viewing
-- **Quick Actions** - Right-click → Ask Claude
-- **Terminal Integration** - Run commands Claude suggests
+#### ☁️ Cloud Storage (Premium)
+- **Encrypted Backup** - Secure cloud storage for context
+- **Auto-Sync** - Automatically sync old projects to cloud
+- **Free Local Space** - Archive to cloud, free up disk
+- **Multi-Device Access** - Access context from anywhere
 
-#### 💻 VS Code Extension
-- **GitHub Copilot Enhancement** - Augment Copilot with Context Sync
-- **Sidebar Panel** - View project context in VS Code
-- **Command Palette** - Quick access to Context Sync tools
-- **Status Bar** - Show active project and workspace
+#### 💰 Monetization Tiers
+- **Free Tier** - 5 projects or 100MB local storage
+- **Premium Tier** - Unlimited cloud storage + auto-sync
+- **Service Premium** - Pay for convenience, not features
+- **Value Proposition** - "Never lose context, free up disk space"
 
-#### 🎨 Visual Feedback
-- **Highlighted Reads** - See what Claude is reading
-- **Real-time File Updates** - Sync changes instantly
-- **Progress Indicators** - Show when Claude is scanning
-- **Minimap Integration** - Visual code navigation
+#### 🔄 Smart Sync
+- **Selective Sync** - Choose which projects to sync
+- **Bandwidth Control** - Limit sync speed
+- **Offline Mode** - Full functionality without cloud
+- **Conflict Resolution** - Handle multi-device edits
 
-#### ⚡ Performance
-- **Incremental Indexing** - Only scan changed files
-- **Parallel Processing** - Multi-threaded file operations
-- **Smart Caching** - Intelligent cache invalidation
-- **Lazy Loading** - Load on demand, not upfront
+#### 🔐 Security
+- **End-to-End Encryption** - Zero-knowledge architecture
+- **Local-First** - Cloud optional, not required
+- **Data Portability** - Export your data anytime
+- **GDPR Compliant** - Privacy-focused design
 
-**Expected Release:** Nov 2025
-
----
-
-### v0.5.0 - AI-Powered Features (Q3 2025)
-
-**Theme:** "Intelligent automation"
-
-#### 🤖 Automatic Context Capture
-- **Conversation Mining** - Extract decisions from chats automatically
-- **Code Change Detection** - Notice when you change architecture
-- **Decision Inference** - Suggest decisions based on code changes
-- **Smart Summaries** - Auto-summarize long conversations
-
-#### 🧠 Semantic Understanding
-- **Code Embeddings** - Vectorize your codebase
-- **Semantic Search** - "Find code that handles authentication"
-- **Similar Code Detection** - Find related implementations
-- **Pattern Recognition** - Identify common patterns in your code
-
-#### 📊 Analytics & Insights
-- **Project Health** - Code quality metrics
-- **Complexity Analysis** - Identify complex areas
-- **Dependency Graphs** - Visualize project dependencies
-- **Change Impact** - Predict effects of changes
-
-#### 🎓 Learning & Suggestions
-- **Best Practices** - Suggest improvements based on your patterns
-- **Consistency Checking** - Ensure code follows your style
-- **Refactoring Opportunities** - Identify code smells
-- **Documentation Generation** - Auto-generate docs
-
-**Expected Release:** Jan 2026
+**Expected Release:** Q1 2026
 
 ---
 
-### v0.6.0 - Collaboration (Q4 2026)
+### v0.7.0 - Team Collaboration (Q2 2026)
 
 **Theme:** "Team knowledge sharing"
 
@@ -143,25 +131,19 @@ Context Sync aims to be the bridge between AI assistants and your development en
 - **Onboarding Assistant** - Help new developers understand codebase
 - **Code Reviews** - Collaborative review with AI assistance
 
-#### ☁️ Cloud Sync (Optional)
-- **Encrypted Backup** - Secure cloud storage
-- **Multi-Device Sync** - Access context from anywhere
-- **Team Collaboration** - Share context with teammates
-- **Version History** - Time-travel through context changes
-
 #### 🔐 Enterprise Features
 - **SSO Integration** - Single sign-on support
 - **Audit Logs** - Track all context changes
 - **Role-Based Access** - Control who sees what
-- **Compliance** - GDPR, SOC2 compliance
+- **Team Workspaces** - Shared project environments
 
-#### 📈 Advanced Analytics
+#### 📈 Team Analytics
 - **Team Insights** - How your team uses Context Sync
 - **Productivity Metrics** - Measure time saved
 - **Decision Tracking** - Understand architectural evolution
 - **Knowledge Gaps** - Identify undocumented areas
 
-**Expected Release:** December 2026
+**Expected Release:** Q2 2026
 
 ---
 
@@ -179,11 +161,13 @@ Context Sync aims to be the bridge between AI assistants and your development en
 - **Rust:** Cargo integration
 - **Go:** Module understanding
 
-### Advanced AI Features
-- **Code Generation** - Generate entire features
-- **Test Generation** - Auto-write tests
-- **Bug Prediction** - Predict bugs before they happen
-- **Performance Optimization** - Suggest optimizations
+### Smart Context Features (If User Demand Emerges)
+- **Semantic Search** - Natural language code search
+- **Pattern Recognition** - Identify common patterns
+- **Auto-Tagging** - Automatically categorize code
+- **Smart Summaries** - AI-powered context summaries
+
+> Note: Context Engine (AI-powered features) archived for potential future use. See `archive/v7-ai-layer` branch. Focus remains on simple, effective tools that leverage MCP's lazy loading architecture.
 
 ### Platform Expansion
 - **Mobile Apps** - iOS/Android Context Sync
@@ -201,29 +185,29 @@ Context Sync aims to be the bridge between AI assistants and your development en
 
 ## 🎯 Success Metrics
 
-### v0.3.0 Goals
-- ⚡ 50% faster file operations
-- 📝 File writing with 99.9% safe mode accuracy
-- 🔍 Sub-second search across 10k+ file projects
-- 💾 <5MB memory footprint increase
+### v0.6.0 Achievements ✅
+- ⚡ 2-5x faster database queries with prepared statements
+- 📁 5MB file size limit prevents OOM crashes
+- 🔍 Real-time cache invalidation with file watchers
+- 💻 VS Code/GitHub Copilot support added
 
-### v0.4.0 Goals
-- 🔀 10,000+ Cursor users
-- 💻 5,000+ VS Code users
-- ⭐ 5,000+ GitHub stars
-- 🎨 <100ms UI response time
+### v0.6.1 Goals
+- 💾 Reduce average local storage by 40% through smart cleanup
+- 🧹 Archive 90% of inactive projects automatically
+- 📊 Storage dashboard with <100ms load time
+- 🎯 Zero accidental data loss with safe defaults
 
-### v0.5.0 Goals
-- 🤖 90% automatic decision capture accuracy
-- 🧠 Semantic search outperforms text search 80% of time
-- 📊 50% reduction in code review time
-- 🎓 80% of suggestions accepted by users
+### v0.6.5 Goals
+- ☁️ 1,000+ premium subscribers
+- 💰 $10-20 MRR per premium user
+- 🔄 99.9% uptime for cloud sync
+- 🔐 Zero-knowledge encryption architecture
 
-### v0.6.0 Goals
-- 👥 1,000+ teams using Context Sync
-- ☁️ 99.9% uptime for cloud sync
-- 🔐 SOC2 compliance achieved
+### v0.7.0 Goals
+- 👥 100+ teams using Context Sync
 - 📈 Average 2 hours saved per developer per week
+- ⭐ 10,000+ GitHub stars
+- 🤝 50+ active community contributors
 
 ---
 
@@ -242,11 +226,12 @@ We're building Context Sync FOR developers. Your input matters!
 ### Most Requested Features
 
 Based on community feedback:
-1. 🔥 File writing capabilities (coming v0.3.0)
-2. 🔥 Cursor integration (coming v0.4.0)
-3. 🔥 Semantic code search (coming v0.5.0)
-4. 🔥 Team collaboration (coming v0.6.0)
-5. 🔥 VS Code extension (coming v0.4.0)
+1. ✅ File writing capabilities (shipped v0.3.0)
+2. ✅ VS Code integration (shipped v0.6.0)
+3. ✅ Cursor integration (shipped v0.4.0)
+4. 🔥 Storage management (coming v0.6.1)
+5. 🔥 Cloud backup (coming v0.6.5)
+6. 🔥 Team collaboration (coming v0.7.0)
 
 ---
 
@@ -256,10 +241,13 @@ Based on community feedback:
 |---------|-------|--------|--------|
 | v0.1.0 | Foundation | Oct 2025 | ✅ Released |
 | v0.2.0 | Workspace | Oct 2025 | ✅ Released |
-| v0.3.0 | Enhanced Workspace | Q1 2025 | 🚧 In Progress |
-| v0.4.0 | IDE Integration | Q2 2025 | 📋 Planned |
-| v0.5.0 | AI Features | Q3 2025 | 📋 Planned |
-| v0.6.0 | Collaboration | Q4 2026 | 📋 Planned |
+| v0.3.0 | File Writing & Git | Oct 2025 | ✅ Released |
+| v0.4.0 | Advanced Analysis | Oct 2025 | ✅ Released |
+| v0.5.0 | Todo Management | Oct 2025 | ✅ Released |
+| v0.6.0 | Performance & VS Code | Oct 2025 | ✅ Released |
+| v0.6.1 | Storage Management | Dec 2025 | 🚧 In Progress |
+| v0.6.5 | Cloud Backup | Q1 2026 | 📋 Planned |
+| v0.7.0 | Team Collaboration | Q2 2026 | 📋 Planned |
 
 ---
 

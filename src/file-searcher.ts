@@ -3,6 +3,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { WorkspaceDetector } from './workspace-detector.js';
+import { FileSizeGuard } from './file-size-guard.js';
+import { FileSkimmer } from './file-skimmer.js';
 
 export interface FileMatch {
   path: string;
@@ -37,8 +39,17 @@ export interface ContentSearchOptions extends SearchOptions {
 export class FileSearcher {
   // Regex pattern cache for better performance
   private patternCache: Map<string, RegExp> = new Map();
+  private fileSizeGuard: FileSizeGuard;
+  private fileSkimmer: FileSkimmer;
   
-  constructor(private workspaceDetector: WorkspaceDetector) {}
+  constructor(private workspaceDetector: WorkspaceDetector) {
+    this.fileSizeGuard = new FileSizeGuard();
+    this.fileSkimmer = new FileSkimmer({
+      maxFileSize: 2 * 1024 * 1024,  // Start skimming at 2MB for search operations
+      headerSize: 64 * 1024,         // 64KB header
+      footerSize: 32 * 1024,         // 32KB footer
+    });
+  }
 
   /**
    * Search for files by name or pattern
@@ -77,6 +88,9 @@ export class FileSearcher {
     query: string,
     options: ContentSearchOptions = {}
   ): ContentMatch[] {
+    // Reset file size guard for new search operation
+    this.fileSizeGuard.reset();
+    
     const workspace = this.workspaceDetector.getCurrentWorkspace();
     if (!workspace) {
       return [];
@@ -95,6 +109,7 @@ export class FileSearcher {
 
     this.searchContentRecursive(
       workspace,
+      query,
       searchRegex,
       results,
       maxResults,
@@ -221,6 +236,7 @@ export class FileSearcher {
 
   private searchContentRecursive(
     dirPath: string,
+    originalQuery: string,
     searchRegex: RegExp,
     results: ContentMatch[],
     maxResults: number,
@@ -241,6 +257,7 @@ export class FileSearcher {
         if (entry.isDirectory()) {
           this.searchContentRecursive(
             fullPath,
+            originalQuery,
             searchRegex,
             results,
             maxResults,
@@ -259,7 +276,22 @@ export class FileSearcher {
           }
 
           try {
-            const content = fs.readFileSync(fullPath, 'utf8');
+            // Try intelligent skimming first for large files
+            const skimResult = this.fileSkimmer.readFile(fullPath, [originalQuery]);
+            
+            let content = skimResult.content;
+            let isSkimmed = skimResult.skimmed;
+            
+            // If file was too large even for skimming, use fallback
+            if (!content) {
+              const guardResult = this.fileSizeGuard.readFile(fullPath, 'utf8');
+              if (guardResult.skipped) {
+                continue; // Skip files that are still too large
+              }
+              content = guardResult.content;
+              isSkimmed = false;
+            }
+            
             const lines = content.split('\n');
             const relativePath = path.relative(
               this.workspaceDetector.getCurrentWorkspace()!,
