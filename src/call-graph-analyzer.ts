@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { FileSizeGuard } from './file-size-guard.js';
+import { skimForFunctions } from './file-skimmer.js';
 
 // Types for call graph analysis
 export interface FunctionDefinition {
@@ -52,12 +54,18 @@ export class CallGraphAnalyzer {
   private fileCache: Map<string, string>;
   private functionCache: Map<string, FunctionDefinition[]>;
   private callCache: Map<string, FunctionCall[]>;
+  private fileSizeGuard: FileSizeGuard;
   
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
     this.fileCache = new Map();
     this.functionCache = new Map();
     this.callCache = new Map();
+    this.fileSizeGuard = new FileSizeGuard({
+      maxFileSize: 5 * 1024 * 1024,    // 5MB per file
+      maxTotalSize: 50 * 1024 * 1024,   // 50MB total
+      skipLargeFiles: true,
+    });
   }
 
   /**
@@ -421,7 +429,22 @@ export class CallGraphAnalyzer {
     }
     
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
+      // Use intelligent skimming for function analysis
+      const skimResult = skimForFunctions(filePath);
+      
+      if (!skimResult.content) {
+        // Fallback to file size guard if skimming fails
+        const guardResult = this.fileSizeGuard.readFile(filePath, 'utf-8');
+        if (guardResult.skipped) {
+          return ''; // Return empty string for skipped files to prevent crashes
+        }
+        const content = guardResult.content;
+        this.fileCache.set(filePath, content);
+        return content;
+      }
+      
+      // Use skimmed content for function analysis
+      const content = skimResult.content;
       this.fileCache.set(filePath, content);
       return content;
     } catch (error) {

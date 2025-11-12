@@ -18,7 +18,14 @@ import { TypeAnalyzer } from './type-analyzer.js';
 import { PlatformSync, type AIPlatform } from './platform-sync.js';   
 import { TodoManager } from './todo-manager.js';
 import { createTodoHandlers } from './todo-handlers.js';
+import { readFileSync } from 'fs';
+import { join, dirname, basename } from 'path';
+import { fileURLToPath } from 'url';
+import { PathNormalizer } from './path-normalizer.js';
+import { PerformanceMonitor } from './performance-monitor.js';
 import { todoToolDefinitions } from './todo-tools.js';
+import type { ProjectContext } from './types.js';
+import * as fs from 'fs';
 
 export class ContextSyncServer {
   private server: Server;
@@ -34,6 +41,9 @@ export class ContextSyncServer {
   private platformSync: PlatformSync;
   private todoManager: TodoManager;
   private todoHandlers: ReturnType<typeof createTodoHandlers>;
+  
+  // ✅ NEW: Session-specific current project
+  private currentProjectId: string | null = null;
 
   constructor(storagePath?: string) {
 
@@ -46,7 +56,7 @@ export class ContextSyncServer {
     this.server = new Server(
       {
         name: 'context-sync',
-        version: '0.6.0',
+        version: '0.6.1',
       },
       {
         capabilities: {
@@ -67,6 +77,55 @@ export class ContextSyncServer {
     this.setupPromptHandlers();
   }
 
+  /**
+   * Get the current version from package.json
+   */
+  private getVersion(): string {
+    try {
+      // Get the directory of the current module
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      
+      // Look for package.json in parent directories
+      let currentDir = __dirname;
+      while (currentDir !== dirname(currentDir)) {
+        try {
+          const packagePath = join(currentDir, 'package.json');
+          const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
+          if (packageJson.name === '@context-sync/server') {
+            return packageJson.version;
+          }
+        } catch {
+          // Continue searching in parent directory
+        }
+        currentDir = dirname(currentDir);
+      }
+      
+      // Fallback: try to read from installed package location
+      try {
+        const installedPackagePath = join(process.cwd(), '..', '..', 'package.json');
+        const packageJson = JSON.parse(readFileSync(installedPackagePath, 'utf8'));
+        if (packageJson.name === '@context-sync/server') {
+          return packageJson.version;
+        }
+      } catch {
+        // Fallback failed
+      }
+      
+      return '0.6.1'; // Fallback version
+    } catch (error) {
+      return '0.6.1'; // Fallback version
+    }
+  }
+
+  /**
+   * Get current project from session state
+   */
+  private getCurrentProject(): ProjectContext | null {
+    if (!this.currentProjectId) return null;
+    return this.storage.getProject(this.currentProjectId);
+  }
+
   private setupPromptHandlers(): void {
     this.server.setRequestHandler(ListPromptsRequestSchema, async () => ({
       prompts: [
@@ -83,8 +142,7 @@ export class ContextSyncServer {
         throw new Error(`Unknown prompt: ${request.params.name}`);
       }
 
-      const project = this.storage.getCurrentProject();
-
+      const project = this.getCurrentProject();  
       if (!project) {
         return {
           description: 'No active project',
@@ -168,8 +226,7 @@ export class ContextSyncServer {
       if (name === 'get_project_context') return this.handleGetContext();
       if (name === 'save_decision') return this.handleSaveDecision(args as any);
       if (name === 'save_conversation') return this.handleSaveConversation(args as any);
-      if (name === 'init_project') return this.handleInitProject(args as any);
-      if (name === 'detect_project') return this.handleDetectProject(args as any);
+
       if (name === 'set_workspace') return this.handleSetWorkspace(args as any);
       if (name === 'read_file') return this.handleReadFile(args as any);
       if (name === 'get_project_structure') return this.handleGetProjectStructure(args as any);
@@ -217,13 +274,17 @@ export class ContextSyncServer {
       if (name === 'get_platform_context') return this.handleGetPlatformContext(args as any);
       if (name === 'setup_cursor') return this.handleSetupCursor();
       if (name === 'get_started') return this.handleGetStarted();
-      // V0.4.0 - Todo Management Tools (ADD THESE)
-      if (name.startsWith('todo_')) {
-        const handler = this.todoHandlers[name as keyof typeof this.todoHandlers];
-        if (handler) {
-          return await handler(args as any);
-        }
-      }
+      if (name === 'debug_session') return this.handleDebugSession();
+      if (name === 'get_performance_report') return this.handleGetPerformanceReport(args as any);
+      // V0.4.0 - Todo Management Tools (with current project integration)
+      if (name === 'todo_create') return this.handleTodoCreate(args as any);
+      if (name === 'todo_get') return this.handleTodoGet(args as any);
+      if (name === 'todo_list') return this.handleTodoList(args as any);
+      if (name === 'todo_update') return this.handleTodoUpdate(args as any);
+      if (name === 'todo_delete') return this.handleTodoDelete(args as any);
+      if (name === 'todo_complete') return this.handleTodoComplete(args as any);
+      if (name === 'todo_stats') return this.handleTodoStats(args as any);
+      if (name === 'todo_tags') return this.handleTodoTags();
 
       throw new Error(`Unknown tool: ${name}`);
     });
@@ -261,34 +322,18 @@ export class ContextSyncServer {
           required: ['content', 'role'],
         },
       },
-      {
-        name: 'init_project',
-        description: 'Initialize or switch to a project',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            name: { type: 'string' },
-            path: { type: 'string' },
-            architecture: { type: 'string' },
-          },
-          required: ['name'],
-        },
-      },
-      {
-        name: 'detect_project',
-        description: 'Auto-detect project from a directory path',
-        inputSchema: {
-          type: 'object',
-          properties: { path: { type: 'string' } },
-          required: ['path'],
-        },
-      },
+
       {
         name: 'set_workspace',
-        description: 'Set the current workspace/project folder',
+        description: 'Set workspace directory and initialize project. Automatically detects project type, validates path, and offers to initialize Context Sync features with user consent. This is the primary command for starting work on any project.',
         inputSchema: {
           type: 'object',
-          properties: { path: { type: 'string' } },
+          properties: { 
+            path: { 
+              type: 'string',
+              description: 'Absolute path to the project directory (must exist and be accessible)'
+            } 
+          },
           required: ['path'],
         },
       },
@@ -754,6 +799,31 @@ export class ContextSyncServer {
           properties: {},
         },
       },
+      {
+        name: 'debug_session',
+        description: 'Debug session state and project information for multi-project testing',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'get_performance_report',
+        description: 'Get performance metrics and statistics for database operations and system performance',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            operation: {
+              type: 'string',
+              description: 'Specific operation to get stats for (optional)',
+            },
+            reset: {
+              type: 'boolean',
+              description: 'Reset stats after reporting (default: false)',
+            },
+          },
+        },
+      },
       // V0.4.0 - Todo Management Tools (ADD THESE)
       ...todoToolDefinitions,
     ];
@@ -762,13 +832,13 @@ export class ContextSyncServer {
   // ========== V0.2.0 HANDLERS ==========
 
   private handleGetContext() {
-    const project = this.storage.getCurrentProject();
+    const project = this.getCurrentProject();
     
     if (!project) {
       return {
         content: [{
           type: 'text',
-          text: 'No active project. Use init_project to create one.',
+          text: 'No active project. Use set_workspace to create one.',
         }],
       };
     }
@@ -783,11 +853,11 @@ export class ContextSyncServer {
   }
 
   private handleSaveDecision(args: any) {
-    const project = this.storage.getCurrentProject();
+    const project = this.getCurrentProject();
     
     if (!project) {
       return {
-        content: [{ type: 'text', text: 'No active project. Use init_project first.' }],
+        content: [{ type: 'text', text: 'No active project. Use set_workspace first.' }],
       };
     }
 
@@ -804,11 +874,11 @@ export class ContextSyncServer {
   }
 
   private handleSaveConversation(args: any) {
-    const project = this.storage.getCurrentProject();
+    const project = this.getCurrentProject();
     
     if (!project) {
       return {
-        content: [{ type: 'text', text: 'No active project. Use init_project first.' }],
+        content: [{ type: 'text', text: 'No active project. Use set_workspace first.' }],
       };
     }
 
@@ -824,84 +894,294 @@ export class ContextSyncServer {
     };
   }
 
-  private handleInitProject(args: any) {
-    const project = this.storage.createProject(args.name, args.path);
 
-    if (args.architecture) {
-      this.storage.updateProject(project.id, { architecture: args.architecture });
-    }
-
-    return {
-      content: [{ type: 'text', text: `Project "${args.name}" initialized and set as active.` }],
-    };
-  }
-
-  private handleDetectProject(args: any) {
-    try {
-      this.projectDetector.createOrUpdateProject(args.path);
-      const project = this.storage.getCurrentProject();
-      
-      if (!project) {
-        return {
-          content: [{ type: 'text', text: `No project detected at: ${args.path}` }],
-        };
-      }
-
-      const techStack = project.techStack.join(', ') || 'None detected';
-      const arch = project.architecture || 'Not specified';
-
-      return {
-        content: [{
-          type: 'text',
-          text: `📁 Detected project: ${project.name}\n🏗️  Architecture: ${arch}\n⚙️  Tech Stack: ${techStack}`,
-        }],
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Error detecting project: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        }],
-      };
-    }
-  }
 
   private async handleSetWorkspace(args: any) {
     try {
-      this.workspaceDetector.setWorkspace(args.path);
-      this.gitIntegration = new GitIntegration(args.path);
-      this.dependencyAnalyzer = new DependencyAnalyzer(args.path)
-      this.callGraphAnalyzer = new CallGraphAnalyzer(args.path);
-      this.typeAnalyzer = new TypeAnalyzer(args.path); 
+      // 0. NORMALIZE PATH for consistent handling
+      const normalizedPath = PathNormalizer.normalize(args.path);
+      const displayPath = PathNormalizer.getDisplayPath(args.path);
 
-      const project = this.storage.getCurrentProject();
-      
-      if (!project) {
-        return {
-          content: [{
-            type: 'text',
-            text: `Workspace set to: ${args.path}\nBut no project configuration detected.`,
-          }],
-        };
+      // 1. STRICT PATH VALIDATION - Fail fast on invalid paths
+      await this.validatePathStrict(normalizedPath);
+
+      // 2. CHECK IF PROJECT ALREADY EXISTS IN DATABASE
+      const existingProject = this.storage.findProjectByPath(normalizedPath);
+      if (existingProject) {
+        return await this.useExistingProject(normalizedPath, existingProject, displayPath);
       }
 
-      const structure = await this.workspaceDetector.getProjectStructure(2);
-      const isGit = this.gitIntegration.isGitRepo() ? ' (Git repo ✓)' : '';
+      // 3. DETECT PROJECT FROM FILESYSTEM - Thorough detection  
+      const detectedMetadata = await this.detectProjectFromPathStrict(normalizedPath);
+      if (detectedMetadata) {
+        return this.requestProjectInitialization(normalizedPath, detectedMetadata, displayPath);
+      }
 
+      // 4. NO PROJECT DETECTED - OFFER OPTIONS
+      return this.requestGenericInitialization(normalizedPath, displayPath);
+
+    } catch (error) {
+      return this.createErrorResponse(error, args.path);
+    }
+  }
+
+  // ========== STRICT INTERNAL FUNCTIONS WITH ROBUST VALIDATION ==========
+
+  /**
+   * Strict path validation - throws descriptive errors for any path issues
+   */
+  private async validatePathStrict(path: string): Promise<void> {
+    if (!path || typeof path !== 'string') {
+      throw new Error('Path is required and must be a string');
+    }
+
+    const trimmedPath = path.trim();
+    if (!trimmedPath) {
+      throw new Error('Path cannot be empty or just whitespace');
+    }
+
+    // Check if path exists
+    let stats;
+    try {
+      stats = await fs.promises.stat(trimmedPath);
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        throw new Error(`Directory does not exist: ${trimmedPath}`);
+      } else if (error.code === 'EACCES') {
+        throw new Error(`Permission denied accessing: ${trimmedPath}`);
+      } else if (error.code === 'ENOTDIR') {
+        throw new Error(`Path exists but is not a directory: ${trimmedPath}`);
+      } else {
+        throw new Error(`Cannot access path "${trimmedPath}": ${error.message}`);
+      }
+    }
+
+    // Verify it's actually a directory
+    if (!stats.isDirectory()) {
+      throw new Error(`Path exists but is not a directory: ${trimmedPath}`);
+    }
+
+    // Check read permissions by trying to list contents
+    try {
+      await fs.promises.readdir(trimmedPath);
+    } catch (error: any) {
+      throw new Error(`Cannot read directory contents: ${trimmedPath} (${error.message})`);
+    }
+  }
+
+  /**
+   * Strict project detection - only returns metadata for valid, detectable projects
+   */
+  private async detectProjectFromPathStrict(path: string): Promise<any | null> {
+    try {
+      // Use existing project detector but with additional validation
+      const metadata = await this.projectDetector.detectFromPath(path);
+      
+      if (!metadata) {
+        return null; // No project detected - this is fine
+      }
+
+      // Validate detected metadata is actually valid
+      if (!metadata.name || !metadata.type) {
+        console.warn(`Invalid project metadata detected at ${path}:`, metadata);
+        return null;
+      }
+
+      // Ensure tech stack is valid
+      if (!Array.isArray(metadata.techStack)) {
+        console.warn(`Invalid tech stack in project metadata at ${path}:`, metadata.techStack);
+        metadata.techStack = [];
+      }
+
+      return metadata;
+
+    } catch (error) {
+      console.error(`Error detecting project at ${path}:`, error);
+      return null; // Don't throw - just return null for undetectable projects
+    }
+  }
+
+  /**
+   * Use existing project with full workspace setup
+   */
+  private async useExistingProject(path: string, project: any, displayPath?: string) {
+    try {
+      // Set up workspace and analyzers
+      await this.initializeWorkspaceStrict(path);
+      
+      // Set as current project in session
+      this.currentProjectId = project.id;
+      
+      const structure = await this.workspaceDetector.getProjectStructure(2);
+      const isGit = this.gitIntegration?.isGitRepo() ? ' (Git repo ✓)' : '';
+      
       return {
         content: [{
           type: 'text',
-          text: `✅ Workspace set: ${args.path}${isGit}\n\n📁 Project: ${project.name}\n⚙️  Tech Stack: ${project.techStack.join(', ')}\n\n📂 Structure Preview:\n${structure}\n\nYou can now:\n- read_file to view files\n- create_file to preview new files (then apply_create_file to create)\n- modify_file to preview changes (then apply_modify_file to apply)\n- search_files to find files\n- git_status to check git status`,
-        }],
+          text: `✅ **Workspace Connected**: ${path}${isGit}\n\n📁 **Project**: ${project.name}\n⚙️  **Tech Stack**: ${project.techStack.join(', ') || 'None'}\n🏗️  **Architecture**: ${project.architecture || 'Not specified'}\n\n📂 **Structure Preview**:\n${structure}\n\n🎯 **Ready!** All Context Sync features are active for this project.\n\n**Available**:\n• Project-specific todos\n• Decision tracking\n• Git integration\n• Code analysis tools`
+        }]
       };
     } catch (error) {
+      throw new Error(`Failed to set up existing project: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Request user consent for project initialization
+   */
+  private requestProjectInitialization(path: string, metadata: any, displayPath?: string) {
+    return {
+      content: [{
+        type: 'text',
+        text: `🔍 **Project Detected!**\n\n📁 **Name**: ${metadata.name}\n🏗️  **Type**: ${metadata.type}\n⚙️  **Tech Stack**: ${metadata.techStack.join(', ')}\n${metadata.architecture ? `🏛️  **Architecture**: ${metadata.architecture}\n` : ''}\n**Initialize this project in Context Sync?**\n\n✅ **Benefits**:\n• Project-specific todos and decisions\n• Context tracking across AI sessions\n• Git integration and code analysis\n• Shared memory between AI platforms\n\n**Commands**:\n• \`"yes"\` or \`"initialize"\` to proceed\n• \`"no"\` or \`"skip"\` to use as basic workspace\n\n*Note: You can always initialize later if you change your mind.*`
+      }]
+    };
+  }
+
+  /**
+   * Request user choice for generic initialization
+   */
+  private requestGenericInitialization(path: string, displayPath?: string) {
+    return {
+      content: [{
+        type: 'text',
+        text: `📂 **Directory Validated**: ${path}\n\nNo specific project type detected (no package.json, Cargo.toml, etc.)\n\n**Choose your setup**:\n\n**1. 🚀 Full Project** (Recommended)\n• Enable todos and decision tracking\n• Full Context Sync features\n• Project-specific context\n• Cross-platform sync\n\n**2. 📁 Basic Workspace**\n• File operations only\n• No project tracking\n• Minimal features\n\n**Commands**:\n• \`"1"\` or \`"full"\` for complete project setup\n• \`"2"\` or \`"basic"\` for workspace-only mode`
+      }]
+    };
+  }
+
+  /**
+   * Initialize workspace with all analyzers - strict validation
+   */
+  private async initializeWorkspaceStrict(path: string): Promise<void> {
+    try {
+      // Set workspace detector
+      this.workspaceDetector.setWorkspace(path);
+      
+      // Initialize analyzers with error handling
+      try {
+        this.gitIntegration = new GitIntegration(path);
+      } catch (error) {
+        console.warn(`Git integration failed for ${path}:`, error);
+        this.gitIntegration = null;
+      }
+
+      try {
+        this.dependencyAnalyzer = new DependencyAnalyzer(path);
+      } catch (error) {
+        console.warn(`Dependency analyzer failed for ${path}:`, error);
+        this.dependencyAnalyzer = null;
+      }
+
+      try {
+        this.callGraphAnalyzer = new CallGraphAnalyzer(path);
+      } catch (error) {
+        console.warn(`Call graph analyzer failed for ${path}:`, error);
+        this.callGraphAnalyzer = null;
+      }
+
+      try {
+        this.typeAnalyzer = new TypeAnalyzer(path);
+      } catch (error) {
+        console.warn(`Type analyzer failed for ${path}:`, error);
+        this.typeAnalyzer = null;
+      }
+
+    } catch (error) {
+      throw new Error(`Failed to initialize workspace: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Initialize a new project with strict validation
+   */
+  private async initializeProjectStrict(path: string, metadata?: any, customName?: string): Promise<any> {
+    try {
+      // Validate inputs
+      if (!path) {
+        throw new Error('Path is required for project initialization');
+      }
+
+      // Re-validate path still exists (safety check)
+      await this.validatePathStrict(path);
+
+      // Create project name
+      const projectName = customName || metadata?.name || basename(path);
+      if (!projectName || projectName.trim().length === 0) {
+        throw new Error('Project name cannot be empty');
+      }
+
+      // Create project in database
+      const project = this.storage.createProject(projectName.trim(), path);
+      if (!project || !project.id) {
+        throw new Error('Failed to create project in database');
+      }
+      
+      // Update with metadata if available
+      if (metadata) {
+        try {
+          this.storage.updateProject(project.id, {
+            techStack: Array.isArray(metadata.techStack) ? metadata.techStack : [],
+            architecture: metadata.architecture || undefined,
+          });
+        } catch (error) {
+          console.warn('Failed to update project metadata:', error);
+          // Continue - project creation succeeded even if metadata update failed
+        }
+      }
+      
+      // Set as current project in session
+      this.currentProjectId = project.id;
+      
+      // Initialize workspace
+      await this.initializeWorkspaceStrict(path);
+      
+      // Return success response
+      return await this.createSuccessResponse(path, project);
+      
+    } catch (error) {
+      throw new Error(`Project initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Create comprehensive success response
+   */
+  private async createSuccessResponse(path: string, project: any) {
+    try {
+      const structure = await this.workspaceDetector.getProjectStructure(2);
+      const isGit = this.gitIntegration?.isGitRepo() ? ' (Git repo ✓)' : '';
+      
       return {
         content: [{
           type: 'text',
-          text: `Error setting workspace: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        }],
+          text: `🎉 **Project Initialized Successfully!**\n\n✅ **Workspace**: ${path}${isGit}\n📁 **Project**: ${project.name}\n⚙️  **Tech Stack**: ${project.techStack?.join(', ') || 'None'}\n🏗️  **Architecture**: ${project.architecture || 'Generic'}\n\n📂 **Structure Preview**:\n${structure}\n\n🚀 **Context Sync Active!**\n\n**Available Commands**:\n• \`todo_create "task"\` - Add project todos\n• \`save_decision "choice"\` - Record decisions\n• \`git_status\` - Check repository status\n• \`search_content "term"\` - Find code\n• \`get_project_context\` - View project info\n\n**Pro Tip**: All todos and decisions are now linked to "${project.name}" automatically!`
+        }]
+      };
+    } catch (error) {
+      // Fallback response if structure preview fails
+      return {
+        content: [{
+          type: 'text',
+          text: `🎉 **Project Initialized**: ${project.name}\n✅ **Workspace**: ${path}\n\n🚀 Context Sync is now active for this project!`
+        }]
       };
     }
+  }
+
+  /**
+   * Create comprehensive error response
+   */
+  private createErrorResponse(error: any, path?: string) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    
+    return {
+      content: [{
+        type: 'text',
+        text: `❌ **Workspace Setup Failed**\n\n**Error**: ${errorMessage}\n\n**Path**: ${path || 'Not provided'}\n\n**Common Solutions**:\n• Verify the directory path exists\n• Check you have read permissions\n• Ensure path points to a directory (not a file)\n• Try using an absolute path\n\n**Need Help?** Double-check the path and try again.`
+      }],
+      isError: true
+    };
   }
 
   private async handleReadFile(args: any) {
@@ -2099,63 +2379,75 @@ private getRelativePath(filePath: string): string {
 
   private async handleGetStarted() {
     // Check installation status - if we're here, Context Sync is working
-    const isWorking = true;
+    const version = this.getVersion();
     
-    // Get current state
-    const currentProject = this.storage.getCurrentProject();
-    // For now, we'll just check if there's a current project
-    const hasProjects = currentProject !== null;
+    // Get current state using session-based approach (NEW)
+    const currentProject = this.getCurrentProject();
     const workspace = this.workspaceDetector.getCurrentWorkspace();
-    const platform = this.platformSync.getPlatform();
+    const detectedPlatform = PlatformSync.detectPlatform(); // Real-time detection
+    const platformStatus = PlatformSync.getPlatformStatus();
     
     // Build response
-    let response = `🎉 **Context Sync is working!**\n\n`;
+    let response = `🎉 **Context Sync v${version} is working!**\n\n`;
     
-    // Current status
+    // Show integrated AI platforms
+    response += `🤖 **Integrated AI Platforms:**\n`;
+    response += `${platformStatus.claude ? '✅' : '⚪'} **Claude Desktop** - Advanced reasoning and code analysis\n`;
+    response += `${platformStatus.cursor ? '✅' : '⚪'} **Cursor IDE** - Real-time coding assistance\n`;
+    response += `${platformStatus.copilot ? '✅' : '⚪'} **GitHub Copilot (VS Code)** - Intelligent code completion\n\n`;
+    
+    // Current status - simplified and useful
     response += `📊 **Current Status:**\n`;
-    response += `• Projects: ${hasProjects ? '1+' : '0'}\n`;
-    response += `• Active Project: ${currentProject ? currentProject.name : 'None'}\n`;
-    response += `• Workspace: ${workspace ? 'Set' : 'Not set'}\n`;
-    response += `• Platform: ${platform}\n\n`;
+    if (currentProject) {
+      response += `• Active Project: ${currentProject.name}\n`;
+    }
+    if (workspace) {
+      response += `• Workspace: Set\n`;
+    }
+    response += `\n`;
     
     // Next steps based on current state
     response += `🚀 **Quick Start Options:**\n\n`;
     
-    if (!hasProjects) {
-      response += `1️⃣ **Start a new project**\n`;
-      response += `   → "Initialize project 'my-awesome-app'"\n\n`;
-    } else if (!currentProject) {
-      response += `1️⃣ **Switch to existing project**\n`;
-      response += `   → "What projects do I have?"\n\n`;
-    }
-    
-    if (!workspace) {
-      response += `2️⃣ **Set up workspace**\n`;
+    if (!currentProject) {
+      response += `1️⃣ **Set up your workspace**\n`;
       response += `   → "Set workspace to /path/to/your/project"\n\n`;
     } else {
-      response += `2️⃣ **Explore your workspace**\n`;
+      response += `1️⃣ **Explore your project**\n`;
       response += `   → "Scan workspace" or "Get project structure"\n\n`;
     }
     
-    response += `3️⃣ **Explore features**\n`;
+    response += `2️⃣ **Try key features**\n`;
     response += `   → "Show me what Context Sync can do"\n\n`;
     
-    // Add platform-specific tips
-    if (platform === 'cursor') {
-      response += `💡 **Cursor IDE Tips:**\n`;
-      response += `• I can read your files automatically\n`;
-      response += `• Try: "Analyze dependencies for src/components/App.tsx"\n`;
-      response += `• Use: "Create todo: Fix authentication bug"\n\n`;
-    } else if (platform === 'claude') {
-      response += `💡 **Claude Desktop Tips:**\n`;
-      response += `• Set workspace to see your actual code\n`;
-      response += `• I'll remember everything across chats\n`;
-      response += `• Try: "Set workspace to /Users/you/your-project"\n\n`;
+    // Universal platform guidance
+    response += `💡 **Getting Started:**\n\n`;
+    
+    if (!workspace) {
+      response += `🎯 **First, set your workspace:**\n`;
+      response += `• Try: "Set workspace to /path/to/your/project"\n`;
+      response += `• This enables all Context Sync features\n\n`;
+    } else {
+      response += `🎯 **Your workspace is ready! Try these:**\n`;
+      response += `• "Scan workspace" - Get project overview\n`;
+      response += `• "Search content for TODO" - Find todos in code\n`;
+      response += `• "Create todo: Fix authentication bug" - Add todos\n`;
+      response += `• "Get project structure" - See file organization\n\n`;
     }
     
-    response += `🔧 **Need help?**\n`;
-    response += `• "Setup cursor" - Get Cursor IDE instructions\n`;
-    response += `• "Check platform status" - Verify configuration\n`;
+    // Show what each platform offers
+    response += `**All Platforms Support:**\n`;
+    response += `• 📁 Project workspace management\n`;
+    response += `• 🔍 Code search and analysis\n`;
+    response += `• 📋 Todo management with auto-linking\n`;
+    response += `• 🔄 Cross-platform context sync\n`;
+    response += `• ⚡ Performance monitoring\n`;
+    response += `• 🧠 Intelligent file skimming for large codebases\n\n`;
+    
+    response += `🔧 **Advanced Commands:**\n`;
+    response += `• "Setup cursor" - Get Cursor IDE setup instructions\n`;
+    response += `• "Check platform status" - Verify platform configurations\n`;
+    response += `• "Get performance report" - View system metrics\n`;
     response += `• "Show features" - See all available tools\n\n`;
     
     response += `**Ready to get started?** Choose an option above! 🚀`;
@@ -2167,6 +2459,398 @@ private getRelativePath(filePath: string): string {
           text: response
         }
       ]
+    };
+  }
+
+  private async handleDebugSession() {
+    const version = this.getVersion();
+    const platform = this.platformSync.getPlatform();
+    
+    // Session-based current project (NEW)
+    const sessionProject = this.getCurrentProject();
+    
+    // Database-based current project (OLD - should be deprecated)
+    const dbProject = this.storage.getCurrentProject();
+    
+    // Workspace information
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    
+    // All projects in database
+    const allProjects = this.storage.getAllProjects();
+    
+    // Build response
+    let response = `🔍 **Context Sync Session Debug v${version}**\n\n`;
+    
+    // Session information
+    response += `📱 **Session State:**\n`;
+    response += `• Platform: ${platform}\n`;
+    response += `• Session Project ID: ${this.currentProjectId || 'null'}\n`;
+    response += `• Session Project: ${sessionProject ? sessionProject.name : 'None'}\n\n`;
+    
+    // Database state
+    response += `💾 **Database State:**\n`;
+    response += `• DB Current Project: ${dbProject ? dbProject.name : 'None'}\n`;
+    response += `• Total Projects: ${allProjects.length}\n`;
+    response += `• Workspace Set: ${workspace ? 'Yes' : 'No'}\n`;
+    if (workspace) {
+      response += `• Workspace Path: ${workspace}\n`;
+    }
+    response += `\n`;
+    
+    // Project list
+    if (allProjects.length > 0) {
+      response += `📂 **All Projects:**\n`;
+      allProjects.forEach((project: any, index: number) => {
+        const isSession = sessionProject && sessionProject.id === project.id;
+        const isDB = dbProject && dbProject.id === project.id;
+        const markers = [];
+        if (isSession) markers.push('SESSION');
+        if (isDB) markers.push('DB');
+        const markerText = markers.length > 0 ? ` [${markers.join(', ')}]` : '';
+        
+        response += `${index + 1}. ${project.name}${markerText}\n`;
+        response += `   Path: ${project.path}\n`;
+        response += `   ID: ${project.id}\n`;
+      });
+      response += `\n`;
+    }
+    
+    // Architecture validation
+    response += `⚙️ **Architecture Validation:**\n`;
+    response += `• Session-based: ${sessionProject ? '✅' : '❌'}\n`;
+    response += `• DB deprecated: ${!dbProject || sessionProject ? '✅' : '⚠️'}\n`;
+    response += `• Consistency: ${(!sessionProject && !dbProject) || (sessionProject && sessionProject.id === dbProject?.id) ? '✅' : '⚠️ Mismatch'}\n\n`;
+    
+    // Multi-project testing instructions
+    response += `🧪 **Multi-Project Testing:**\n`;
+    response += `1. Test different MCP clients with different projects\n`;
+    response += `2. Verify each maintains separate session state\n`;
+    response += `3. Check todo auto-linking per session\n\n`;
+    
+    response += `💡 **Usage:** Use this tool to debug session isolation and project state consistency.`;
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: response
+        }
+      ]
+    };
+  }
+
+  private async handleGetPerformanceReport(args: { operation?: string; reset?: boolean }) {
+    const { operation, reset = false } = args;
+    
+    let response = `📊 **Context Sync Performance Report**\n\n`;
+    
+    if (operation) {
+      // Get stats for specific operation
+      const stats = PerformanceMonitor.getStats(operation);
+      if (stats.count > 0) {
+        response += `🔍 **Operation: ${operation}**\n`;
+        response += `• Calls: ${stats.count}\n`;
+        response += `• Total Time: ${stats.totalDuration.toFixed(2)}ms\n`;
+        response += `• Average Time: ${stats.averageDuration.toFixed(2)}ms\n`;
+        response += `• Min Time: ${stats.minDuration.toFixed(2)}ms\n`;
+        response += `• Max Time: ${stats.maxDuration.toFixed(2)}ms\n\n`;
+      } else {
+        response += `❌ No data found for operation: ${operation}\n\n`;
+      }
+    } else {
+      // Get all operation stats
+      const allStats = PerformanceMonitor.getAllOperationStats();
+      if (Object.keys(allStats).length === 0) {
+        response += `ℹ️ No performance data collected yet.\n`;
+        response += `Performance monitoring tracks database operations like:\n`;
+        response += `• findProjectByPath\n`;
+        response += `• createProject\n`;
+        response += `• getAllProjects\n\n`;
+      } else {
+        response += `📈 **All Operations:**\n\n`;
+        Object.entries(allStats).forEach(([opName, stats]) => {
+          response += `**${opName}:**\n`;
+          response += `• Calls: ${stats.count}\n`;
+          response += `• Avg Time: ${stats.averageDuration.toFixed(2)}ms\n`;
+          response += `• Total Time: ${stats.totalDuration.toFixed(2)}ms\n`;
+          response += `• Range: ${stats.minDuration.toFixed(2)}ms - ${stats.maxDuration.toFixed(2)}ms\n\n`;
+        });
+      }
+      
+      // Use the formatted report from PerformanceMonitor
+      const detailedReport = PerformanceMonitor.getReport();
+      response += `📋 **Detailed Report:**\n${detailedReport}\n\n`;
+    }
+    
+    if (reset) {
+      PerformanceMonitor.clearMetrics();
+      response += `🔄 **Performance data has been reset.**\n\n`;
+    }
+    
+    response += `💡 **Usage:** Monitor database operation performance to identify optimization opportunities.`;
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: response
+        }
+      ]
+    };
+  }
+
+  // ========== TODO HANDLERS WITH CURRENT PROJECT INTEGRATION ==========
+
+  private async handleTodoCreate(args: any) {
+    // Auto-link to current project if no projectId provided
+    if (!args.projectId) {
+      const currentProject = this.getCurrentProject();
+      if (currentProject) {
+        args.projectId = currentProject.id;
+      }
+    }
+
+    const todo = this.todoManager.createTodo(args);
+    const projectInfo = args.projectId ? ` (linked to current project)` : '';
+    
+    return {
+      content: [{
+        type: 'text',
+        text: `✅ Todo created: "${todo.title}"${projectInfo}\n\nID: ${todo.id}\nPriority: ${todo.priority}\nStatus: ${todo.status}${todo.dueDate ? `\nDue: ${todo.dueDate}` : ''}${todo.tags.length > 0 ? `\nTags: ${todo.tags.join(', ')}` : ''}`,
+      }],
+    };
+  }
+
+  private async handleTodoGet(args: { id: string }) {
+    const todo = this.todoManager.getTodo(args.id);
+    
+    if (!todo) {
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ Todo not found: ${args.id}`,
+        }],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: `📋 **${todo.title}**\n\nStatus: ${todo.status}\nPriority: ${todo.priority}\n${todo.description ? `Description: ${todo.description}\n` : ''}${todo.dueDate ? `Due: ${todo.dueDate}\n` : ''}${todo.tags.length > 0 ? `Tags: ${todo.tags.join(', ')}\n` : ''}Created: ${todo.createdAt}\nUpdated: ${todo.updatedAt}${todo.completedAt ? `\nCompleted: ${todo.completedAt}` : ''}`,
+      }],
+    };
+  }
+
+  private async handleTodoList(args?: any) {
+    // If no projectId specified and there's a current project, filter by current project
+    if (!args?.projectId) {
+      const currentProject = this.getCurrentProject();
+      if (currentProject) {
+        args = { ...args, projectId: currentProject.id };
+      }
+    }
+
+    const todos = this.todoManager.listTodos(args);
+    
+    if (todos.length === 0) {
+      const currentProject = this.getCurrentProject();
+      const projectContext = currentProject ? ` for project "${currentProject.name}"` : '';
+      return {
+        content: [{
+          type: 'text',
+          text: `📝 No todos found${projectContext}`,
+        }],
+      };
+    }
+
+    const grouped = {
+      urgent: todos.filter(t => t.priority === 'urgent' && t.status !== 'completed'),
+      high: todos.filter(t => t.priority === 'high' && t.status !== 'completed'),
+      medium: todos.filter(t => t.priority === 'medium' && t.status !== 'completed'),
+      low: todos.filter(t => t.priority === 'low' && t.status !== 'completed'),
+      completed: todos.filter(t => t.status === 'completed')
+    };
+
+    const currentProject = this.getCurrentProject();
+    const projectContext = currentProject ? ` for project "${currentProject.name}"` : '';
+    let output = `📋 Found ${todos.length} todo(s)${projectContext}\n\n`;
+
+    const formatTodo = (todo: any) => {
+      const statusEmoji: { [key: string]: string } = {
+        pending: '⏳',
+        in_progress: '🔄',
+        completed: '✅',
+        cancelled: '❌'
+      };
+      return `${statusEmoji[todo.status] || '📋'} ${todo.title}${todo.dueDate ? ` (Due: ${todo.dueDate})` : ''}\n   ID: ${todo.id}`;
+    };
+
+    if (grouped.urgent.length > 0) {
+      output += `🔴 **URGENT** (${grouped.urgent.length})\n`;
+      grouped.urgent.forEach((todo: any) => output += formatTodo(todo) + '\n');
+      output += '\n';
+    }
+
+    if (grouped.high.length > 0) {
+      output += `🟠 **HIGH** (${grouped.high.length})\n`;
+      grouped.high.forEach((todo: any) => output += formatTodo(todo) + '\n');
+      output += '\n';
+    }
+
+    if (grouped.medium.length > 0) {
+      output += `🟡 **MEDIUM** (${grouped.medium.length})\n`;
+      grouped.medium.forEach((todo: any) => output += formatTodo(todo) + '\n');
+      output += '\n';
+    }
+
+    if (grouped.low.length > 0) {
+      output += `🟢 **LOW** (${grouped.low.length})\n`;
+      grouped.low.forEach((todo: any) => output += formatTodo(todo) + '\n');
+      output += '\n';
+    }
+
+    if (grouped.completed.length > 0 && !args?.status) {
+      output += `✅ **COMPLETED** (${grouped.completed.length})\n`;
+      grouped.completed.slice(0, 5).forEach((todo: any) => output += formatTodo(todo) + '\n');
+      if (grouped.completed.length > 5) {
+        output += `   ... and ${grouped.completed.length - 5} more\n`;
+      }
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: output,
+      }],
+    };
+  }
+
+  private async handleTodoUpdate(args: any) {
+    const todo = this.todoManager.updateTodo(args);
+    
+    if (!todo) {
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ Todo not found: ${args.id}`,
+        }],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: `✅ Todo updated: "${todo.title}"\n\nStatus: ${todo.status}\nPriority: ${todo.priority}\nUpdated: ${todo.updatedAt}`,
+      }],
+    };
+  }
+
+  private async handleTodoDelete(args: { id: string }) {
+    const success = this.todoManager.deleteTodo(args.id);
+    
+    if (!success) {
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ Todo not found: ${args.id}`,
+        }],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: `✅ Todo deleted: ${args.id}`,
+      }],
+    };
+  }
+
+  private async handleTodoComplete(args: { id: string }) {
+    const todo = this.todoManager.completeTodo(args.id);
+    
+    if (!todo) {
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ Todo not found: ${args.id}`,
+        }],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: `✅ Todo completed: "${todo.title}"\n\nCompleted at: ${todo.completedAt}`,
+      }],
+    };
+  }
+
+  private async handleTodoStats(args?: { projectId?: string }) {
+    // Use current project if no projectId specified
+    let projectId = args?.projectId;
+    if (!projectId) {
+      const currentProject = this.getCurrentProject();
+      if (currentProject) {
+        projectId = currentProject.id;
+      }
+    }
+
+    const stats = this.todoManager.getStats(projectId);
+    const currentProject = this.getCurrentProject();
+    const projectContext = projectId && currentProject ? ` for project "${currentProject.name}"` : '';
+    
+    let output = `📊 Todo Statistics${projectContext}\n\n`;
+    output += `**Total:** ${stats.total} todos\n\n`;
+    
+    output += `**By Status:**\n`;
+    output += `⏳ Pending: ${stats.byStatus.pending}\n`;
+    output += `🔄 In Progress: ${stats.byStatus.in_progress}\n`;
+    output += `✅ Completed: ${stats.byStatus.completed}\n`;
+    output += `❌ Cancelled: ${stats.byStatus.cancelled}\n\n`;
+    
+    output += `**By Priority:**\n`;
+    output += `🔴 Urgent: ${stats.byPriority.urgent}\n`;
+    output += `🟠 High: ${stats.byPriority.high}\n`;
+    output += `🟡 Medium: ${stats.byPriority.medium}\n`;
+    output += `🟢 Low: ${stats.byPriority.low}\n\n`;
+    
+    if (stats.overdue > 0) {
+      output += `⚠️  **${stats.overdue} overdue** todo(s)\n`;
+    }
+    
+    if (stats.dueSoon > 0) {
+      output += `⏰ **${stats.dueSoon} due soon** (within 24 hours)\n`;
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: output,
+      }],
+    };
+  }
+
+  private async handleTodoTags() {
+    const tags = this.todoManager.getAllTags();
+    
+    if (tags.length === 0) {
+      return {
+        content: [{
+          type: 'text',
+          text: '🏷️  No tags found',
+        }],
+      };
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: `🏷️  Available tags (${tags.length}):\n\n${tags.join(', ')}`,
+      }],
     };
   }
 

@@ -11,12 +11,15 @@ import type {
   StorageInterface,
 } from './types.js';
 import {createTodoTable} from './todo-schema.js';
+import { PathNormalizer } from './path-normalizer.js';
+import { PerformanceMonitor } from './performance-monitor.js';
 
 export class Storage implements StorageInterface {
   private db: Database.Database;
   
-  // Prepared statement cache for 2-5x faster queries
+  // Prepared statement cache for 2-5x faster queries with LRU eviction
   private preparedStatements: Map<string, Database.Statement> = new Map();
+  private readonly MAX_PREPARED_STATEMENTS = 100;
 
   constructor(dbPath?: string) {
     // Default to user's home directory
@@ -78,10 +81,28 @@ export class Storage implements StorageInterface {
 
   /**
    * Get or create a prepared statement for faster queries (2-5x performance improvement)
+   * Implements LRU cache to prevent memory bloat
    */
   private getStatement(sql: string): Database.Statement {
     if (this.preparedStatements.has(sql)) {
-      return this.preparedStatements.get(sql)!;
+      // Move to end (most recently used) in Map
+      const statement = this.preparedStatements.get(sql)!;
+      this.preparedStatements.delete(sql);
+      this.preparedStatements.set(sql, statement);
+      return statement;
+    }
+    
+    // Check if we need to evict oldest entry
+    if (this.preparedStatements.size >= this.MAX_PREPARED_STATEMENTS) {
+      // Remove least recently used (first entry in Map)
+      const firstKey = this.preparedStatements.keys().next().value;
+      if (firstKey) {
+        const oldStatement = this.preparedStatements.get(firstKey);
+        this.preparedStatements.delete(firstKey);
+        
+        // Note: better-sqlite3 statements don't need explicit cleanup
+        // They are automatically cleaned up when garbage collected
+      }
     }
     
     const statement = this.db.prepare(sql);
@@ -89,25 +110,27 @@ export class Storage implements StorageInterface {
     return statement;
   }
 
-  createProject(name: string, projectPath?: string): ProjectContext {
-    const id = randomUUID();
+    createProject(name: string, projectPath?: string): ProjectContext {
+    const timer = PerformanceMonitor.startTimer('createProject');
+    
+    // Normalize the path before storing if provided
+    const normalizedPath = projectPath ? PathNormalizer.normalize(projectPath) : undefined;
+    
+    const id = crypto.randomUUID();
     const now = Date.now();
-    const techStack: string[] = [];
 
-    // Set this as current project (unset others) - use cached prepared statement
-    this.getStatement('UPDATE projects SET is_current = 0').run();
-
-    // Insert new project - use cached prepared statement
     this.getStatement(`
-      INSERT INTO projects (id, name, path, tech_stack, created_at, updated_at, is_current)
-      VALUES (?, ?, ?, ?, ?, ?, 1)
-    `).run(id, name, projectPath || null, JSON.stringify(techStack), now, now);
+      INSERT INTO projects (id, name, path, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, name, normalizedPath, now, now);
+
+    timer();
 
     return {
       id,
       name,
-      path: projectPath,
-      techStack,
+      path: normalizedPath,
+      techStack: [],
       createdAt: new Date(now),
       updatedAt: new Date(now),
     };
@@ -123,15 +146,23 @@ export class Storage implements StorageInterface {
     return this.rowToProject(row);
   }
 
+  /**
+   * @deprecated This method is deprecated. Use ContextSyncServer.getCurrentProject() instead.
+   * Current project is now managed as session state, not in database.
+   */
   getCurrentProject(): ProjectContext | null {
-    const row = this.getStatement(`
-      SELECT * FROM projects WHERE is_current = 1 LIMIT 1
-    `).get() as any;
-
-    if (!row) return null;
-
-    return this.rowToProject(row);
+    // Return null - current project should be retrieved from session
+    return null;
   }
+  /**
+   * @deprecated This method is deprecated. Current project is now managed as session state in ContextSyncServer.
+   * Kept for backward compatibility only.
+   */
+  setCurrentProject(projectId: string): void {
+    // No-op - current project is now managed in ContextSyncServer
+  }
+
+
 
   updateProject(id: string, updates: Partial<ProjectContext>): void {
     const sets: string[] = [];
@@ -184,9 +215,16 @@ export class Storage implements StorageInterface {
   }
 
   findProjectByPath(projectPath: string): ProjectContext | null {
+    const timer = PerformanceMonitor.startTimer('findProjectByPath');
+    
+    // Normalize the input path for consistent lookup
+    const normalizedPath = PathNormalizer.normalize(projectPath);
+    
     const row = this.getStatement(`
       SELECT * FROM projects WHERE path = ?
-    `).get(projectPath) as any;
+    `).get(normalizedPath) as any;
+
+    timer();
 
     if (!row) return null;
 
@@ -286,6 +324,19 @@ export class Storage implements StorageInterface {
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };
+  }
+
+  getAllProjects(): ProjectContext[] {
+    const timer = PerformanceMonitor.startTimer('getAllProjects');
+    
+    const rows = this.getStatement(`
+      SELECT * FROM projects ORDER BY updated_at DESC
+    `).all();
+    
+    const projects = rows.map((row: any) => this.rowToProject(row));
+    timer();
+    
+    return projects;
   }
 
   getDb(): Database.Database {

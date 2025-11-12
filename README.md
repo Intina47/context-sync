@@ -111,6 +111,16 @@ AI: "Continuing your Next.js app with Supabase.
 
 **Context Sync syncs your AI context between Cursor, Claude Desktop, and VS Code automatically.**
 
+<div align="center">
+
+### 🎉 **New in v0.6.1: Intelligent Onboarding**
+
+**Just type:** `"help me get started with context-sync"`
+
+✨ **No more commands to memorize** • Get instant, personalized guidance in any AI tool
+
+</div>
+
 <br>
 
 ---
@@ -190,11 +200,11 @@ One command. Global install.
 ⏱️ 1 minute
 
 ```
-You: "help context-sync"
+You: "help me get started with context-sync"
 ```
 
 Context Sync is running!
-Follow the guided setup!
+Get instant guidance!
 
 </td>
 </tr>
@@ -212,10 +222,10 @@ Follow the guided setup!
 
 1. **Install:** `npm install -g @context-sync/server`
 2. **Choose your platform:**
-   - **Claude Desktop:** Restart app → type `"help context-sync"`
-   - **VS Code + Copilot:** Restart VS Code → open Copilot Chat → look for context-sync tools
-   - **Cursor:** Refresh MCP → test with `"help context-sync"`
-3. **Follow the guided setup!** ✅ You're done!
+   - **Claude Desktop:** Restart app → type `"help me get started with context-sync"`
+   - **VS Code + Copilot:** Restart VS Code → open Copilot Chat → type `"help me get started with context-sync"`
+   - **Cursor:** Refresh MCP → type `"help me get started with context-sync"`
+3. **Follow the intelligent guidance!** ✅ You're done!
 <br>
 
 ### 🔧 Setup for VS Code + GitHub Copilot
@@ -366,7 +376,7 @@ Think of it like:
 
 Context Sync stores **structured summaries**. AI queries for details on-demand. You never saturate the context window.
 
-### ⚡ Performance Optimizations (v0.6.0):
+### ⚡ Performance Optimizations (v0.6.1):
 
 **Faster, safer, more reliable:**
 - 🔒 **File size limits** - Prevents crashes with 5MB max file size
@@ -573,7 +583,7 @@ You never saturate because you're not copying conversations - you're giving AI a
 <summary><b>Does this work with VS Code?</b></summary>
 <br>
 
-**Yes! Available in v0.6.0!** 🎉
+**Yes! Available since v0.6.0!** 🎉
 
 VS Code with GitHub Copilot is now fully supported through MCP integration.
 
@@ -595,7 +605,7 @@ VS Code with GitHub Copilot is now fully supported through MCP integration.
 <summary><b>Does this work with Claude Code CLI?</b></summary>
 <br>
 
-**Also coming in v0.6.0!**
+**Also supported since v0.6.0!**
 
 Claude Code just launched and supports MCP, so integration should be straightforward.
 
@@ -716,7 +726,7 @@ AI: "Analyzing cart code... found 2 potential improvements..."
 <table>
 <tr>
 <td align="center" width="33%">
-  <h3>✅ v0.6.0 - Current</h3>
+  <h3>✅ v0.6.1 - Current</h3>
   <sub>Released October 2025</sub>
   <br><br>
   ✓ VS Code & GitHub Copilot support<br>
@@ -962,13 +972,13 @@ Still stuck? [Create an issue](https://github.com/Intina47/context-sync/issues)
 <summary><b>"No active project" error</b></summary>
 <br>
 
-Initialize a project first:
+Set up a workspace first:
 
 ```bash
-You: "Initialize project 'test-app'"
+You: "Set workspace to /path/to/your/project"
 ```
 
-Or switch to existing:
+Or check existing projects:
 
 ```bash
 You: "What projects do I have?"

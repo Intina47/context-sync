@@ -6,7 +6,7 @@
 export const todoToolDefinitions = [
   {
     name: 'todo_create',
-    description: 'Create a new todo item in the global todo list',
+    description: 'Create a new todo item. If no projectId is specified, the todo will be automatically linked to the current active project (if any).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -34,7 +34,7 @@ export const todoToolDefinitions = [
         },
         projectId: {
           type: 'string',
-          description: 'Link to a specific project (optional)'
+          description: 'Link to a specific project (optional - if not provided, uses current active project)'
         }
       },
       required: ['title']
@@ -56,7 +56,7 @@ export const todoToolDefinitions = [
   },
   {
     name: 'todo_list',
-    description: 'List todos with optional filters. Returns todos grouped by priority.',
+    description: 'List todos with optional filters. Returns todos grouped by priority. By default, shows todos for the current active project. Use projectId parameter to view todos from other projects, or omit projectId to see all todos.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -87,7 +87,7 @@ export const todoToolDefinitions = [
         },
         projectId: {
           type: 'string',
-          description: 'Filter by project ID'
+          description: 'Filter by project ID (if omitted, shows todos for current active project, or all todos if no project is active)'
         },
         dueBefore: {
           type: 'string',

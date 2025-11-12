@@ -9,14 +9,61 @@ Context Sync now supports **seamless context sharing** between Claude Desktop an
 ### Architecture
 
 ```
-┌─────────────────┐         ┌──────────────────┐
-│  Claude Desktop │◄───────►│   Context Sync    │
-│                 │         │   MCP Server      │
-└─────────────────┘         │  (Single Source   │
-                            │   of Truth)       │
-┌─────────────────┐         │                  │
-│   Cursor IDE    │◄───────►│                  │
-└─────────────────┘         └──────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    SESSIONS (In-Memory, Per-Instance)                   │
+│                                                                         │
+│  ┌──────────────────────┐  ┌──────────────────────┐  ┌────────────────┐ │
+│  │  Claude Desktop      │  │  Cursor              │  │ vscode/copilot │ │
+│  │  MCP Server Instance │  │  MCP Server Instance │  │ MCP Server Inst│ │
+│  │                      │  │                      │  │                │ │
+│  │  currentProjectId:   │  │  currentProjectId:   │  │ currentProjectId││
+│  │  "context-sync-123"  │  │  "hostscan-456"      │  │ "context-sync-1│ │
+│  │                      │  │                      │  │                │ │
+│  │  workspace:          │  │  workspace:          │  │ workspace:     │ │
+│  │  /proj/context-sync  │  │  /proj/hostscan      │  │ /proj/context-s│ │
+│  └──────────┬───────────┘  └──────────┬───────────┘  └────────┬───────┘ │
+└─────────────┼─────────────────────────┼──────────-────────────┼─────────┘
+              │                         │                       │
+              │        All read/write to shared DB              │
+              └──────────────────┬───────────────┬──────────────┘
+                                 ▼               ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    DATABASE (SQLite) - SHARED                           │
+│                                                                          │
+│  projects table (NO is_current column):                                 │
+│  ┌──────────────────────────────────────────────┐                      │
+│  │ id: "context-sync-123"                       │                      │
+│  │ name: "context-sync"                         │                      │
+│  │ path: "/projects/context-sync"               │                      │
+│  │ tech_stack: ["TypeScript", "React"]          │                      │
+│  └──────────────────────────────────────────────┘                      │
+│  ┌──────────────────────────────────────────────┐                      │
+│  │ id: "hostscan-456"                           │                      │
+│  │ name: "hostscan"                             │                      │
+│  │ path: "/projects/hostscan"                   │                      │
+│  │ tech_stack: ["Next.js", "Supabase"]          │                      │
+│  └──────────────────────────────────────────────┘                      │
+│                                                                          │
+│  decisions table:                                                       │
+│  ┌──────────────────────────────────────────────┐                      │
+│  │ project_id: "context-sync-123"               │                      │
+│  │ description: "Use TypeScript for type safety"│                      │
+│  └──────────────────────────────────────────────┘                      │
+│  ┌──────────────────────────────────────────────┐                      │
+│  │ project_id: "hostscan-456"                   │                      │
+│  │ description: "Use Supabase for backend"      │                      │
+│  └──────────────────────────────────────────────┘                      │
+│                                                                          │
+│  todos table:                                                           │
+│  ┌──────────────────────────────────────────────┐                      │
+│  │ project_id: "context-sync-123"               │                      │
+│  │ title: "Fix workspace linking bug"           │                      │
+│  └──────────────────────────────────────────────┘                      │
+│  ┌──────────────────────────────────────────────┐                      │
+│  │ project_id: "hostscan-456"                   │                      │
+│  │ title: "Add QR code scanner"                 │                      │
+│  └──────────────────────────────────────────────┘                      │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Both AIs connect to the same Context Sync server**

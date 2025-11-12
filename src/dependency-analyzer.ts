@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as chokidar from 'chokidar';
+import { FileSizeGuard } from './file-size-guard.js';
+import { skimForDependencies } from './file-skimmer.js';
 
 // Types for dependency analysis
 export interface ImportInfo {
@@ -47,15 +49,17 @@ export class DependencyAnalyzer {
   private fileCache: Map<string, string>;
   private dependencyCache: Map<string, DependencyGraph>;
   private fileWatcher: chokidar.FSWatcher | null = null;
-  
-  // File size limits to prevent OOM crashes
-  private readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB - prevents OOM crashes
-  private readonly WARN_FILE_SIZE = 1 * 1024 * 1024; // 1MB - warn but still process
+  private fileSizeGuard: FileSizeGuard;
   
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
     this.fileCache = new Map();
     this.dependencyCache = new Map();
+    this.fileSizeGuard = new FileSizeGuard({
+      maxFileSize: 5 * 1024 * 1024,    // 5MB per file (suitable for large TypeScript files)
+      maxTotalSize: 50 * 1024 * 1024,   // 50MB total (prevent excessive memory use)
+      skipLargeFiles: true,            // Skip rather than error on large files
+    });
     this.setupFileWatcher();
   }
 
@@ -95,8 +99,8 @@ export class DependencyAnalyzer {
       .on('unlink', (filePath) => {
         this.invalidateCache(filePath);
       })
-      .on('error', (error) => {
-        console.error('Dependency analyzer file watcher error:', error);
+      .on('error', () => {
+        // Silently handle file watcher errors
       });
   }
 
@@ -416,19 +420,27 @@ export class DependencyAnalyzer {
     }
     
     try {
-      // Check file size first to prevent OOM crashes
-      const stats = fs.statSync(filePath);
+      // Use intelligent skimming for dependency analysis
+      const skimResult = skimForDependencies(filePath);
       
-      if (stats.size > this.MAX_FILE_SIZE) {
-        console.error(`⚠️  File too large for dependency analysis (${(stats.size / 1024 / 1024).toFixed(1)}MB), skipping: ${path.relative(this.workspacePath, filePath)}`);
-        return '';
+      if (!skimResult.content) {
+        // Fallback to file size guard if skimming fails
+        const guardResult = this.fileSizeGuard.readFile(filePath, 'utf-8');
+        if (guardResult.skipped) {
+          if (guardResult.reason) {
+            console.error(`⚠️  ${guardResult.reason}, skipping: ${path.relative(this.workspacePath, filePath)}`);
+          }
+          return '';
+        }
+        const content = guardResult.content;
+        this.fileCache.set(filePath, content);
+        return content;
       }
       
-      if (stats.size > this.WARN_FILE_SIZE) {
-        console.error(`⚠️  Large file in dependency analysis (${(stats.size / 1024 / 1024).toFixed(1)}MB): ${path.relative(this.workspacePath, filePath)}`);
-      }
+      // Successfully skimmed or read the file
+      // File skimming is now silent to reduce log noise
       
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const content = skimResult.content;
       this.fileCache.set(filePath, content);
       return content;
     } catch (error) {
@@ -550,7 +562,6 @@ export class DependencyAnalyzer {
     if (this.fileWatcher) {
       this.fileWatcher.close();
       this.fileWatcher = null;
-      console.error('📁 Dependency analyzer file watcher disposed');
     }
   }
 }
