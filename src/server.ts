@@ -914,11 +914,11 @@ export class ContextSyncServer {
       // 3. DETECT PROJECT FROM FILESYSTEM - Thorough detection  
       const detectedMetadata = await this.detectProjectFromPathStrict(normalizedPath);
       if (detectedMetadata) {
-        return this.requestProjectInitialization(normalizedPath, detectedMetadata, displayPath);
+        return this.initializeProjectStrict(normalizedPath, detectedMetadata, displayPath);
       }
 
       // 4. NO PROJECT DETECTED - OFFER OPTIONS
-      return this.requestGenericInitialization(normalizedPath, displayPath);
+      return this.initializeProjectStrict(normalizedPath, displayPath);
 
     } catch (error) {
       return this.createErrorResponse(error, args.path);
@@ -1024,30 +1024,6 @@ export class ContextSyncServer {
     } catch (error) {
       throw new Error(`Failed to set up existing project: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }
-
-  /**
-   * Request user consent for project initialization
-   */
-  private requestProjectInitialization(path: string, metadata: any, displayPath?: string) {
-    return {
-      content: [{
-        type: 'text',
-        text: `🔍 **Project Detected!**\n\n📁 **Name**: ${metadata.name}\n🏗️  **Type**: ${metadata.type}\n⚙️  **Tech Stack**: ${metadata.techStack.join(', ')}\n${metadata.architecture ? `🏛️  **Architecture**: ${metadata.architecture}\n` : ''}\n**Initialize this project in Context Sync?**\n\n✅ **Benefits**:\n• Project-specific todos and decisions\n• Context tracking across AI sessions\n• Git integration and code analysis\n• Shared memory between AI platforms\n\n**Commands**:\n• \`"yes"\` or \`"initialize"\` to proceed\n• \`"no"\` or \`"skip"\` to use as basic workspace\n\n*Note: You can always initialize later if you change your mind.*`
-      }]
-    };
-  }
-
-  /**
-   * Request user choice for generic initialization
-   */
-  private requestGenericInitialization(path: string, displayPath?: string) {
-    return {
-      content: [{
-        type: 'text',
-        text: `📂 **Directory Validated**: ${path}\n\nNo specific project type detected (no package.json, Cargo.toml, etc.)\n\n**Choose your setup**:\n\n**1. 🚀 Full Project** (Recommended)\n• Enable todos and decision tracking\n• Full Context Sync features\n• Project-specific context\n• Cross-platform sync\n\n**2. 📁 Basic Workspace**\n• File operations only\n• No project tracking\n• Minimal features\n\n**Commands**:\n• \`"1"\` or \`"full"\` for complete project setup\n• \`"2"\` or \`"basic"\` for workspace-only mode`
-      }]
-    };
   }
 
   /**
