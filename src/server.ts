@@ -16,14 +16,17 @@ import { DependencyAnalyzer } from './dependency-analyzer.js';
 import { CallGraphAnalyzer } from './call-graph-analyzer.js';  
 import { TypeAnalyzer } from './type-analyzer.js';
 import { PlatformSync, type AIPlatform } from './platform-sync.js';   
+import { PLATFORM_REGISTRY, type PlatformMetadata } from './platform-registry.js';
 import { TodoManager } from './todo-manager.js';
 import { createTodoHandlers } from './todo-handlers.js';
+import { DatabaseMigrator } from './database-migrator.js';
 import { readFileSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { PathNormalizer } from './path-normalizer.js';
 import { PerformanceMonitor } from './performance-monitor.js';
 import { todoToolDefinitions } from './todo-tools.js';
+import { ContextAnalyzer } from './context-analyzer.js';
 import type { ProjectContext } from './types.js';
 import * as fs from 'fs';
 
@@ -48,6 +51,10 @@ export class ContextSyncServer {
   constructor(storagePath?: string) {
 
     this.storage = new Storage(storagePath);
+    
+    // Check for migration prompt on startup (non-blocking)
+    this.checkStartupMigration();
+    
     this.projectDetector = new ProjectDetector(this.storage);
     this.workspaceDetector = new WorkspaceDetector(this.storage, this.projectDetector);
     this.fileWriter = new FileWriter(this.workspaceDetector, this.storage);
@@ -56,7 +63,7 @@ export class ContextSyncServer {
     this.server = new Server(
       {
         name: 'context-sync',
-        version: '0.6.1',
+        version: '1.0.0',
       },
       {
         capabilities: {
@@ -75,6 +82,28 @@ export class ContextSyncServer {
     
     this.setupToolHandlers();
     this.setupPromptHandlers();
+  }
+
+  /**
+   * Check for migration prompt on startup (non-blocking)
+   */
+  private async checkStartupMigration(): Promise<void> {
+    try {
+      const version = this.getVersion();
+      const migrationCheck = await this.storage.checkMigrationPrompt(version);
+      
+      if (migrationCheck.shouldPrompt) {
+        // Log to stderr so it shows in the MCP client without interfering with responses
+        console.error('\n' + '='.repeat(80));
+        console.error('CONTEXT SYNC DATABASE OPTIMIZATION AVAILABLE');
+        console.error('='.repeat(80));
+        console.error(migrationCheck.message.replace(/\*\*([^*]+)\*\*/g, '$1')); // Remove markdown formatting for console
+        console.error('='.repeat(80) + '\n');
+      }
+    } catch (error) {
+      // Silently fail - don't disrupt server startup
+      console.warn('Startup migration check failed:', error);
+    }
   }
 
   /**
@@ -112,9 +141,9 @@ export class ContextSyncServer {
         // Fallback failed
       }
       
-      return '0.6.1'; // Fallback version
+      return '1.0.0'; // Fallback version
     } catch (error) {
-      return '0.6.1'; // Fallback version
+      return '1.0.0'; // Fallback version
     }
   }
 
@@ -127,44 +156,89 @@ export class ContextSyncServer {
   }
 
   private setupPromptHandlers(): void {
-    this.server.setRequestHandler(ListPromptsRequestSchema, async () => ({
-      prompts: [
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      const prompts = [
         {
           name: 'project_context',
           description: 'Automatically inject active project context into conversation',
           arguments: [],
         },
-      ],
-    }));
+      ];
 
-    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-      if (request.params.name !== 'project_context') {
-        throw new Error(`Unknown prompt: ${request.params.name}`);
+      // Add migration prompt for v1.0.0+ users with duplicates
+      try {
+        const version = this.getVersion();
+        const migrationCheck = await this.storage.checkMigrationPrompt(version);
+        if (migrationCheck.shouldPrompt) {
+          prompts.push({
+            name: 'migration_prompt',
+            description: 'Database optimization prompt for Context Sync v1.0.0+ users with duplicate projects',
+            arguments: [],
+          });
+        }
+      } catch (error) {
+        // Silently ignore migration prompt errors
+        console.warn('Migration prompt check failed:', error);
       }
 
-      const project = this.getCurrentProject();  
-      if (!project) {
+      return { prompts };
+    });
+
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      if (request.params.name === 'project_context') {
+        const project = this.getCurrentProject();  
+        if (!project) {
+          return {
+            description: 'No active project',
+            messages: [],
+          };
+        }
+
+        const summary = this.storage.getContextSummary(project.id);
+        const contextMessage = this.buildContextPrompt(summary);
+
         return {
-          description: 'No active project',
-          messages: [],
+          description: `Context for ${project.name}`,
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: contextMessage,
+              },
+            },
+          ],
         };
       }
 
-      const summary = this.storage.getContextSummary(project.id);
-      const contextMessage = this.buildContextPrompt(summary);
+      if (request.params.name === 'migration_prompt') {
+        const version = this.getVersion();
+        const migrationCheck = await this.storage.checkMigrationPrompt(version);
+        
+        if (migrationCheck.shouldPrompt) {
+          const migrationMessage = this.buildMigrationPrompt(migrationCheck.message);
+          
+          return {
+            description: 'Context Sync Database Optimization Required',
+            messages: [
+              {
+                role: 'user',
+                content: {
+                  type: 'text',
+                  text: migrationMessage,
+                },
+              },
+            ],
+          };
+        } else {
+          return {
+            description: 'No migration needed',
+            messages: [],
+          };
+        }
+      }
 
-      return {
-        description: `Context for ${project.name}`,
-        messages: [
-          {
-            role: 'user',
-            content: {
-              type: 'text',
-              text: contextMessage,
-            },
-          },
-        ],
-      };
+      throw new Error(`Unknown prompt: ${request.params.name}`);
     });
   }
 
@@ -205,6 +279,29 @@ export class ContextSyncServer {
     prompt += `   → Call apply_create_file/apply_modify_file/apply_delete_file\n`;
     prompt += `4. If user says no → Don't call apply tools\n\n`;
     prompt += `IMPORTANT: Always wait for explicit user approval before calling apply_* tools!\n`;
+
+    return prompt;
+  }
+
+  private buildMigrationPrompt(migrationMessage: string): string {
+    let prompt = `[CONTEXT SYNC DATABASE OPTIMIZATION REQUIRED]\n\n`;
+    
+    prompt += `⚠️  **IMPORTANT**: Your Context Sync database needs optimization for better performance.\n\n`;
+    
+    // Add the migration message but format it for AI assistant context
+    prompt += migrationMessage.replace(/🔧 \*\*Context Sync v1\.0\.0\+ Database Optimization Available\*\*/, '');
+    
+    prompt += `\n\n[IMMEDIATE ACTION REQUIRED]\n`;
+    prompt += `Please inform the user about this database optimization opportunity and guide them through the migration process. `;
+    prompt += `This is critical for optimal Context Sync performance.\n\n`;
+    
+    prompt += `**Recommended approach:**\n`;
+    prompt += `1. Explain the benefits of database optimization\n`;
+    prompt += `2. Show them how to preview changes: \`get_migration_stats\`\n`;
+    prompt += `3. Guide them through safe migration: \`migrate_database dryRun:true\` then \`migrate_database\`\n`;
+    prompt += `4. Emphasize data safety - all project data will be preserved\n\n`;
+    
+    prompt += `**This prompt will not appear again once migration is completed.**`;
 
     return prompt;
   }
@@ -272,6 +369,8 @@ export class ContextSyncServer {
       if (name === 'switch_platform') return this.handleSwitchPlatform(args as any);
       if (name === 'get_platform_status') return this.handleGetPlatformStatus();
       if (name === 'get_platform_context') return this.handleGetPlatformContext(args as any);
+      if (name === 'discover_ai_platforms') return this.handleDiscoverAIPlatforms(args as any);
+      if (name === 'get_platform_recommendations') return this.handleGetPlatformRecommendations(args as any);
       if (name === 'setup_cursor') return this.handleSetupCursor();
       if (name === 'get_started') return this.handleGetStarted();
       if (name === 'debug_session') return this.handleDebugSession();
@@ -285,6 +384,15 @@ export class ContextSyncServer {
       if (name === 'todo_complete') return this.handleTodoComplete(args as any);
       if (name === 'todo_stats') return this.handleTodoStats(args as any);
       if (name === 'todo_tags') return this.handleTodoTags();
+
+      // V1.0.0 - Database Migration Tools
+      if (name === 'migrate_database') return this.handleMigrateDatabase(args as any);
+      if (name === 'get_migration_stats') return this.handleGetMigrationStats();
+      if (name === 'check_migration_suggestion') return this.handleCheckMigrationSuggestion();
+      
+      // V1.0.0 - Smart Context Analysis
+      if (name === 'analyze_conversation_context') return this.handleAnalyzeConversationContext(args as any);
+      if (name === 'suggest_missing_context') return this.handleSuggestMissingContext(args as any);
 
       throw new Error(`Unknown tool: ${name}`);
     });
@@ -784,6 +892,43 @@ export class ContextSyncServer {
         },
       },
       {
+        name: 'discover_ai_platforms',
+        description: 'Discover and explore available AI platforms with setup information and compatibility details',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            category: {
+              type: 'string',
+              enum: ['all', 'core', 'extended', 'api'],
+              description: 'Filter platforms by category (default: all)',
+            },
+            includeSetupInstructions: {
+              type: 'boolean',
+              description: 'Include detailed setup instructions for each platform',
+            },
+          },
+        },
+      },
+      {
+        name: 'get_platform_recommendations',
+        description: 'Get personalized AI platform recommendations based on user needs and current setup',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            useCase: {
+              type: 'string',
+              enum: ['coding', 'research', 'writing', 'local', 'enterprise', 'beginner'],
+              description: 'Primary use case for AI assistance',
+            },
+            priority: {
+              type: 'string',
+              enum: ['ease_of_use', 'privacy', 'features', 'cost', 'performance'],
+              description: 'Most important factor in platform selection',
+            },
+          },
+        },
+      },
+      {
         name: 'setup_cursor',
         description: 'Get instructions for setting up Context Sync in Cursor IDE',
         inputSchema: {
@@ -826,6 +971,68 @@ export class ContextSyncServer {
       },
       // V0.4.0 - Todo Management Tools (ADD THESE)
       ...todoToolDefinitions,
+      
+      // V1.0.0 - Database Migration Tools
+      {
+        name: 'migrate_database',
+        description: 'Migrate and merge duplicate projects by normalized path. This tool helps clean up database duplicates caused by path variations (case differences, trailing slashes, package.json vs folder names). AI assistants can help users run this to clean up their Context Sync database.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            dryRun: { 
+              type: 'boolean', 
+              description: 'If true, show what would be migrated without making changes (default: false)' 
+            },
+          },
+        },
+      },
+      {
+        name: 'get_migration_stats',
+        description: 'Get statistics about duplicate projects without running migration. Shows how many duplicates exist and what would be merged.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'check_migration_suggestion',
+        description: 'Check if the user should be prompted for database migration based on current version and duplicate detection. Provides smart migration recommendations.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'analyze_conversation_context',
+        description: 'Analyze recent conversation for important context that should be saved automatically. Detects decisions, todos, and insights that need to be preserved in Context Sync.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            conversationText: {
+              type: 'string',
+              description: 'Recent conversation text to analyze for context'
+            },
+            autoSave: {
+              type: 'boolean',
+              description: 'If true, automatically save detected context (default: false)'
+            }
+          },
+          required: ['conversationText']
+        },
+      },
+      {
+        name: 'suggest_missing_context',
+        description: 'Analyze current project state and suggest what important context might be missing from Context Sync. Helps ensure comprehensive project documentation.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            includeFileAnalysis: {
+              type: 'boolean',
+              description: 'If true, analyze recent file changes for undocumented decisions (default: true)'
+            }
+          }
+        },
+      },
     ];
   }
 
@@ -911,14 +1118,15 @@ export class ContextSyncServer {
         return await this.useExistingProject(normalizedPath, existingProject, displayPath);
       }
 
-      // 3. DETECT PROJECT FROM FILESYSTEM - Thorough detection  
+      // 3. DETECT PROJECT FROM FILESYSTEM - Thorough detection
       const detectedMetadata = await this.detectProjectFromPathStrict(normalizedPath);
       if (detectedMetadata) {
-        return this.requestProjectInitialization(normalizedPath, detectedMetadata, displayPath);
+        // Auto-initialize immediately (no interactive confirmation)
+        return await this.initializeProjectStrict(normalizedPath, detectedMetadata);
       }
 
-      // 4. NO PROJECT DETECTED - OFFER OPTIONS
-      return this.requestGenericInitialization(normalizedPath, displayPath);
+      // 4. NO PROJECT DETECTED - Initialize a basic workspace project without prompting
+      return await this.initializeProjectStrict(normalizedPath);
 
     } catch (error) {
       return this.createErrorResponse(error, args.path);
@@ -1027,30 +1235,6 @@ export class ContextSyncServer {
   }
 
   /**
-   * Request user consent for project initialization
-   */
-  private requestProjectInitialization(path: string, metadata: any, displayPath?: string) {
-    return {
-      content: [{
-        type: 'text',
-        text: `🔍 **Project Detected!**\n\n📁 **Name**: ${metadata.name}\n🏗️  **Type**: ${metadata.type}\n⚙️  **Tech Stack**: ${metadata.techStack.join(', ')}\n${metadata.architecture ? `🏛️  **Architecture**: ${metadata.architecture}\n` : ''}\n**Initialize this project in Context Sync?**\n\n✅ **Benefits**:\n• Project-specific todos and decisions\n• Context tracking across AI sessions\n• Git integration and code analysis\n• Shared memory between AI platforms\n\n**Commands**:\n• \`"yes"\` or \`"initialize"\` to proceed\n• \`"no"\` or \`"skip"\` to use as basic workspace\n\n*Note: You can always initialize later if you change your mind.*`
-      }]
-    };
-  }
-
-  /**
-   * Request user choice for generic initialization
-   */
-  private requestGenericInitialization(path: string, displayPath?: string) {
-    return {
-      content: [{
-        type: 'text',
-        text: `📂 **Directory Validated**: ${path}\n\nNo specific project type detected (no package.json, Cargo.toml, etc.)\n\n**Choose your setup**:\n\n**1. 🚀 Full Project** (Recommended)\n• Enable todos and decision tracking\n• Full Context Sync features\n• Project-specific context\n• Cross-platform sync\n\n**2. 📁 Basic Workspace**\n• File operations only\n• No project tracking\n• Minimal features\n\n**Commands**:\n• \`"1"\` or \`"full"\` for complete project setup\n• \`"2"\` or \`"basic"\` for workspace-only mode`
-      }]
-    };
-  }
-
-  /**
    * Initialize workspace with all analyzers - strict validation
    */
   private async initializeWorkspaceStrict(path: string): Promise<void> {
@@ -1152,10 +1336,22 @@ export class ContextSyncServer {
       const structure = await this.workspaceDetector.getProjectStructure(2);
       const isGit = this.gitIntegration?.isGitRepo() ? ' (Git repo ✓)' : '';
       
+      // Check for migration prompt (lightweight)
+      let migrationTip = '';
+      try {
+        const version = this.getVersion();
+        const migrationCheck = await this.storage.checkMigrationPrompt(version);
+        if (migrationCheck.shouldPrompt) {
+          migrationTip = `\n\n💡 **Performance Tip:** Your database has duplicate projects that can be cleaned up. Run \`get_migration_stats\` for details.`;
+        }
+      } catch {
+        // Ignore migration check errors in success response
+      }
+      
       return {
         content: [{
           type: 'text',
-          text: `🎉 **Project Initialized Successfully!**\n\n✅ **Workspace**: ${path}${isGit}\n📁 **Project**: ${project.name}\n⚙️  **Tech Stack**: ${project.techStack?.join(', ') || 'None'}\n🏗️  **Architecture**: ${project.architecture || 'Generic'}\n\n📂 **Structure Preview**:\n${structure}\n\n🚀 **Context Sync Active!**\n\n**Available Commands**:\n• \`todo_create "task"\` - Add project todos\n• \`save_decision "choice"\` - Record decisions\n• \`git_status\` - Check repository status\n• \`search_content "term"\` - Find code\n• \`get_project_context\` - View project info\n\n**Pro Tip**: All todos and decisions are now linked to "${project.name}" automatically!`
+          text: `🎉 **Project Initialized Successfully!**\n\n✅ **Workspace**: ${path}${isGit}\n📁 **Project**: ${project.name}\n⚙️  **Tech Stack**: ${project.techStack?.join(', ') || 'None'}\n🏗️  **Architecture**: ${project.architecture || 'Generic'}\n\n📂 **Structure Preview**:\n${structure}\n\n🚀 **Context Sync Active!**\n\n**Available Commands**:\n• \`todo_create "task"\` - Add project todos\n• \`save_decision "choice"\` - Record decisions\n• \`git_status\` - Check repository status\n• \`search_content "term"\` - Find code\n• \`get_project_context\` - View project info\n\n**Pro Tip**: All todos and decisions are now linked to "${project.name}" automatically!${migrationTip}`
         }]
       };
     } catch (error) {
@@ -2336,16 +2532,33 @@ private getRelativePath(filePath: string): string {
       const status = PlatformSync.getPlatformStatus();
       const current = this.platformSync.getPlatform();
 
-      let response = `📱 Platform Configuration Status\n\n`;
-      response += `Current Platform: ${current}\n\n`;
-      response += `Configuration Status:\n`;
-      response += `  ${status.claude ? '✅' : '❌'} Claude Desktop\n`;
-      response += `  ${status.cursor ? '✅' : '❌'} Cursor\n`;
-      response += `  ${status.copilot ? '✅' : '❌'} GitHub Copilot\n\n`;
+      let response = `� **Context Sync Platform Status**\n\n`;
+      response += `**Current Platform:** ${current}\n\n`;
+      
+      // Core platforms (fully supported)
+      response += `## 🎯 **Core Platforms**\n`;
+      response += `${status.claude ? '✅' : '❌'} **Claude Desktop** - Advanced reasoning and analysis\n`;
+      response += `${status.cursor ? '✅' : '❌'} **Cursor IDE** - AI-powered coding environment\n`;
+      response += `${status.copilot ? '✅' : '❌'} **GitHub Copilot** - VS Code integration\n\n`;
+      
+      // Extended platforms  
+      response += `## 🔧 **Extended Platforms**\n`;
+      response += `${status.continue ? '✅' : '❌'} **Continue.dev** - Open source AI coding assistant\n`;
+      response += `${status.zed ? '✅' : '❌'} **Zed Editor** - Fast collaborative editor\n`;
+      response += `${status.windsurf ? '✅' : '❌'} **Windsurf** - Codeium's AI IDE\n`;
+      response += `${status.tabnine ? '✅' : '❌'} **TabNine** - Enterprise AI completion\n\n`;
 
-      if (!status.cursor) {
-        response += `💡 To configure Cursor, use the setup_cursor tool or manually configure:\n`;
-        response += PlatformSync.getInstallInstructions('cursor');
+
+      // Count active platforms
+      const activePlatforms = Object.values(status).filter(Boolean).length;
+      response += `**Active Platforms:** ${activePlatforms}/13\n\n`;
+      
+      if (activePlatforms === 0) {
+        response += `⚠️  **No platforms configured yet**\n`;
+        response += `Get started with: "help me get started with context-sync"\n`;
+      } else if (activePlatforms < 3) {
+        response += `💡 **Want to add more platforms?**\n`;
+        response += `Use: "switch platform to [platform-name]" for setup instructions\n`;
       }
 
       return {
@@ -2390,11 +2603,22 @@ private getRelativePath(filePath: string): string {
     // Build response
     let response = `🎉 **Context Sync v${version} is working!**\n\n`;
     
-    // Show integrated AI platforms
-    response += `🤖 **Integrated AI Platforms:**\n`;
-    response += `${platformStatus.claude ? '✅' : '⚪'} **Claude Desktop** - Advanced reasoning and code analysis\n`;
-    response += `${platformStatus.cursor ? '✅' : '⚪'} **Cursor IDE** - Real-time coding assistance\n`;
-    response += `${platformStatus.copilot ? '✅' : '⚪'} **GitHub Copilot (VS Code)** - Intelligent code completion\n\n`;
+    // Show integrated AI platforms with counts
+    const activePlatforms = Object.values(platformStatus).filter(Boolean).length;
+    response += `🌍 **Universal AI Platform Support (${activePlatforms}/13 active):**\n\n`;
+    
+    response += `**🎯 Core Platforms:**\n`;
+    response += `${platformStatus.claude ? '✅' : '⚪'} Claude Desktop • ${platformStatus.cursor ? '✅' : '⚪'} Cursor IDE • ${platformStatus.copilot ? '✅' : '⚪'} VS Code + Copilot\n\n`;
+    
+    response += `**🔧 Extended Support:**\n`;
+    response += `${platformStatus.continue ? '✅' : '⚪'} Continue.dev • ${platformStatus.zed ? '✅' : '⚪'} Zed Editor • ${platformStatus.windsurf ? '✅' : '⚪'} Windsurf\n`;
+    response += `${platformStatus.tabnine ? '✅' : '⚪'} TabNine\n\n`;
+    
+    if (activePlatforms > 1) {
+      response += `🎉 **Multi-platform setup detected!** Your context syncs across ${activePlatforms} platforms.\n\n`;
+    } else if (activePlatforms === 1) {
+      response += `💡 **Single platform detected.** Add more with "get platform status"\n\n`;
+    }
     
     // Current status - simplified and useful
     response += `📊 **Current Status:**\n`;
@@ -2596,6 +2820,353 @@ private getRelativePath(filePath: string): string {
           text: response
         }
       ]
+    };
+  }
+
+  private handleDiscoverAIPlatforms(args: { category?: 'all' | 'core' | 'extended' | 'api'; includeSetupInstructions?: boolean }) {
+    const { category = 'all', includeSetupInstructions = false } = args;
+    
+    // Filter platforms by category
+    const platforms = Object.entries(PLATFORM_REGISTRY)
+      .filter(([_, metadata]) => {
+        if (category === 'all') return true;
+        return metadata.category === category;
+      })
+      .sort(([_, a], [__, b]) => {
+        // Sort by category priority: core > extended > api
+        const priority = { core: 0, extended: 1, api: 2 };
+        return priority[a.category] - priority[b.category];
+      });
+
+    let response = `🌍 **AI Platform Discovery** (${platforms.length} platforms)\n\n`;
+    
+    // Add category-specific intro
+    if (category === 'core') {
+      response += `🎯 **Core Platforms** - Fully integrated with rich MCP support:\n\n`;
+    } else if (category === 'extended') {
+      response += `🔧 **Extended Platforms** - Advanced integrations with growing support:\n\n`;
+    } else if (category === 'api') {
+      response += `🌐 **API Integrations** - Direct API connections for programmatic access:\n\n`;
+    } else {
+      response += `**All 14 supported AI platforms categorized by integration level:**\n\n`;
+    }
+
+    // Group by category for display
+    const categorized = platforms.reduce((acc, [platformId, metadata]) => {
+      if (!acc[metadata.category]) acc[metadata.category] = [];
+      acc[metadata.category].push([platformId, metadata]);
+      return acc;
+    }, {} as Record<string, Array<[string, PlatformMetadata]>>);
+
+    // Display each category
+    const categoryTitles = {
+      core: '🎯 **Core Platforms**',
+      extended: '🔧 **Extended Platforms**', 
+      api: '🌐 **API Integrations**'
+    };
+
+    const categoryDescriptions = {
+      core: 'Full MCP integration with rich context sharing',
+      extended: 'Advanced integrations with growing feature support',
+      api: 'Direct API access for programmatic AI interactions'
+    };
+
+    for (const [cat, title] of Object.entries(categoryTitles)) {
+      if (categorized[cat] && (category === 'all' || category === cat)) {
+        response += `${title} - ${categoryDescriptions[cat as keyof typeof categoryDescriptions]}\n`;
+        
+        for (const [platformId, metadata] of categorized[cat]) {
+          const status = PlatformSync.getPlatformStatus();
+          const isActive = status[platformId as keyof typeof status];
+          const statusIcon = isActive ? '✅' : '⚪';
+          
+          response += `${statusIcon} **${metadata.name}**\n`;
+          response += `   ${metadata.description}\n`;
+          response += `   Complexity: ${metadata.setupComplexity} • MCP: ${metadata.mcpSupport} • Status: ${metadata.status}\n`;
+          
+          if (metadata.features.length > 0) {
+            response += `   Features: ${metadata.features.join(', ')}\n`;
+          }
+          
+          if (includeSetupInstructions) {
+            response += `   Website: ${metadata.website}\n`;
+          }
+          
+          response += `\n`;
+        }
+        response += `\n`;
+      }
+    }
+
+    // Add platform statistics
+    const currentStatus = PlatformSync.getPlatformStatus();
+    const activeCount = Object.values(currentStatus).filter(Boolean).length;
+    const totalCount = Object.keys(PLATFORM_REGISTRY).length;
+    
+    response += `📊 **Platform Status:**\n`;
+    response += `• Active Platforms: ${activeCount}/${totalCount}\n`;
+    response += `• Current Platform: ${this.platformSync.getPlatform()}\n\n`;
+
+    // Add quick actions
+    response += `🚀 **Quick Actions:**\n`;
+    response += `• \`get platform status\` - See detailed platform configuration\n`;
+    response += `• \`switch platform to [name]\` - Switch to a different platform\n`;
+    response += `• \`discover ai platforms core\` - View only core platforms\n`;
+    response += `• \`discover ai platforms extended\` - View extended platforms\n`;
+    response += `• \`discover ai platforms api\` - View API integrations\n\n`;
+
+    // Add setup instructions if requested
+    if (includeSetupInstructions) {
+      response += `📋 **Setup Instructions:**\n`;
+      response += `Each platform has specific setup requirements. Use the platform-specific setup commands or visit the Context Sync documentation for detailed configuration guides.\n\n`;
+    }
+
+    response += `**Universal Memory Infrastructure** - Context Sync provides consistent memory and context sharing across all supported platforms, making it truly platform-agnostic AI infrastructure.`;
+
+    return {
+      content: [{
+        type: 'text',
+        text: response,
+      }],
+    };
+  }
+
+  private handleGetPlatformRecommendations(args: { useCase?: string; priority?: string }) {
+    const { useCase = 'coding', priority = 'ease_of_use' } = args;
+    
+    let response = `🎯 **AI Platform Recommendations**\n\n`;
+    response += `**Your Profile:** ${useCase} focused, prioritizing ${priority.replace('_', ' ')}\n\n`;
+
+    // Get current status for personalization
+    const currentStatus = PlatformSync.getPlatformStatus();
+    const currentPlatform = this.platformSync.getPlatform();
+    const activeCount = Object.values(currentStatus).filter(Boolean).length;
+
+    // Define recommendation logic based on use case and priority
+    const recommendations: Array<{
+      platform: string;
+      metadata: PlatformMetadata;
+      score: number;
+      reasons: string[];
+    }> = [];
+
+    // Score each platform based on criteria
+    Object.entries(PLATFORM_REGISTRY).forEach(([platformId, metadata]) => {
+      let score = 0;
+      const reasons: string[] = [];
+
+      // Use case scoring
+      switch (useCase) {
+        case 'coding':
+          if (['cursor', 'copilot', 'continue'].includes(platformId)) {
+            score += 3;
+            reasons.push('Excellent for coding workflows');
+          }
+          if (metadata.features.includes('Real-time coding') || 
+              metadata.features.includes('Code completion') ||
+              metadata.features.includes('AI editing')) {
+            score += 2;
+            reasons.push('Strong coding features');
+          }
+          break;
+        
+        case 'research':
+          if (['claude', 'gemini', 'openai'].includes(platformId)) {
+            score += 3;
+            reasons.push('Excellent for research and analysis');
+          }
+          if (metadata.features.includes('Advanced reasoning') ||
+              metadata.features.includes('Large context')) {
+            score += 2;
+            reasons.push('Strong analytical capabilities');
+          }
+          break;
+        
+        case 'local':
+          if (['ollama'].includes(platformId)) {
+            score += 4;
+            reasons.push('Runs entirely on your machine');
+          }
+          if (metadata.features.includes('Privacy focused') ||
+              metadata.features.includes('Local models')) {
+            score += 3;
+            reasons.push('Privacy-first approach');
+          }
+          break;
+        
+        case 'enterprise':
+          if (['copilot', 'tabnine', 'codewisperer'].includes(platformId)) {
+            score += 3;
+            reasons.push('Enterprise-grade features');
+          }
+          if (metadata.features.includes('Enterprise') ||
+              metadata.features.includes('Security')) {
+            score += 2;
+            reasons.push('Enterprise support available');
+          }
+          break;
+        
+        case 'beginner':
+          if (metadata.setupComplexity === 'easy') {
+            score += 3;
+            reasons.push('Easy to set up');
+          }
+          if (['claude', 'cursor'].includes(platformId)) {
+            score += 2;
+            reasons.push('Beginner-friendly interface');
+          }
+          break;
+      }
+
+      // Priority scoring
+      switch (priority) {
+        case 'ease_of_use':
+          if (metadata.setupComplexity === 'easy') {
+            score += 2;
+            reasons.push('Simple setup process');
+          }
+          if (metadata.mcpSupport === 'native') {
+            score += 2;
+            reasons.push('Native MCP integration');
+          }
+          break;
+        
+        case 'privacy':
+          if (['ollama', 'continue'].includes(platformId)) {
+            score += 3;
+            reasons.push('Privacy-focused design');
+          }
+          if (metadata.features.includes('Local') || 
+              metadata.features.includes('Self-hosted')) {
+            score += 2;
+            reasons.push('Local processing available');
+          }
+          break;
+        
+        case 'features':
+          if (metadata.features.length >= 4) {
+            score += 2;
+            reasons.push('Rich feature set');
+          }
+          if (metadata.category === 'core') {
+            score += 2;
+            reasons.push('Full Context Sync integration');
+          }
+          break;
+        
+        case 'cost':
+          if (['continue', 'codeium', 'ollama'].includes(platformId)) {
+            score += 3;
+            reasons.push('Free or open source');
+          }
+          if (metadata.features.includes('Free tier')) {
+            score += 2;
+            reasons.push('Free tier available');
+          }
+          break;
+        
+        case 'performance':
+          if (['cursor', 'zed'].includes(platformId)) {
+            score += 2;
+            reasons.push('Optimized for speed');
+          }
+          if (metadata.features.includes('Fast')) {
+            score += 1;
+            reasons.push('Fast performance');
+          }
+          break;
+      }
+
+      // Category bonus
+      if (metadata.category === 'core') score += 1;
+      
+      // Current platform bonus/penalty
+      if (platformId === currentPlatform) {
+        score += 1;
+        reasons.push('Currently active');
+      }
+
+      recommendations.push({
+        platform: platformId,
+        metadata,
+        score,
+        reasons: reasons.slice(0, 3) // Limit to top 3 reasons
+      });
+    });
+
+    // Sort by score and get top 5
+    const topRecommendations = recommendations
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    response += `🏆 **Top Recommendations for You:**\n\n`;
+
+    topRecommendations.forEach((rec, index) => {
+      const isActive = currentStatus[rec.platform as keyof typeof currentStatus];
+      const statusIcon = isActive ? '✅' : '⭐';
+      const position = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+      
+      response += `${position} ${statusIcon} **${rec.metadata.name}** (Score: ${rec.score})\n`;
+      response += `   ${rec.metadata.description}\n`;
+      response += `   Why recommended: ${rec.reasons.join(', ')}\n`;
+      response += `   Setup: ${rec.metadata.setupComplexity} • Category: ${rec.metadata.category}\n\n`;
+    });
+
+    // Add setup suggestions
+    response += `🚀 **Next Steps:**\n\n`;
+    
+    if (activeCount === 0) {
+      response += `1️⃣ **Get Started:** Try "${topRecommendations[0].metadata.name}" - ${topRecommendations[0].reasons[0]}\n`;
+      response += `2️⃣ **Easy Alternative:** Consider "${topRecommendations[1].metadata.name}" as backup\n`;
+    } else if (activeCount < 3) {
+      const notActive = topRecommendations.filter(r => 
+        !currentStatus[r.platform as keyof typeof currentStatus]
+      );
+      if (notActive.length > 0) {
+        response += `1️⃣ **Expand Your Setup:** Add "${notActive[0].metadata.name}"\n`;
+        response += `2️⃣ **Current Platform:** Keep using "${currentPlatform}" for familiar workflows\n`;
+      }
+    } else {
+      response += `✅ **You're all set!** With ${activeCount} platforms active, you have great coverage.\n`;
+      response += `💡 **Pro Tip:** Use "switch platform" to move contexts between platforms seamlessly.\n`;
+    }
+
+    response += `\n🔧 **Quick Actions:**\n`;
+    response += `• \`discover ai platforms ${topRecommendations[0].metadata.category}\` - See similar platforms\n`;
+    response += `• \`switch platform to ${topRecommendations[0].platform}\` - Try top recommendation\n`;
+    response += `• \`get platform status\` - Check current setup\n\n`;
+
+    // Add use case specific tips
+    switch (useCase) {
+      case 'coding':
+        response += `💻 **Coding Pro Tips:**\n`;
+        response += `• Use Cursor for real-time AI assistance while coding\n`;
+        response += `• Claude excels at explaining complex code and architecture\n`;
+        response += `• Continue.dev offers the most customization for power users\n`;
+        break;
+      
+      case 'local':
+        response += `🔒 **Privacy-First Setup:**\n`;
+        response += `• Ollama keeps everything on your machine\n`;
+        response += `• Continue.dev supports local models and custom endpoints\n`;
+        response += `• Consider hardware requirements for local model performance\n`;
+        break;
+      
+      case 'enterprise':
+        response += `🏢 **Enterprise Considerations:**\n`;
+        response += `• GitHub Copilot offers the strongest enterprise policies\n`;
+        response += `• TabNine provides on-premise deployment options\n`;
+        response += `• All core platforms support team collaboration features\n`;
+        break;
+    }
+
+    response += `\n**Context Sync makes it easy to try multiple platforms** - your memory and context seamlessly transfers between all supported AI tools!`;
+
+    return {
+      content: [{
+        type: 'text',
+        text: response,
+      }],
     };
   }
 
@@ -2854,11 +3425,456 @@ private getRelativePath(filePath: string): string {
     };
   }
 
+  // ========== V1.0.0 HANDLERS - DATABASE MIGRATION ==========
+  
+  private async handleCheckMigrationSuggestion() {
+    try {
+      const version = this.getVersion();
+      const migrationCheck = await this.storage.checkMigrationPrompt(version);
+      
+      if (!migrationCheck.shouldPrompt) {
+        return {
+          content: [{
+            type: 'text',
+            text: `✅ **No Migration Needed**\n\nYour Context Sync database is already optimized!\n\n📈 **Status:**\n• No duplicate projects detected\n• Database is clean and performant\n• All systems running optimally\n\n🚀 You're all set to use Context Sync at peak performance!`,
+          }],
+        };
+      }
+      
+      return {
+        content: [{
+          type: 'text',
+          text: migrationCheck.message,
+        }],
+      };
+      
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `⚠️ **Migration Check Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nYou can still try running migration tools manually:\n• \`get_migration_stats\` - Check for duplicates\n• \`migrate_database dryRun:true\` - Preview migration`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async handleAnalyzeConversationContext(args: { conversationText: string; autoSave?: boolean }) {
+    try {
+      const { conversationText, autoSave = false } = args;
+      const analysis = ContextAnalyzer.analyzeConversation(conversationText);
+      
+      let response = `🧠 **Conversation Context Analysis**\n\n`;
+      response += `${analysis.summary}\n\n`;
+      
+      if (analysis.decisions.length === 0 && analysis.todos.length === 0 && analysis.insights.length === 0) {
+        response += `✅ **No significant context detected** in this conversation.\n\n`;
+        response += `The conversation appears to be general discussion without specific:\n`;
+        response += `• Technical decisions\n`;
+        response += `• Action items or todos\n`;
+        response += `• Key insights or breakthroughs\n\n`;
+        response += `💡 **Tip**: Context Sync automatically detects technical discussions, architecture decisions, and action items.`;
+        
+        return {
+          content: [{ type: 'text', text: response }],
+        };
+      }
+
+      // Show analysis results
+      if (analysis.decisions.length > 0) {
+        response += `📋 **Technical Decisions Detected (${analysis.decisions.length}):**\n`;
+        analysis.decisions.forEach((decision, i) => {
+          const priorityIcon = decision.priority === 'high' ? '🔴' : decision.priority === 'medium' ? '🟡' : '🟢';
+          response += `${i + 1}. ${priorityIcon} ${decision.content}\n`;
+          response += `   *${decision.reasoning}*\n\n`;
+        });
+      }
+
+      if (analysis.todos.length > 0) {
+        response += `✅ **Action Items Detected (${analysis.todos.length}):**\n`;
+        analysis.todos.forEach((todo, i) => {
+          const priorityIcon = todo.priority === 'high' ? '🔴' : todo.priority === 'medium' ? '🟡' : '🟢';
+          response += `${i + 1}. ${priorityIcon} ${todo.content}\n`;
+          response += `   *${todo.reasoning}*\n\n`;
+        });
+      }
+
+      if (analysis.insights.length > 0) {
+        response += `💡 **Key Insights Detected (${analysis.insights.length}):**\n`;
+        analysis.insights.forEach((insight, i) => {
+          const priorityIcon = insight.priority === 'high' ? '🔴' : insight.priority === 'medium' ? '🟡' : '🟢';
+          response += `${i + 1}. ${priorityIcon} ${insight.content}\n`;
+          response += `   *${insight.reasoning}*\n\n`;
+        });
+      }
+
+      if (autoSave) {
+        response += `🤖 **Auto-saving detected context...**\n\n`;
+        let savedCount = 0;
+
+        // Auto-save decisions
+        for (const decision of analysis.decisions.filter(d => d.priority !== 'low')) {
+          try {
+            const decisionData = ContextAnalyzer.extractDecision(decision.content);
+            if (decisionData) {
+              await this.handleSaveDecision({
+                type: decisionData.type,
+                description: decisionData.description,
+                reasoning: decisionData.reasoning
+              });
+              savedCount++;
+            }
+          } catch (error) {
+            console.warn('Failed to auto-save decision:', error);
+          }
+        }
+
+        // Auto-save todos
+        for (const todo of analysis.todos.filter(t => t.priority !== 'low')) {
+          try {
+            const todoData = ContextAnalyzer.extractTodo(todo.content);
+            if (todoData) {
+              await this.handleTodoCreate({
+                title: todoData.title,
+                description: todoData.description,
+                priority: todoData.priority
+              });
+              savedCount++;
+            }
+          } catch (error) {
+            console.warn('Failed to auto-save todo:', error);
+          }
+        }
+
+        // Auto-save insights
+        for (const insight of analysis.insights.filter(i => i.priority === 'high')) {
+          try {
+            await this.handleSaveConversation({
+              content: insight.content,
+              role: 'assistant'
+            });
+            savedCount++;
+          } catch (error) {
+            console.warn('Failed to auto-save insight:', error);
+          }
+        }
+
+        response += `✅ **Auto-saved ${savedCount} context items**\n\n`;
+      } else {
+        response += `🚀 **Recommended Actions:**\n`;
+        response += `• Use \`save_decision\` for technical decisions\n`;
+        response += `• Use \`todo_create\` for action items\n`;
+        response += `• Use \`save_conversation\` for key insights\n`;
+        response += `• Or re-run with \`autoSave: true\` to save automatically\n\n`;
+      }
+
+      response += `💡 **Pro Tip**: Enable auto-context saving in your AI assistant prompt for seamless context preservation!`;
+
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+      
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ **Context Analysis Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nMake sure to provide conversation text for analysis.`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async handleSuggestMissingContext(args: { includeFileAnalysis?: boolean }) {
+    try {
+      const { includeFileAnalysis = true } = args;
+      const currentProject = this.getCurrentProject();
+      
+      if (!currentProject) {
+        return {
+          content: [{
+            type: 'text',
+            text: `❌ **No Active Project**\n\nUse \`set_workspace\` to set up a project first before analyzing missing context.`,
+          }],
+          isError: true,
+        };
+      }
+
+      let response = `🔍 **Missing Context Analysis for "${currentProject.name}"**\n\n`;
+      
+      // Get current context
+      const summary = this.storage.getContextSummary(currentProject.id);
+      const decisions = summary.recentDecisions || [];
+      const conversations = summary.recentConversations || [];
+      
+      response += `📊 **Current Context State:**\n`;
+      response += `• Decisions: ${decisions.length}\n`;
+      response += `• Conversations: ${conversations.length}\n`;
+      response += `• Tech Stack: ${currentProject.techStack?.length || 0} items\n`;
+      response += `• Architecture: ${currentProject.architecture || 'Not specified'}\n\n`;
+      
+      // Analyze missing context
+      const suggestions: string[] = [];
+      
+      // Check for missing architecture
+      if (!currentProject.architecture || currentProject.architecture === 'Not specified') {
+        suggestions.push(`🏗️ **Architecture Decision Missing**: Document the overall architecture pattern (microservices, monolith, serverless, etc.)`);
+      }
+      
+      // Check for missing tech stack decisions
+      if (!currentProject.techStack || currentProject.techStack.length === 0) {
+        suggestions.push(`⚙️ **Technology Stack Missing**: Document key technologies, frameworks, and libraries used`);
+      }
+      
+      // Check for recent decisions
+      if (decisions.length === 0) {
+        suggestions.push(`📋 **No Technical Decisions Recorded**: Start documenting architectural choices, library selections, and design decisions`);
+      } else if (decisions.length < 3) {
+        suggestions.push(`📋 **Limited Decision History**: Most projects have 5-10+ key decisions documented`);
+      }
+      
+      // Check for configuration decisions
+      const hasConfigDecisions = decisions.some((d: any) => 
+        d.type === 'configuration' || d.description.toLowerCase().includes('config')
+      );
+      if (!hasConfigDecisions) {
+        suggestions.push(`⚙️ **Configuration Decisions Missing**: Document environment setup, deployment configs, and key settings`);
+      }
+      
+      // Check for security decisions
+      const hasSecurityDecisions = decisions.some((d: any) => 
+        d.description.toLowerCase().includes('security') || 
+        d.description.toLowerCase().includes('auth')
+      );
+      if (!hasSecurityDecisions) {
+        suggestions.push(`🔒 **Security Context Missing**: Document authentication, authorization, and security patterns`);
+      }
+      
+      // Check for performance decisions
+      const hasPerformanceDecisions = decisions.some((d: any) => 
+        d.description.toLowerCase().includes('performance') || 
+        d.description.toLowerCase().includes('optimize')
+      );
+      if (!hasPerformanceDecisions) {
+        suggestions.push(`⚡ **Performance Context Missing**: Document optimization decisions and performance considerations`);
+      }
+      
+      if (suggestions.length === 0) {
+        response += `✅ **Well-Documented Project!**\n\n`;
+        response += `Your project has comprehensive context coverage:\n`;
+        response += `• Architecture documented\n`;
+        response += `• Technology stack defined\n`;
+        response += `• Multiple decisions recorded\n`;
+        response += `• Various decision types covered\n\n`;
+        response += `💡 **Keep up the good work!** Continue documenting new decisions as the project evolves.`;
+      } else {
+        response += `⚠️ **Missing Context Areas (${suggestions.length}):**\n\n`;
+        suggestions.forEach((suggestion, i) => {
+          response += `${i + 1}. ${suggestion}\n\n`;
+        });
+        
+        response += `🚀 **Quick Actions:**\n`;
+        response += `• Use \`save_decision\` to document technical choices\n`;
+        response += `• Update project info with \`update_project\` (if available)\n`;
+        response += `• Use \`analyze_conversation_context\` on recent discussions\n`;
+        response += `• Document key patterns and conventions as decisions\n\n`;
+        
+        response += `💡 **Pro Tip**: Well-documented projects help AI assistants provide more relevant and context-aware assistance!`;
+      }
+
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+      
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ **Missing Context Analysis Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
+  private async handleMigrateDatabase(args: { dryRun?: boolean }) {
+    const { dryRun = false } = args;
+    
+    try {
+      // Use null to let DatabaseMigrator use default path (same as Storage)
+      const migrator = new DatabaseMigrator();
+      
+      if (dryRun) {
+        // For dry run, just get the stats
+        const stats = await migrator.getMigrationStats();
+        
+        let response = `� **Database Migration Preview (Dry Run)**\n\n`;
+        
+        if (stats.duplicateGroups === 0) {
+          response += `✅ No duplicate projects found! Your database is clean.\n\n`;
+          response += `📊 **Summary:**\n`;
+          response += `• Total projects: ${stats.totalProjects}\n`;
+          response += `• Duplicates: 0\n`;
+          response += `• No migration needed\n`;
+          
+          migrator.close();
+          return {
+            content: [{ type: 'text', text: response }],
+          };
+        }
+        
+        response += `📊 **Would be migrated:**\n`;
+        response += `• Total projects: ${stats.totalProjects}\n`;
+        response += `• Duplicate groups: ${stats.duplicateGroups}\n`;
+        response += `• Total duplicates: ${stats.totalDuplicates}\n`;
+        response += `• Projects after cleanup: ${stats.totalProjects - stats.totalDuplicates}\n\n`;
+        
+        response += `🔍 **Duplicate groups found:**\n\n`;
+        
+        stats.duplicateDetails.forEach((group, i) => {
+          response += `${i + 1}. **${group.path}**\n`;
+          response += `   → ${group.count} projects: ${group.names.slice(0, 3).join(', ')}`;
+          if (group.names.length > 3) {
+            response += ` +${group.names.length - 3} more`;
+          }
+          response += `\n\n`;
+        });
+        
+        response += `💡 **Next Steps:**\n`;
+        response += `• Review the changes above\n`;
+        response += `• Run "migrate database" (without dryRun) to apply changes\n`;
+        response += `• Backup recommended before running actual migration\n`;
+        
+        migrator.close();
+        return {
+          content: [{ type: 'text', text: response }],
+        };
+      }
+      
+      // Actual migration
+      const result = await migrator.migrateDuplicateProjects();
+      
+      let response = `🔄 **Database Migration Complete**\n\n`;
+      
+      if (result.duplicatesFound === 0) {
+        response += `✅ No duplicate projects found! Your database was already clean.\n\n`;
+        response += `📊 **Summary:**\n`;
+        response += `• No duplicates found\n`;
+        response += `• No changes made\n`;
+      } else {
+        response += `✅ **Migration successful!**\n\n`;
+        response += `� **Summary:**\n`;
+        response += `• Duplicates found: ${result.duplicatesFound}\n`;
+        response += `• Duplicates removed: ${result.duplicatesRemoved}\n`;
+        response += `• Projects merged: ${result.projectsMerged}\n\n`;
+        
+        if (result.details.length > 0) {
+          response += `📋 **Details:**\n`;
+          result.details.forEach(detail => {
+            response += `• ${detail}\n`;
+          });
+          response += `\n`;
+        }
+        
+        response += `🎉 **Migration Complete!**\n`;
+        response += `• Database has been cleaned up\n`;
+        response += `• All related data (conversations, decisions, todos) preserved\n`;
+        response += `• You should see fewer duplicate projects now\n`;
+      }
+      
+      if (result.errors.length > 0) {
+        response += `\n⚠️ **Warnings:**\n`;
+        result.errors.forEach(error => {
+          response += `• ${error}\n`;
+        });
+      }
+      
+      migrator.close();
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+      
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ **Migration Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nThe database was not modified. Please try again or check the logs.`,
+        }],
+        isError: true,
+      };
+    }
+  }
+  
+  private async handleGetMigrationStats() {
+    try {
+      const migrator = new DatabaseMigrator();
+      const stats = await migrator.getMigrationStats();
+      
+      let response = `📊 **Database Migration Statistics**\n\n`;
+      
+      response += `📈 **Current State:**\n`;
+      response += `• Total projects: ${stats.totalProjects}\n`;
+      response += `• Projects with paths: ${stats.projectsWithPaths}\n`;
+      response += `• Duplicate groups: ${stats.duplicateGroups}\n`;
+      response += `• Total duplicates: ${stats.totalDuplicates}\n\n`;
+      
+      if (stats.duplicateGroups === 0) {
+        response += `✅ **No duplicates found!** Your database is clean.\n\n`;
+        response += `🎯 **Recommendations:**\n`;
+        response += `• Your Context Sync database is optimized\n`;
+        response += `• No migration needed\n`;
+        response += `• All projects have unique paths\n`;
+        
+        migrator.close();
+        return {
+          content: [{ type: 'text', text: response }],
+        };
+      }
+      
+      response += `⚠️ **Duplicates Detected:**\n\n`;
+      
+      stats.duplicateDetails.forEach((group, i) => {
+        response += `${i + 1}. **${group.path}**\n`;
+        response += `   Projects: ${group.count}\n`;
+        response += `   Names: ${group.names.slice(0, 3).join(', ')}`;
+        if (group.names.length > 3) {
+          response += ` +${group.names.length - 3} more`;
+        }
+        response += `\n\n`;
+      });
+      
+      response += `🛠️ **Next Steps:**\n`;
+      response += `• Run "migrate database dryRun:true" to preview changes\n`;
+      response += `• Run "migrate database" to clean up duplicates\n`;
+      response += `• This will preserve all your data while removing duplicates\n\n`;
+      
+      response += `💡 **Migration Benefits:**\n`;
+      response += `• Cleaner project list\n`;
+      response += `• Improved performance\n`;
+      response += `• Consolidated project context\n`;
+      response += `• Better AI tool integration\n`;
+      
+      migrator.close();
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+      
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ **Failed to get migration stats**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+  }
+
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     
-    console.error('Context Sync MCP server v0.5.2 running on stdio');
+    console.error('Context Sync MCP server v1.0.0 running on stdio');
   }
 
   close(): void {

@@ -76,7 +76,8 @@ export class ProjectDetector {
     markerFile: string,
     type: ProjectMetadata['type']
   ): Promise<ProjectMetadata> {
-    let name = path.basename(projectPath);
+    // Always use folder name as project name for consistency and deduplication
+    const name = path.basename(projectPath);
     let techStack: string[] = [];
     let architecture: string | undefined;
 
@@ -85,20 +86,18 @@ export class ProjectDetector {
         const pkgPath = path.join(projectPath, 'package.json');
         const pkg = JSON.parse(await fsAsync.readFile(pkgPath, 'utf8'));
         
-        name = pkg.name || name;
+        // Use folder name instead of package.json name for consistency
         techStack = await this.detectNodeTechStack(pkg, projectPath);
         architecture = this.inferArchitecture(techStack);
       } else if (markerFile === 'Cargo.toml') {
         const cargoPath = path.join(projectPath, 'Cargo.toml');
         const cargo = await fsAsync.readFile(cargoPath, 'utf8');
-        const nameMatch = cargo.match(/name\s*=\s*"(.+)"/);
-        name = nameMatch ? nameMatch[1] : name;
+        // Use folder name for consistency, but we could extract Cargo project name for tech stack details if needed
         techStack = ['Rust'];
       } else if (markerFile === 'go.mod') {
         const goPath = path.join(projectPath, 'go.mod');
         const goMod = await fsAsync.readFile(goPath, 'utf8');
-        const nameMatch = goMod.match(/module\s+(.+)/);
-        name = nameMatch ? path.basename(nameMatch[1]) : name;
+        // Use folder name for consistency, but we could extract Go module name for tech stack details if needed
         techStack = ['Go'];
       } else if (markerFile === 'requirements.txt' || markerFile === 'pyproject.toml') {
         techStack = await this.detectPythonTechStack(projectPath);

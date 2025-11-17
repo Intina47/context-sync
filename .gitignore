@@ -57,3 +57,7 @@ local/
 # VSCode extension build output and pack
 vscode-extension/dist/
 vscode-extension/*.vsix
+
+# other
+hf_space/
+scripts/

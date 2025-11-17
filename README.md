@@ -27,6 +27,25 @@ npm install -g @context-sync/server
 </div>
 ---
 
+**Supports:**
+<!-- PLATFORM BADGES - PROMINENT -->
+<p>
+  <img src="https://img.shields.io/badge/Cursor-Supported-00D4AA?style=for-the-badge&logo=cursor&logoColor=white" alt="Cursor">
+  <img src="https://img.shields.io/badge/Claude%20Desktop-Supported-6366f1?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Desktop">
+  <img src="https://img.shields.io/badge/VS%20Code-Supported-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="VS Code">
+  <img src="https://img.shields.io/badge/GitHub%20Copilot-Supported-24292e?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Copilot">
+  <!-- Continue.dev -->
+  <img src="https://img.shields.io/badge/Continue.dev-Supported-1F8ACB?style=for-the-badge&logo=continue-dot-dev&logoColor=white" alt="Continue.dev">
+  <!-- windsurf -->
+  <img src="https://img.shields.io/badge/Windsurf-Supported-FF6F61?style=for-the-badge&logo=windsurf&logoColor=white" alt="Windsurf">
+  <!-- tabnine -->
+  <img src="https://img.shields.io/badge/TabNine-Supported-4A90E2?style=for-the-badge&logo=tabnine&logoColor=white" alt="TabNine">
+  <!-- zed -->
+  <img src="https://img.shields.io/badge/Zed-Supported-000000?style=for-the-badge&logo=zed&logoColor=white" alt="Zed">
+</p>
+
+---
+
 ## The Problem Every Developer Faces
 
 AI systems lose context between conversations. You spend hours explaining your codebase, architecture decisions, and project context... then close the chat and start over tomorrow.
@@ -104,11 +123,6 @@ npm install -g @context-sync/server
 
 **That's it.** Context Sync auto-configures and guides you through first-time setup with natural language instructions.
 
-**Supports:**
-- Claude Desktop (Mac/Windows/Linux)
-- Cursor IDE
-- VS Code + GitHub Copilot
-- Any MCP-compatible AI tool
 
 ### 🎯 See the Problem in Action
 
@@ -152,6 +166,8 @@ npm install -g @context-sync/server
 ```
 
 Context Sync automatically detects your platform and guides you through setup with personalized instructions.
+
+> 📖 **Need detailed documentation?** See the [Context Sync v1.0.0 Comprehensive Documentation](documentation/RELEASE_v1.0.0_COMPREHENSIVE_DOCUMENTATION.md) for complete setup guides, troubleshooting, and advanced configuration.
 
 ### 🔧 Platform-Specific Setup
 
@@ -216,11 +232,176 @@ Done! ✅
 
 </details>
 
+</details>
+
+<details>
+<summary>Claude Desktop</summary>
+
+<details>
+<summary><b>Quick Setup for Claude Desktop (30 seconds)</b></summary>
 <br>
+
+After installing Context Sync globally:
+
+1. **Restart Claude Desktop** completely
+2. **Start a new conversation**  
+3. **Test:** Ask Claude `"help me get started with context-sync"`
+
+Claude will automatically configure itself! ✨
+
+</details>
+
+<details>
+<summary><b>Manual Claude Desktop Setup</b></summary>
+<br>
+
+**Windows:**
+```bash
+# Edit config file
+notepad "%APPDATA%\Claude\claude_desktop_config.json"
+```
+
+**macOS:**
+```bash
+# Edit config file  
+open ~/Library/Application\ Support/Claude/claude_desktop_config.json
+```
+
+**Linux:**
+```bash
+# Edit config file
+nano ~/.config/Claude/claude_desktop_config.json
+```
+
+Add this configuration:
+```json
+{
+  "mcpServers": {
+    "context-sync": {
+      "command": "npx",
+      "args": ["-y", "@context-sync/server"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop and test: `"Help me get started with context-sync"`
+
+</details>
+
+</details>
+
+<details>
+<summary>Continue.dev (VS Code Extension)</summary>
+
+<details>
+<summary><b>Quick Setup for Continue.dev (30 seconds)</b></summary>
+<br>
+
+After installing Context Sync globally:
+
+1. **Install Continue.dev** extension in VS Code
+2. **Restart VS Code** completely
+3. **Open Continue chat** (Ctrl+Shift+M / Cmd+Shift+M)
+4. **Test:** Ask Continue `"help me get started with context-sync"`
+
+Context Sync should be available as an MCP tool! ✨
+
+</details>
+
+<details>
+<summary><b>Manual Continue.dev Setup</b></summary>
+<br>
+
+1. Open Continue config: `~/.continue/config.yaml`
+
+2. Add MCP server configuration:
+```yaml
+mcpServers:
+  context-sync:
+    command: npx
+    args: ["-y", "@context-sync/server"]
+```
+
+3. Restart VS Code
+
+4. Test: `"Help me get started with context-sync"`
+
+</details>
+
+</details>
+
+<details>
+<summary>Windsurf IDE</summary>
+
+<details>
+<summary><b>Quick Setup for Windsurf (30 seconds)</b></summary>
+<br>
+
+After installing Context Sync globally:
+
+1. **Open Windsurf Settings** → MCP
+2. **Add new server** with name `context-sync`
+3. **Command:** `npx`
+4. **Args:** `-y @context-sync/server`
+5. **Save and restart** Windsurf
+6. **Test:** Ask Windsurf `"help me get started with context-sync"`
+
+</details>
+
+</details>
+
+<details>
+<summary>Zed Editor</summary>
+
+<details>
+<summary><b>Quick Setup for Zed (30 seconds)</b></summary>
+<br>
+
+After installing Context Sync globally:
+
+1. **Open Zed Settings** (Cmd+, / Ctrl+,)
+2. **Navigate to MCP section**
+3. **Add server:**
+   - **Name:** `context-sync`
+   - **Command:** `npx`
+   - **Args:** `["-y", "@context-sync/server"]`
+4. **Restart Zed**
+5. **Test:** Ask Zed assistant `"help me get started with context-sync"`
+
+</details>
+
+</details>
+
+<details>
+<summary>TabNine</summary>
+
+<details>
+<summary><b>Quick Setup for TabNine (30 seconds)</b></summary>
+<br>
+
+After installing Context Sync globally:
+
+1. **Open TabNine settings**
+2. **Navigate to MCP Servers**
+3. **Add new server:**
+```json
+{
+  "context-sync": {
+    "command": "npx",
+    "args": ["-y", "@context-sync/server"]
+  }
+}
+```
+4. **Restart your editor**
+5. **Test:** Ask TabNine `"help me get started with context-sync"`
+
+</details>
+
+</details>
 
 ---
 
-<br>
 
 ## How It Works: Distributed AI Memory
 
@@ -285,6 +466,10 @@ Your Development Environment
 - ✅ Claude Desktop (Mac/Windows/Linux)
 - ✅ Cursor IDE
 - ✅ VS Code + GitHub Copilot
+- ✅ Continue.dev
+- ✅ Windsurf
+- ✅ Zed Editor
+- ✅ TabNine
 - ✅ Any MCP-compatible AI tool
 - 🔄 More platforms added regularly via community contributions
 
@@ -567,7 +752,7 @@ AI: "Analyzing cart code... found 2 potential improvements..."
 <table>
 <tr>
 <td align="center" width="33%">
-  <h3>✅ v0.6.1 - Current</h3>
+  <h3>✅ v0.6.1 - prev</h3>
   <sub>Released October 2025</sub>
   <br><br>
   ✓ VS Code & GitHub Copilot support<br>
@@ -577,11 +762,12 @@ AI: "Analyzing cart code... found 2 potential improvements..."
   ✓ Real-time cache invalidation
 </td>
 <td align="center" width="33%">
-  <h3>🔄 v0.7.0 - Next</h3>
-  <sub>6-8 weeks</sub>
+  <h3>🔄 v1.0.0 - Current</h3>
+  <sub>release November 2025</sub>
   <br><br>
-  • Claude Code CLI support<br>
+  • Windsurf, Tabnine, Zed, Continue intergration<br>
   • Enhanced VS Code integration<br>
+  • Enhanced cursor integration<br>
   • Better onboarding flow<br>
   • Improved documentation<br>
   • Additional performance optimizations

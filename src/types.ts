@@ -13,7 +13,7 @@ export interface ProjectContext {
 export interface Conversation {
   id: string;
   projectId: string;
-  tool: 'claude' | 'cursor' | 'copilot' | 'other';
+  tool: 'claude' | 'cursor' | 'copilot' | 'ollama' | 'openai' | 'anthropic' | 'continue' | 'codeium' | 'tabnine' | 'windsurf' | 'zed' | 'gemini' | 'codewisperer' | 'other';
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;

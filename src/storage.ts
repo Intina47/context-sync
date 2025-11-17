@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
+import * as crypto from 'crypto';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
@@ -13,6 +14,7 @@ import type {
 import {createTodoTable} from './todo-schema.js';
 import { PathNormalizer } from './path-normalizer.js';
 import { PerformanceMonitor } from './performance-monitor.js';
+import { MigrationPrompter } from './migration-prompter.js';
 
 export class Storage implements StorageInterface {
   private db: Database.Database;
@@ -38,6 +40,7 @@ export class Storage implements StorageInterface {
   }
 
   private initDatabase(): void {
+    
     // Create tables
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS projects (
@@ -116,6 +119,15 @@ export class Storage implements StorageInterface {
     // Normalize the path before storing if provided
     const normalizedPath = projectPath ? PathNormalizer.normalize(projectPath) : undefined;
     
+    // Check for existing project with same path to prevent duplicates
+    if (normalizedPath) {
+      const existing = this.findProjectByPath(normalizedPath);
+      if (existing) {
+        timer();
+        return existing;
+      }
+    }
+    
     const id = crypto.randomUUID();
     const now = Date.now();
 
@@ -161,7 +173,6 @@ export class Storage implements StorageInterface {
   setCurrentProject(projectId: string): void {
     // No-op - current project is now managed in ContextSyncServer
   }
-
 
 
   updateProject(id: string, updates: Partial<ProjectContext>): void {
@@ -341,6 +352,23 @@ export class Storage implements StorageInterface {
 
   getDb(): Database.Database {
     return this.db;
+  }
+
+  /**
+   * Check if user should be prompted for database migration
+   * This is called by the server to provide migration suggestions
+   */
+  async checkMigrationPrompt(currentVersion: string): Promise<{ shouldPrompt: boolean; message: string }> {
+    try {
+      const result = await MigrationPrompter.shouldPromptForMigration(currentVersion, this.db.name);
+      return {
+        shouldPrompt: result.shouldPrompt,
+        message: result.message
+      };
+    } catch (error) {
+      console.warn('Migration prompt check failed:', error);
+      return { shouldPrompt: false, message: '' };
+    }
   }
 
   close(): void {
