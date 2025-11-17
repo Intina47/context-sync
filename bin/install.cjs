@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
+const PlatformAutoConfigurator = require('./auto-configurator.cjs');
 
 // Simple colored output without dependencies (for initial install)
 const colors = {
@@ -76,88 +77,98 @@ if (!fs.existsSync(packagePath)) {
 
 log(colors.green, `✅ Package found: ${packagePath}\n`);
 
-// Track successful configurations
-let configurationsCompleted = [];
-
 // ============================================================================
-// CLAUDE DESKTOP CONFIGURATION
+// UNIVERSAL AI PLATFORM AUTO-CONFIGURATION
 // ============================================================================
-log(colors.cyan + colors.bold, '🤖 Configuring Claude Desktop...\n');
+log(colors.cyan + colors.bold, '🌍 Universal AI Platform Auto-Configuration\n');
+log(colors.gray, 'Context Sync will now automatically detect and configure all installed AI platforms...\n');
 
-const platform = os.platform();
-let claudeConfigPath;
+// Use our new auto-configuration system
+async function runAutoConfiguration() {
+  const autoConfigurator = new PlatformAutoConfigurator(packagePath, false);
+  
+  try {
+    const results = await autoConfigurator.configureAllPlatforms();
+    // Generate and display report
+    const report = autoConfigurator.generateReport();
+    console.log(report);
 
-if (platform === 'darwin') {
-  claudeConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
-} else if (platform === 'win32') {
-  claudeConfigPath = path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json');
-} else {
-  claudeConfigPath = path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+    // Show platform-specific next steps
+    if (results.configured.length > 0) {
+      log(colors.cyan + colors.bold, '🚀 Platform-Specific Instructions:\n');
+
+      results.configured.forEach(platformId => {
+        switch (platformId) {
+          case 'claude':
+            log(colors.cyan, '📱 Claude Desktop:');
+            log(colors.reset, '   1. Restart Claude Desktop completely');
+            log(colors.reset, '   2. Open a new chat');
+            log(colors.reset, '   3. Type: ' + colors.gray + '"help context-sync"' + colors.reset);
+            log(colors.reset, '   4. Follow the guided setup!\n');
+            break;
+
+          case 'cursor':
+            log(colors.cyan, '🖱️  Cursor IDE:');
+            log(colors.reset, '   1. Restart Cursor IDE');
+            log(colors.reset, '   2. Open Copilot Chat (Ctrl+Shift+I / Cmd+Shift+I)');
+            log(colors.reset, '   3. Look for context-sync in Tools list');
+            log(colors.reset, '   4. Start syncing context!\n');
+            break;
+
+          case 'copilot':
+            log(colors.cyan, '💻 VS Code (GitHub Copilot):');
+            log(colors.reset, '   1. Restart VS Code completely');
+            log(colors.reset, '   2. Open Copilot Chat (Ctrl+Shift+I / Cmd+Shift+I)');
+            log(colors.reset, '   3. Switch to Agent mode');
+            log(colors.reset, '   4. Look for context-sync in Tools list');
+            log(colors.reset, '   5. Start syncing context!\n');
+            break;
+
+          case 'continue':
+            log(colors.cyan, '🔄 Continue.dev:');
+            log(colors.reset, '   1. Restart VS Code');
+            log(colors.reset, '   2. Open Continue chat panel');
+            log(colors.reset, '   3. Context Sync should be available as MCP tool');
+            log(colors.reset, '   4. Try: "help context-sync"\n');
+            break;
+
+          default:
+            log(colors.cyan, `� ${platformId}:`);
+            log(colors.reset, '   1. Restart the application');
+            log(colors.reset, '   2. Look for context-sync in MCP/Tools menu');
+            log(colors.reset, '   3. Try: "help context-sync"\n');
+            break;
+        }
+      });
+
+      log(colors.green + colors.bold, '🎉 Context Sync is now your universal AI memory layer!\n');
+      log(colors.reset, '💡 All configured platforms share the same persistent context and memory.');
+      log(colors.reset, '� Switch between platforms seamlessly with full context preservation.\n');
+    } else {
+      log(colors.yellow, '⚠️  No AI platforms were auto-configured.');
+      log(colors.reset, '\nTo get started:');
+      log(colors.reset, '1. Install an AI platform that supports MCP (Claude Desktop, Cursor, VS Code + Copilot)');
+      log(colors.reset, '2. Re-run: npm install -g @context-sync/server');
+      log(colors.reset, '3. Auto-configuration will detect and configure it automatically!\n');
+      
+      printManualInstructions(packagePath);
+    }
+
+    log(colors.reset, '📚 Documentation: ' + colors.cyan + 'https://github.com/Intina47/context-sync');
+    log(colors.reset, '💬 Issues: ' + colors.cyan + 'https://github.com/Intina47/context-sync/issues');
+    log(colors.reset, '\n🎉 Happy coding with universal AI context!\n');
+
+  } catch (error) {
+    log(colors.red, '❌ Auto-configuration failed:');
+    log(colors.gray, error.message);
+    log(colors.yellow, '\nFalling back to manual configuration...\n');
+    printManualInstructions(packagePath);
+    process.exit(1);
+  }
 }
 
-log(colors.gray, `📁 Config path: ${claudeConfigPath}`);
-
-// Setup Claude Desktop
-const claudeResult = setupClaudeDesktop(claudeConfigPath, packagePath);
-if (claudeResult.success) {
-  configurationsCompleted.push('Claude Desktop');
-  log(colors.green, '✅ Claude Desktop configured successfully!\n');
-} else {
-  log(colors.yellow, '⚠️  Claude Desktop configuration skipped');
-  log(colors.gray, claudeResult.message + '\n');
-}
-
-// ============================================================================
-// VS CODE CONFIGURATION (GitHub Copilot)
-// ============================================================================
-log(colors.cyan + colors.bold, '💻 Configuring VS Code (GitHub Copilot)...\n');
-
-const vscodeMcpPath = getVSCodeMcpPath();
-log(colors.gray, `📁 MCP config path: ${vscodeMcpPath}`);
-
-const vscodeResult = setupVSCode(vscodeMcpPath, packagePath);
-if (vscodeResult.success) {
-  configurationsCompleted.push('VS Code');
-  log(colors.green, '✅ VS Code configured successfully!\n');
-} else {
-  log(colors.yellow, '⚠️  VS Code configuration skipped');
-  log(colors.gray, vscodeResult.message + '\n');
-}
-
-// ============================================================================
-// FINAL SUCCESS MESSAGE
-// ============================================================================
-if (configurationsCompleted.length === 0) {
-  log(colors.red, '❌ No platforms were configured automatically.');
-  log(colors.yellow, '\nPlease configure manually:\n');
-  printManualInstructions(packagePath);
-  process.exit(1);
-}
-
-log(colors.green + colors.bold, `\n✅ Context Sync installed successfully!\n`);
-log(colors.reset, `Configured platforms: ${colors.cyan}${configurationsCompleted.join(', ')}${colors.reset}\n`);
-log(colors.reset, 'Next steps:\n');
-
-if (configurationsCompleted.includes('Claude Desktop')) {
-  log(colors.cyan, '📱 Claude Desktop:');
-  log(colors.reset, '   1. Restart Claude Desktop completely');
-  log(colors.reset, '   2. Open a new chat');
-  log(colors.reset, '   3. Type: ' + colors.gray + '"help context-sync"' + colors.reset);
-  log(colors.reset, '   4. Follow the guided setup!\n');
-}
-
-if (configurationsCompleted.includes('VS Code')) {
-  log(colors.cyan, '💻 VS Code (GitHub Copilot):');
-  log(colors.reset, '   1. Restart VS Code completely');
-  log(colors.reset, '   2. Open Copilot Chat (Ctrl+Shift+I / Cmd+Shift+I)');
-  log(colors.reset, '   3. Switch to Agent mode');
-  log(colors.reset, '   4. Look for context-sync in Tools list');
-  log(colors.reset, '   5. Start syncing context!\n');
-}
-
-log(colors.reset, '📚 Documentation: ' + colors.cyan + 'https://github.com/Intina47/context-sync');
-log(colors.reset, '💬 Issues: ' + colors.cyan + 'https://github.com/Intina47/context-sync/issues');
-log(colors.reset, '\n🎉 Happy coding!\n');
+// Run the auto-configuration
+runAutoConfiguration();
 
 // ============================================================================
 // HELPER FUNCTIONS

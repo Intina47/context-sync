@@ -1,7 +1,8 @@
 {
   "name": "@context-sync/server",
-  "version": "0.6.3",
+  "version": "1.0.0",
   "description": "MCP server for AI context sync with persistent memory, workspace file access, and intelligent code operations",
+  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -10,11 +11,11 @@
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
-    "postinstall": "node bin/install.js || true",
+    "postinstall": "node bin/install.cjs || true",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "watch": "tsx watch src/index.ts",
-    "test": "node -e \"console.log('✅ Context Sync v0.6.1 - All systems ready!')\"",
+    "test": "node -e \"console.log('✅ Context Sync v1.0.0 - All systems ready!')\"",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
@@ -26,7 +27,6 @@
     "context",
     "memory",
     "claude",
-    "anthropic",
     "cursor",
     "github-copilot",
     "workspace",
@@ -36,7 +36,13 @@
     "git-integration",
     "developer-tools",
     "productivity",
-    "typescript"
+    "typescript",
+    "continue",
+    "continue.dev",
+    "zed",
+    "windsurf",
+    "tabnine",
+    "copilot"
   ],
   "author": {
     "name": "mamba",
@@ -59,11 +65,11 @@
     "CHANGELOG.md"
   ],
   "dependencies": {
-    "-": "^0.0.1",
     "@modelcontextprotocol/sdk": "^0.5.0",
     "better-sqlite3": "^11.0.0",
     "chokidar": "^4.0.3",
-    "commander": "^12.0.0"
+    "commander": "^12.0.0",
+    "js-yaml": "^4.1.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.9",
