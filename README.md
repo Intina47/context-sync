@@ -1,5 +1,5 @@
 # Context Sync
-
+[![MCP Badge](https://lobehub.com/badge/mcp/intina47-context-sync)](https://lobehub.com/mcp/intina47-context-sync)
 <div align="center">
 
 <h1>🧠 The Memory Layer for AI Development</h1>
