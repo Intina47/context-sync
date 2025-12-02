@@ -1,0 +1,168 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "context-sync",
+  "version": "1.0.0",
+  "description": "Universal context synchronization across AI platforms with persistent memory",
+  "author": "Context Sync Community",
+  "license": "MIT",
+  "homepage": "https://github.com/Intina47/context-sync",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Intina47/context-sync.git"
+  },
+  "docker": {
+    "image": "contextsync/server",
+    "tag": "latest"
+  },
+  "mcp": {
+    "mcpVersion": "0.5.0",
+    "transport": "stdio",
+    "capabilities": {
+      "tools": [
+        {
+          "name": "search_files",
+          "description": "Search for files in the workspace with advanced filtering"
+        },
+        {
+          "name": "read_file",
+          "description": "Read and analyze file contents"
+        },
+        {
+          "name": "write_file",
+          "description": "Write content to files with conflict detection"
+        },
+        {
+          "name": "create_todo",
+          "description": "Create and manage TODO items"
+        },
+        {
+          "name": "list_todos",
+          "description": "List and filter TODO items"
+        },
+        {
+          "name": "update_todo",
+          "description": "Update TODO item status and details"
+        },
+        {
+          "name": "delete_todo",
+          "description": "Delete TODO items"
+        },
+        {
+          "name": "get_project_context",
+          "description": "Retrieve comprehensive project context and history"
+        },
+        {
+          "name": "save_conversation",
+          "description": "Save conversation context for future reference"
+        },
+        {
+          "name": "save_decision",
+          "description": "Record architectural and technical decisions"
+        },
+        {
+          "name": "get_git_status",
+          "description": "Get Git repository status and information"
+        },
+        {
+          "name": "detect_project_type",
+          "description": "Automatically detect project type and technology stack"
+        }
+      ],
+      "resources": [
+        {
+          "name": "project-context",
+          "description": "Current project context and metadata"
+        },
+        {
+          "name": "conversation-history",
+          "description": "Historical conversation data"
+        },
+        {
+          "name": "decisions",
+          "description": "Recorded technical and architectural decisions"
+        },
+        {
+          "name": "todos",
+          "description": "Project TODO items and tasks"
+        }
+      ],
+      "prompts": [
+        {
+          "name": "analyze-project",
+          "description": "Analyze project structure and provide insights"
+        },
+        {
+          "name": "context-summary",
+          "description": "Generate a summary of project context"
+        }
+      ]
+    }
+  },
+  "configuration": {
+    "properties": {
+      "workspaceRoot": {
+        "type": "string",
+        "description": "Root directory of the workspace to monitor",
+        "default": "/workspace"
+      },
+      "dataDir": {
+        "type": "string", 
+        "description": "Directory for storing persistent data",
+        "default": "/data"
+      },
+      "healthPort": {
+        "type": "number",
+        "description": "Port for health check endpoint (MCP uses stdio)",
+        "default": 3000
+      },
+      "enableFileWatching": {
+        "type": "boolean",
+        "description": "Enable automatic file watching and context updates",
+        "default": true
+      },
+      "maxFileSize": {
+        "type": "number",
+        "description": "Maximum file size to process in bytes",
+        "default": 1048576
+      },
+      "excludePatterns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "File patterns to exclude from processing",
+        "default": ["node_modules", ".git", "dist", "build", ".DS_Store"]
+      }
+    },
+    "required": ["workspaceRoot"]
+  },
+  "volumes": [
+    {
+      "host": "./workspace",
+      "container": "/workspace",
+      "description": "Mount your project workspace here"
+    },
+    {
+      "host": "./data",
+      "container": "/data", 
+      "description": "Persistent data storage for context and todos"
+    }
+  ],
+  "environment": {
+    "WORKSPACE_ROOT": "/workspace",
+    "DATA_DIR": "/data",
+    "HEALTH_PORT": "3000"
+  },
+  "tags": [
+    "context",
+    "memory",
+    "workspace",
+    "ai-assistant",
+    "productivity",
+    "mcp",
+    "stdio",
+    "typescript",
+    "git-integration",
+    "todo-management"
+  ]
+}

@@ -1,0 +1,47 @@
+# Docker Compose for Context Sync MCP Server
+# Example configuration for local development and testing
+
+version: '3.8'
+
+services:
+  context-sync:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: context-sync-mcp
+    volumes:
+      # Mount your project workspace
+      - ./workspace:/workspace
+      # Persistent data storage
+      - ./data:/data
+    environment:
+      # Required environment variables
+      - WORKSPACE_ROOT=/workspace
+      - DATA_DIR=/data
+      # Optional: Enable health check endpoint
+      - CONTEXT_SYNC_HEALTH_PORT=3000
+      # Optional: Configure file processing
+      - CONTEXT_SYNC_MAX_FILE_SIZE=1048576
+      - CONTEXT_SYNC_ENABLE_WATCHING=true
+    ports:
+      # Health check endpoint (optional)
+      - "3000:3000"
+    # Use stdio for MCP communication
+    stdin_open: true
+    tty: true
+    # Restart policy
+    restart: unless-stopped
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# Create required directories
+volumes:
+  workspace:
+    driver: local
+  data:
+    driver: local

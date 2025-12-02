@@ -61,3 +61,11 @@ vscode-extension/*.vsix
 # other
 hf_space/
 scripts/
+
+npm
+11.6.4
+acli.exe
+tsc
+ERROR
+
+tmp_rovodev.md
