@@ -1,11 +1,9 @@
-version: '3.8'
-
 services:
   context-sync-mcp:
     build:
       context: ..
       dockerfile: docker/Dockerfile.prebuilt
-    image: context-sync/mcp-server:latest
+    image: intina47/context-sync-mcp:latest
     container_name: context-sync-mcp
     restart: unless-stopped
     

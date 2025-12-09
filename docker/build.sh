@@ -8,7 +8,8 @@ set -e
 # Default values
 TAG="${1:-latest}"
 DOCKERFILE="${2:-docker/Dockerfile.prebuilt}"
-IMAGE_NAME="context-sync/mcp-server"
+IMAGE_NAME="intina47/context-sync-mcp"
+VERSION="1.0.0"  # TODO: Extract from package.json
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -45,7 +46,7 @@ echo -e "${BLUE}Building Docker image...${NC}"
 docker build \
   -f "${DOCKERFILE}" \
   -t "${IMAGE_NAME}:${TAG}" \
-  -t "${IMAGE_NAME}:1.0.0" \
+  -t "${IMAGE_NAME}:${VERSION}" \
   .
 
 echo ""

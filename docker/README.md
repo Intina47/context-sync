@@ -28,7 +28,7 @@ docker-compose down
 docker run -d \
   --name context-sync-mcp \
   -v context-sync-data:/data \
-  context-sync/mcp-server:latest
+  intina47/context-sync-mcp:latest
 
 # Check logs
 docker logs -f context-sync-mcp
@@ -40,7 +40,7 @@ Once published to the Docker MCP Registry:
 
 ```bash
 # Pull and run from Docker MCP Toolkit
-docker run --rm -p 3000:3000 context-sync-mcp
+docker run --rm -p 3000:3000 intina47/context-sync-mcp:latest
 ```
 
 Or select **"Context Sync"** directly from the Docker MCP Toolkit UI.
@@ -73,7 +73,7 @@ For publishing to Docker Hub (requires buildx):
 ```bash
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t context-sync/mcp-server:latest \
+  -t intina47/context-sync-mcp:latest \
   -f docker/Dockerfile \
   --push \
   .
@@ -103,7 +103,7 @@ docker run -d \
   -v context-sync-data:/data \
   -v /path/to/your/project:/workspace:ro \
   -e CONTEXT_SYNC_DB_PATH=/data/context-sync.db \
-  context-sync/mcp-server:latest
+  intina47/context-sync-mcp:latest
 ```
 
 ## 🔌 Integration with AI Tools
@@ -122,7 +122,7 @@ Add to your `claude_desktop_config.json`:
         "--rm",
         "-i",
         "-v", "context-sync-data:/data",
-        "context-sync/mcp-server:latest"
+        "intina47/context-sync-mcp:latest"
       ]
     }
   }
@@ -143,7 +143,7 @@ Add to Cursor settings:
         "--rm",
         "-i",
         "-v", "context-sync-data:/data",
-        "context-sync/mcp-server:latest"
+        "intina47/context-sync-mcp:latest"
       ]
     }
   }
@@ -175,7 +175,7 @@ docker logs context-sync-mcp
 # Interactive test (stdio transport)
 docker run --rm -it \
   -v context-sync-data:/data \
-  context-sync/mcp-server:latest
+  intina47/context-sync-mcp:latest
 ```
 
 The server should start and display:
@@ -268,7 +268,7 @@ docker run --rm \
 
 ```bash
 # Pull latest image (when published)
-docker pull context-sync/mcp-server:latest
+docker pull intina47/context-sync-mcp:latest
 
 # Recreate container
 docker-compose down

@@ -39,7 +39,7 @@
   },
   "runtime": {
     "type": "docker",
-    "image": "context-sync/mcp-server:1.0.0",
+    "image": "intina47/context-sync-mcp:1.0.0",
     "platform": ["linux/amd64", "linux/arm64"]
   },
   "configuration": {

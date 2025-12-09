@@ -11,7 +11,7 @@ Context Sync provides multiple Dockerfile options depending on your build enviro
 **Use when**: Building in a stable environment with reliable package managers.
 
 ```bash
-docker build -f docker/Dockerfile -t context-sync/mcp-server:latest .
+docker build -f docker/Dockerfile -t intina47/context-sync-mcp:latest .
 ```
 
 This Dockerfile:
@@ -30,7 +30,7 @@ npm install
 npm run build
 
 # Then build Docker image
-docker build -f docker/Dockerfile.prebuilt -t context-sync/mcp-server:latest .
+docker build -f docker/Dockerfile.prebuilt -t intina47/context-sync-mcp:latest .
 ```
 
 This Dockerfile:
@@ -71,10 +71,10 @@ npm install
 npm run build
 
 # 2. Build Docker image with prebuilt dist
-docker build -f docker/Dockerfile.prebuilt -t context-sync/mcp-server:dev .
+docker build -f docker/Dockerfile.prebuilt -t intina47/context-sync-mcp:dev .
 
 # 3. Test
-docker run --rm -v test-data:/data context-sync/mcp-server:dev
+docker run --rm -v test-data:/data intina47/context-sync-mcp:dev
 ```
 
 ### For Production
@@ -111,7 +111,7 @@ docker buildx create --use
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -f docker/Dockerfile.prebuilt \
-  -t contextsynchq/context-sync-mcp:latest \
+  -t intina47/context-sync-mcp:latest \
   --push \
   .
 ```
@@ -129,7 +129,7 @@ npm install
 npm run build
 
 # Use prebuilt Dockerfile
-docker build -f docker/Dockerfile.prebuilt -t context-sync/mcp-server .
+docker build -f docker/Dockerfile.prebuilt -t intina47/context-sync-mcp .
 ```
 
 ### "Cannot find module" at Runtime

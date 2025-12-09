@@ -30,7 +30,7 @@ Once published to the Docker MCP Registry:
 docker run -d \
   --name context-sync \
   -v context-sync-data:/data \
-  context-sync/mcp-server:latest
+  intina47/context-sync-mcp:latest
 ```
 
 #### Option 3: Docker Compose
@@ -123,7 +123,7 @@ docker run -d \
   -e CONTEXT_SYNC_DB_PATH=/data/context-sync.db \
   -e NODE_ENV=production \
   -v context-sync-data:/data \
-  context-sync/mcp-server:latest
+  intina47/context-sync-mcp:latest
 ```
 
 Available variables:
@@ -159,7 +159,7 @@ Full example in `docker/docker-compose.yml`:
 ```yaml
 services:
   context-sync-mcp:
-    image: context-sync/mcp-server:latest
+    image: intina47/context-sync-mcp:latest
     environment:
       - NODE_ENV=production
       - CONTEXT_SYNC_DB_PATH=/data/context-sync.db
@@ -186,7 +186,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
         "--rm",
         "-i",
         "-v", "context-sync-data:/data",
-        "context-sync/mcp-server:latest"
+        "intina47/context-sync-mcp:latest"
       ]
     }
   }
@@ -215,7 +215,7 @@ Add to Cursor MCP settings:
         "--rm",
         "-i",
         "-v", "context-sync-data:/data",
-        "context-sync/mcp-server:latest"
+        "intina47/context-sync-mcp:latest"
       ]
     }
   }
@@ -236,7 +236,7 @@ Configure in VS Code settings for MCP integration:
         "--rm",
         "-i",
         "-v", "context-sync-data:/data",
-        "context-sync/mcp-server:latest"
+        "intina47/context-sync-mcp:latest"
       ]
     }
   }
@@ -257,7 +257,7 @@ mcpServers:
       - -i
       - -v
       - context-sync-data:/data
-      - context-sync/mcp-server:latest
+      - intina47/context-sync-mcp:latest
 ```
 
 ## 🧪 Testing & Validation
@@ -269,7 +269,7 @@ mcpServers:
 ./docker/build.sh
 
 # Verify build
-docker images context-sync/mcp-server
+docker images intina47/context-sync-mcp
 ```
 
 ### Runtime Test
@@ -278,7 +278,7 @@ docker images context-sync/mcp-server
 # Start container
 docker run -d --name test-context-sync \
   -v test-data:/data \
-  context-sync/mcp-server:latest
+  intina47/context-sync-mcp:latest
 
 # Check health
 docker ps | grep test-context-sync
@@ -298,7 +298,7 @@ docker volume rm test-data
 # Test stdio communication
 docker run --rm -it \
   -v context-sync-data:/data \
-  context-sync/mcp-server:latest
+  intina47/context-sync-mcp:latest
 ```
 
 Expected output:
@@ -376,7 +376,7 @@ Typical resource consumption:
 
 4. **Regular updates**:
    ```bash
-   docker pull context-sync/mcp-server:latest
+   docker pull intina47/context-sync-mcp:latest
    ```
 
 ## 🐛 Troubleshooting
@@ -406,7 +406,7 @@ docker logs context-sync-mcp
 docker ps | grep context-sync
 
 # Test stdio manually
-docker run --rm -it context-sync/mcp-server:latest
+docker run --rm -it intina47/context-sync-mcp:latest
 
 # Check AI tool config syntax (JSON must be valid)
 ```
@@ -449,7 +449,7 @@ docker volume rm context-sync-data
 
 ```bash
 # Pull latest image
-docker pull context-sync/mcp-server:latest
+docker pull intina47/context-sync-mcp:latest
 
 # Stop old container
 docker stop context-sync-mcp
@@ -460,7 +460,7 @@ docker rm context-sync-mcp
 # Start new container
 docker run -d --name context-sync-mcp \
   -v context-sync-data:/data \
-  context-sync/mcp-server:latest
+  intina47/context-sync-mcp:latest
 ```
 
 ### Backups
@@ -501,8 +501,8 @@ docker system prune -a --volumes
    # Multi-platform build
    docker buildx build \
      --platform linux/amd64,linux/arm64 \
-     -t contextsynchq/context-sync-mcp:1.0.0 \
-     -t contextsynchq/context-sync-mcp:latest \
+     -t intina47/context-sync-mcp:1.0.0 \
+     -t intina47/context-sync-mcp:latest \
      --push \
      -f docker/Dockerfile .
    ```
@@ -547,7 +547,7 @@ docker system prune -a --volumes
 Create your own Dockerfile based on Context Sync:
 
 ```dockerfile
-FROM context-sync/mcp-server:latest
+FROM intina47/context-sync-mcp:latest
 
 # Add your customizations
 RUN apk add --no-cache your-package
@@ -581,8 +581,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            context-sync/mcp-server:latest
-            context-sync/mcp-server:${{ github.ref_name }}
+            intina47/context-sync-mcp:latest
+            intina47/context-sync-mcp:${{ github.ref_name }}
 ```
 
 ### Kubernetes Deployment
@@ -606,7 +606,7 @@ spec:
     spec:
       containers:
       - name: context-sync
-        image: context-sync/mcp-server:latest
+        image: intina47/context-sync-mcp:latest
         env:
         - name: NODE_ENV
           value: "production"
@@ -635,7 +635,7 @@ spec:
 
 - **GitHub Issues**: [Report bugs](https://github.com/Intina47/context-sync/issues)
 - **Discussions**: [Ask questions](https://github.com/Intina47/context-sync/discussions)
-- **Docker Hub**: [View images](https://hub.docker.com/r/contextsynchq/context-sync-mcp)
+- **Docker Hub**: [View images](https://hub.docker.com/r/intina47/context-sync-mcp)
 
 ## 📄 License
 

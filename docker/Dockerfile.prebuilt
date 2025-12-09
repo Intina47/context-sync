@@ -15,11 +15,9 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install only production dependencies
-# Retry logic to handle npm issues in Docker
-RUN npm install --production --force 2>&1 || \
-    (sleep 2 && npm install --production --force) || \
-    (sleep 5 && npm install --production) && \
-    test -d node_modules/@modelcontextprotocol || (echo "Dependencies not installed!" && exit 1)
+# Use ci for more reliable installs when package-lock.json exists
+RUN npm ci --only=production || npm install --production && \
+    test -d node_modules/@modelcontextprotocol || (echo "Dependencies not installed correctly!" && exit 1)
 
 # Copy pre-built distribution
 COPY dist/ ./dist/

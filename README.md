@@ -134,7 +134,7 @@ cd docker && docker-compose up -d
 # Or using Docker CLI
 docker run -d --name context-sync-mcp \
   -v context-sync-data:/data \
-  context-sync/mcp-server:latest
+  intina47/context-sync-mcp:latest
 ```
 
 **Zero environment setup needed!** Perfect for containerized workflows and Docker MCP Toolkit integration.
