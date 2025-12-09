@@ -2,14 +2,14 @@
 # Optimized for Docker MCP Toolkit integration
 
 # Stage 1: Builder
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
-# Install build dependencies
-RUN apk add --no-cache \
+# Install build dependencies for native modules (better-sqlite3)
+RUN apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
-    git
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -18,7 +18,10 @@ COPY package*.json ./
 COPY tsconfig.json ./
 
 # Install dependencies (including devDependencies for building)
-RUN npm ci
+# Use --legacy-peer-deps to avoid conflicts
+RUN npm install --legacy-peer-deps && \
+    ls -la node_modules/.bin/ && \
+    test -f node_modules/.bin/tsc || (echo "tsc not found!" && exit 1)
 
 # Copy source code
 COPY src/ ./src/
@@ -28,13 +31,12 @@ COPY bin/ ./bin/
 RUN npm run build
 
 # Stage 2: Production
-FROM node:20-alpine
+FROM node:20-slim
 
-# Install runtime dependencies
-RUN apk add --no-cache \
+# Install runtime dependencies for native modules
+RUN apt-get update && apt-get install -y \
     python3 \
-    make \
-    g++
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -42,7 +44,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install only production dependencies
-RUN npm ci --only=production
+RUN npm install --production
 
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist

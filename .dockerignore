@@ -3,10 +3,10 @@ node_modules/
 npm-debug.log
 yarn-debug.log
 yarn-error.log
-package-lock.json
+# Note: package-lock.json is needed for npm ci
 
 # Build outputs
-dist/
+# Note: dist/ needed for prebuilt Dockerfile
 *.tsbuildinfo
 
 # Development files
