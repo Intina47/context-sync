@@ -15,8 +15,10 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install only production dependencies
-# Use ci for more reliable installs when package-lock.json exists
-RUN npm ci --only=production || npm install --production && \
+# Use npm ci for reproducible builds (requires package-lock.json)
+# Falls back to npm install if ci fails (e.g., missing lock file or corrupted cache)
+RUN npm ci --only=production || \
+    (echo "Warning: npm ci failed, falling back to npm install" && npm install --production) && \
     test -d node_modules/@modelcontextprotocol || (echo "Dependencies not installed correctly!" && exit 1)
 
 # Copy pre-built distribution

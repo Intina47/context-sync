@@ -257,10 +257,15 @@ docker run --rm \
 ## 📦 Files in This Directory
 
 - **Dockerfile** - Multi-stage Docker build configuration
-- **mcp.json** - Docker MCP Registry manifest
+- **Dockerfile.prebuilt** - Optimized build using prebuilt dist/
+- **mcp.json** - Docker MCP Registry manifest (version should match package.json)
 - **docker-compose.yml** - Compose configuration for local testing
-- **build.sh** - Build script with sensible defaults
+- **build.sh** - Build script with automatic version extraction from package.json
+- **BUILDING.md** - Build troubleshooting and best practices
+- **HANDOFF.md** - Implementation summary and next steps
 - **README.md** - This file
+
+**Note**: When publishing new versions, update the version in `package.json` and the `build.sh` script will automatically use it. The `mcp.json` file should be updated manually to match.
 
 ## 🔄 Updating
 

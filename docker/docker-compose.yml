@@ -18,7 +18,8 @@ services:
       - context-sync-data:/data
       # Optional: Mount your workspace for file operations
       # Uncomment and adjust the path to your workspace
-      # - /path/to/your/workspace:/workspace:ro
+      # - ${PWD}:/workspace:ro              # Current directory
+      # - ~/projects/my-app:/workspace:ro    # Specific project
     
     # Stdin/Stdout for MCP communication
     stdin_open: true

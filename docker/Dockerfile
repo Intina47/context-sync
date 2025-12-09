@@ -18,7 +18,8 @@ COPY package*.json ./
 COPY tsconfig.json ./
 
 # Install dependencies (including devDependencies for building)
-# Use --legacy-peer-deps to avoid conflicts
+# Use --legacy-peer-deps to resolve dependency conflicts in older packages
+# This allows installation to proceed even if peer dependencies don't match exactly
 RUN npm install --legacy-peer-deps && \
     ls -la node_modules/.bin/ && \
     test -f node_modules/.bin/tsc || (echo "tsc not found!" && exit 1)

@@ -3,13 +3,14 @@
 # Build script for Context Sync MCP Server Docker image
 # Usage: ./build.sh [tag] [dockerfile]
 
-set -e
+set -euo pipefail
 
 # Default values
 TAG="${1:-latest}"
 DOCKERFILE="${2:-docker/Dockerfile.prebuilt}"
 IMAGE_NAME="intina47/context-sync-mcp"
-VERSION="1.0.0"  # TODO: Extract from package.json
+# Extract version from package.json if available, otherwise use default
+VERSION=$(node -p "require('../package.json').version" 2>/dev/null || echo "1.0.0")
 
 # Colors for output
 GREEN='\033[0;32m'
