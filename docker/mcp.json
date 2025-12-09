@@ -1,0 +1,101 @@
+{
+  "$schema": "https://github.com/docker/mcp-registry/blob/main/schema/mcp.schema.json",
+  "name": "context-sync",
+  "version": "1.0.0",
+  "description": "MCP server for AI context sync with persistent memory, workspace file access, and intelligent code operations",
+  "author": {
+    "name": "mamba",
+    "url": "https://github.com/Intina47"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Intina47/context-sync"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Intina47/context-sync#readme",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "ai",
+    "ai-assistant",
+    "context",
+    "memory",
+    "claude",
+    "cursor",
+    "github-copilot",
+    "workspace",
+    "file-access",
+    "developer-tools",
+    "docker"
+  ],
+  "transport": {
+    "type": "stdio"
+  },
+  "capabilities": {
+    "tools": true,
+    "prompts": true,
+    "resources": false
+  },
+  "runtime": {
+    "type": "docker",
+    "image": "context-sync/mcp-server:1.0.0",
+    "platform": ["linux/amd64", "linux/arm64"]
+  },
+  "configuration": {
+    "environment": {
+      "CONTEXT_SYNC_DB_PATH": {
+        "description": "Path to the SQLite database file",
+        "type": "string",
+        "default": "/data/context-sync.db",
+        "required": false
+      },
+      "NODE_ENV": {
+        "description": "Node environment (production/development)",
+        "type": "string",
+        "default": "production",
+        "required": false
+      }
+    },
+    "volumes": {
+      "/data": {
+        "description": "Persistent storage for Context Sync database",
+        "type": "bind",
+        "required": true
+      },
+      "/workspace": {
+        "description": "Workspace directory for file operations",
+        "type": "bind",
+        "required": false
+      }
+    }
+  },
+  "features": [
+    "Persistent AI memory across sessions",
+    "Project context tracking",
+    "File read/write operations",
+    "Git integration (status, diff, branches)",
+    "Code analysis (dependencies, call graphs, types)",
+    "TODO management",
+    "Cross-platform sync",
+    "40+ MCP tools"
+  ],
+  "platforms": [
+    "claude-desktop",
+    "cursor",
+    "vscode",
+    "continue.dev",
+    "windsurf",
+    "zed",
+    "tabnine"
+  ],
+  "documentation": {
+    "quickstart": "https://github.com/Intina47/context-sync#quick-start",
+    "api": "https://github.com/Intina47/context-sync/blob/main/documentation/RELEASE_v1.0.0_COMPREHENSIVE_DOCUMENTATION.md",
+    "troubleshooting": "https://github.com/Intina47/context-sync/blob/main/TROUBLESHOOTING.md"
+  },
+  "support": {
+    "issues": "https://github.com/Intina47/context-sync/issues",
+    "discussions": "https://github.com/Intina47/context-sync/discussions"
+  }
+}

@@ -113,6 +113,8 @@ Context Sync is built by developers who were tired of:
 
 ## Quick Start
 
+### Option 1: NPM Install (Recommended)
+
 ```bash
 # Install globally
 npm install -g @context-sync/server
@@ -122,6 +124,22 @@ npm install -g @context-sync/server
 ```
 
 **That's it.** Context Sync auto-configures and guides you through first-time setup with natural language instructions.
+
+### Option 2: Docker (One Command Setup)
+
+```bash
+# Using Docker Compose
+cd docker && docker-compose up -d
+
+# Or using Docker CLI
+docker run -d --name context-sync-mcp \
+  -v context-sync-data:/data \
+  context-sync/mcp-server:latest
+```
+
+**Zero environment setup needed!** Perfect for containerized workflows and Docker MCP Toolkit integration.
+
+> 🐳 **Docker Integration**: See [DOCKER_MCP_INTEGRATION.md](DOCKER_MCP_INTEGRATION.md) for complete Docker setup guide and Docker MCP Toolkit usage.
 
 
 ### 🎯 See the Problem in Action
