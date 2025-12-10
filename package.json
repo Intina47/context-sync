@@ -1,30 +1,35 @@
 {
   "name": "@context-sync/server",
-  "version": "1.0.0",
-  "description": "MCP server for AI context sync with persistent memory, workspace file access, and intelligent code operations",
+  "version": "1.0.3",
+  "description": "Universal Context layer McP server",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "context-sync": "./dist/index.js"
+    "context-sync": "./dist/index.js",
+    "context-sync-setup": "./bin/setup.cjs"
   },
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
     "postinstall": "node bin/install.cjs || true",
+    "preinstall": "node -e \"console.log('\\n🧠 Installing Context Sync MCP Server...\\n')\"",
+    "setup": "node bin/setup.cjs",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "watch": "tsx watch src/index.ts",
-    "test": "node -e \"console.log('✅ Context Sync v1.0.0 - All systems ready!')\"",
+    "test": "node -e \"console.log('✅ Context Sync v1.0.3 - All systems ready!')\"",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
+    "Context Sync",
+    "Context Management",
     "mcp",
     "mcp-server",
     "model-context-protocol",
     "ai",
     "ai-assistant",
-    "context",
+    "context layer",
     "memory",
     "claude",
     "cursor",
@@ -42,7 +47,11 @@
     "zed",
     "windsurf",
     "tabnine",
-    "copilot"
+    "copilot",
+    "Notion",
+    "Notion Integration",
+    "documentation",
+    "Notion MCP server"
   ],
   "author": {
     "name": "mamba",
@@ -66,15 +75,18 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
+    "@notionhq/client": "^5.4.0",
     "better-sqlite3": "^11.0.0",
     "chokidar": "^4.0.3",
     "commander": "^12.0.0",
-    "js-yaml": "^4.1.1"
+    "js-yaml": "^4.1.1",
+    "readline-sync": "^1.4.10"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.9",
     "@types/chokidar": "^1.7.5",
     "@types/node": "^20.11.0",
+    "@types/readline-sync": "^1.4.8",
     "tsx": "^4.20.6",
     "typescript": "^5.3.3"
   },

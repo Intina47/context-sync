@@ -29,6 +29,11 @@ import { todoToolDefinitions } from './todo-tools.js';
 import { ContextAnalyzer } from './context-analyzer.js';
 import type { ProjectContext } from './types.js';
 import * as fs from 'fs';
+import { NotionIntegration } from './notion-integration.js';
+import { createNotionHandlers } from './notion-handlers.js';
+import { AnnouncementTracker } from './announcement-tracker.js';
+import * as os from 'os';
+import { promises as fsPromises } from 'fs';
 
 export class ContextSyncServer {
   private server: Server;
@@ -44,6 +49,9 @@ export class ContextSyncServer {
   private platformSync: PlatformSync;
   private todoManager: TodoManager;
   private todoHandlers: ReturnType<typeof createTodoHandlers>;
+  private notionIntegration: NotionIntegration | null = null;
+  private notionHandlers: ReturnType<typeof createNotionHandlers> | null = null;
+  private announcementTracker: AnnouncementTracker;
   
   // ✅ NEW: Session-specific current project
   private currentProjectId: string | null = null;
@@ -59,6 +67,7 @@ export class ContextSyncServer {
     this.workspaceDetector = new WorkspaceDetector(this.storage, this.projectDetector);
     this.fileWriter = new FileWriter(this.workspaceDetector, this.storage);
     this.fileSearcher = new FileSearcher(this.workspaceDetector);
+    this.announcementTracker = new AnnouncementTracker();
 
     this.server = new Server(
       {
@@ -76,12 +85,43 @@ export class ContextSyncServer {
     this.platformSync = new PlatformSync(this.storage);
     this.todoManager = new TodoManager(this.storage.getDb());
     this.todoHandlers = createTodoHandlers(this.todoManager);
+    
+    // Initialize Notion integration if configured
+    this.initializeNotion().catch(() => {
+      // Silently fail - Notion is optional
+    });
+    
     // Auto-detect platform
     const detectedPlatform = PlatformSync.detectPlatform();
     this.platformSync.setPlatform(detectedPlatform);
     
     this.setupToolHandlers();
     this.setupPromptHandlers();
+  }
+  
+  /**
+   * Initialize Notion integration from user config
+   */
+  private async initializeNotion(): Promise<void> {
+    try {
+      const configPath = join(os.homedir(), '.context-sync', 'config.json');
+      const configData = await fsPromises.readFile(configPath, 'utf-8');
+      const config = JSON.parse(configData);
+      
+      if (config.notion?.token) {
+        this.notionIntegration = new NotionIntegration({
+          token: config.notion.token,
+          defaultParentPageId: config.notion.defaultParentPageId
+        });
+        this.notionHandlers = createNotionHandlers(this.notionIntegration);
+      } else {
+        this.notionHandlers = createNotionHandlers(null);
+      }
+    } catch {
+      // Config doesn't exist or invalid - Notion not configured
+      this.notionIntegration = null;
+      this.notionHandlers = createNotionHandlers(null);
+    }
   }
 
   /**
@@ -165,6 +205,21 @@ export class ContextSyncServer {
         },
       ];
 
+      // Add Notion announcement prompt if it should be shown
+      try {
+        const announcement = this.announcementTracker.shouldShow();
+        if (announcement) {
+          prompts.push({
+            name: 'notion_announcement',
+            description: 'Important announcement about Context Sync Notion integration',
+            arguments: [],
+          });
+        }
+      } catch (error) {
+        // Silently ignore announcement errors
+        console.warn('Notion announcement check failed:', error);
+      }
+
       // Add migration prompt for v1.0.0+ users with duplicates
       try {
         const version = this.getVersion();
@@ -211,28 +266,25 @@ export class ContextSyncServer {
         };
       }
 
-      if (request.params.name === 'migration_prompt') {
-        const version = this.getVersion();
-        const migrationCheck = await this.storage.checkMigrationPrompt(version);
+      if (request.params.name === 'notion_announcement') {
+        const announcement = this.announcementTracker.shouldShow();
         
-        if (migrationCheck.shouldPrompt) {
-          const migrationMessage = this.buildMigrationPrompt(migrationCheck.message);
-          
+        if (announcement) {
           return {
-            description: 'Context Sync Database Optimization Required',
+            description: 'Context Sync Notion Integration Available',
             messages: [
               {
                 role: 'user',
                 content: {
                   type: 'text',
-                  text: migrationMessage,
+                  text: announcement,
                 },
               },
             ],
           };
         } else {
           return {
-            description: 'No migration needed',
+            description: 'No announcement needed',
             messages: [],
           };
         }
@@ -313,18 +365,38 @@ export class ContextSyncServer {
         ...this.getV02Tools(),
         // V0.3.0 tools (including apply_* tools)
         ...this.getV03Tools(),
+        // V1.0.0 - Notion Integration tools
+        ...this.getNotionTools(),
       ],
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
-      // V0.2.0 handlers
-      if (name === 'get_project_context') return this.handleGetContext();
+      // Check if we should show Notion announcement (on any tool call)
+      const announcement = this.announcementTracker.shouldShow();
+      
+      // V0.2.0 handlers  
+      // Prepend announcement to the response of the first tool called
+      if (name === 'get_project_context') {
+        const result = await this.handleGetContext();
+        if (announcement && result.content[0].type === 'text') {
+          result.content[0].text = this.prependAnnouncement(result.content[0].text, announcement);
+        }
+        return result;
+      }
+      
       if (name === 'save_decision') return this.handleSaveDecision(args as any);
       if (name === 'save_conversation') return this.handleSaveConversation(args as any);
 
-      if (name === 'set_workspace') return this.handleSetWorkspace(args as any);
+      if (name === 'set_workspace') {
+        const result = await this.handleSetWorkspace(args as any);
+        if (announcement && result.content[0].type === 'text') {
+          result.content[0].text = this.prependAnnouncement(result.content[0].text, announcement);
+        }
+        return result;
+      }
+      
       if (name === 'read_file') return this.handleReadFile(args as any);
       if (name === 'get_project_structure') return this.handleGetProjectStructure(args as any);
       if (name === 'scan_workspace') return this.handleScanWorkspace();
@@ -372,8 +444,23 @@ export class ContextSyncServer {
       if (name === 'discover_ai_platforms') return this.handleDiscoverAIPlatforms(args as any);
       if (name === 'get_platform_recommendations') return this.handleGetPlatformRecommendations(args as any);
       if (name === 'setup_cursor') return this.handleSetupCursor();
-      if (name === 'get_started') return this.handleGetStarted();
-      if (name === 'debug_session') return this.handleDebugSession();
+      
+      if (name === 'get_started') {
+        const result = await this.handleGetStarted();
+        if (announcement && result.content[0].type === 'text') {
+          result.content[0].text = this.prependAnnouncement(result.content[0].text, announcement);
+        }
+        return result;
+      }
+      
+      if (name === 'debug_session') {
+        const result = await this.handleDebugSession();
+        if (announcement && result.content[0].type === 'text') {
+          result.content[0].text = this.prependAnnouncement(result.content[0].text, announcement);
+        }
+        return result;
+      }
+      
       if (name === 'get_performance_report') return this.handleGetPerformanceReport(args as any);
       // V0.4.0 - Todo Management Tools (with current project integration)
       if (name === 'todo_create') return this.handleTodoCreate(args as any);
@@ -393,6 +480,14 @@ export class ContextSyncServer {
       // V1.0.0 - Smart Context Analysis
       if (name === 'analyze_conversation_context') return this.handleAnalyzeConversationContext(args as any);
       if (name === 'suggest_missing_context') return this.handleSuggestMissingContext(args as any);
+      
+      // V1.0.0 - Notion Integration
+      if (name === 'notion_search' && this.notionHandlers) return this.notionHandlers.handleNotionSearch(args as any);
+      if (name === 'notion_read_page' && this.notionHandlers) return this.notionHandlers.handleNotionReadPage(args as any);
+      if (name === 'notion_create_page' && this.notionHandlers) return this.notionHandlers.handleNotionCreatePage(args as any);
+      if (name === 'notion_update_page' && this.notionHandlers) return this.notionHandlers.handleNotionUpdatePage(args as any);
+      if (name === 'sync_decision_to_notion' && this.notionHandlers) return this.notionHandlers.handleSyncDecisionToNotion(args as any, this.storage);
+      if (name === 'create_project_dashboard' && this.notionHandlers) return this.notionHandlers.handleCreateProjectDashboard(args as any, this.storage, this.currentProjectId);
 
       throw new Error(`Unknown tool: ${name}`);
     });
@@ -1036,9 +1131,122 @@ export class ContextSyncServer {
     ];
   }
 
+  /**
+   * V1.0.0 - Notion Integration Tools
+   */
+  private getNotionTools() {
+    return [
+      {
+        name: 'notion_search',
+        description: 'Search for pages in your Notion workspace. Returns pages that match the search query with their titles, IDs, URLs, and last edited times.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Search query to find pages in Notion',
+            },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'notion_read_page',
+        description: 'Read the contents of a specific Notion page. Returns the page title, URL, and formatted content.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            pageId: {
+              type: 'string',
+              description: 'The ID of the Notion page to read',
+            },
+          },
+          required: ['pageId'],
+        },
+      },
+      {
+        name: 'notion_create_page',
+        description: 'Create a new page in Notion with the specified title and markdown content. Optionally specify a parent page, or use the configured default parent page.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            title: {
+              type: 'string',
+              description: 'Title of the new page',
+            },
+            content: {
+              type: 'string',
+              description: 'Markdown content for the page',
+            },
+            parentPageId: {
+              type: 'string',
+              description: 'Optional parent page ID. If not provided, uses default parent page from config.',
+            },
+          },
+          required: ['title', 'content'],
+        },
+      },
+      {
+        name: 'notion_update_page',
+        description: 'Update an existing Notion page by replacing its content. The new content will completely replace the existing page content.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            pageId: {
+              type: 'string',
+              description: 'The ID of the page to update',
+            },
+            content: {
+              type: 'string',
+              description: 'New markdown content to replace existing content',
+            },
+          },
+          required: ['pageId', 'content'],
+        },
+      },
+      {
+        name: 'sync_decision_to_notion',
+        description: 'Sync a saved architectural decision from Context Sync to Notion. Creates a formatted Architecture Decision Record (ADR) page in Notion.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            decisionId: {
+              type: 'string',
+              description: 'The ID of the decision to sync (from get_project_context)',
+            },
+          },
+          required: ['decisionId'],
+        },
+      },
+      {
+        name: 'create_project_dashboard',
+        description: 'Create a comprehensive project dashboard in Notion for the current project. Includes project overview, tech stack, architecture notes, and timestamps.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project ID. If not provided, uses current active project.',
+            },
+          },
+        },
+      },
+    ];
+  }
+
   // ========== V0.2.0 HANDLERS ==========
 
-  private handleGetContext() {
+  /**
+   * Prepend announcement to response text if provided
+   */
+  private prependAnnouncement(text: string, announcement?: string | null): string {
+    if (announcement) {
+      return announcement + '\n\n---\n\n' + text;
+    }
+    return text;
+  }
+
+  private async handleGetContext(announcement?: string | null) {
     const project = this.getCurrentProject();
     
     if (!project) {
@@ -1051,10 +1259,12 @@ export class ContextSyncServer {
     }
 
     const summary = this.storage.getContextSummary(project.id);
+    const contextText = this.formatContextSummary(summary);
+    
     return {
       content: [{
         type: 'text',
-        text: this.formatContextSummary(summary),
+        text: this.prependAnnouncement(contextText, announcement),
       }],
     };
   }
@@ -1226,7 +1436,7 @@ export class ContextSyncServer {
       return {
         content: [{
           type: 'text',
-          text: `✅ **Workspace Connected**: ${path}${isGit}\n\n📁 **Project**: ${project.name}\n⚙️  **Tech Stack**: ${project.techStack.join(', ') || 'None'}\n🏗️  **Architecture**: ${project.architecture || 'Not specified'}\n\n📂 **Structure Preview**:\n${structure}\n\n🎯 **Ready!** All Context Sync features are active for this project.\n\n**Available**:\n• Project-specific todos\n• Decision tracking\n• Git integration\n• Code analysis tools`
+          text: `✅ **Workspace Connected**: ${path}${isGit}\n\n📁 **Project**: ${project.name}\n⚙️  **Tech Stack**: ${project.techStack.join(', ') || 'None'}\n🏗️  **Architecture**: ${project.architecture || 'Not specified'}\n\n📂 **Structure Preview**:\n${structure}\n\n🎯 **Ready!** All Context Sync features are active for this project.\n\n**Available**:\n• Project-specific todos\n• Decision tracking\n• Git integration\n• Code analysis tools\n• 📝 **Notion Integration** - Save docs, pull specs (\`context-sync-setup\`)`
         }]
       };
     } catch (error) {
@@ -1351,7 +1561,7 @@ export class ContextSyncServer {
       return {
         content: [{
           type: 'text',
-          text: `🎉 **Project Initialized Successfully!**\n\n✅ **Workspace**: ${path}${isGit}\n📁 **Project**: ${project.name}\n⚙️  **Tech Stack**: ${project.techStack?.join(', ') || 'None'}\n🏗️  **Architecture**: ${project.architecture || 'Generic'}\n\n📂 **Structure Preview**:\n${structure}\n\n🚀 **Context Sync Active!**\n\n**Available Commands**:\n• \`todo_create "task"\` - Add project todos\n• \`save_decision "choice"\` - Record decisions\n• \`git_status\` - Check repository status\n• \`search_content "term"\` - Find code\n• \`get_project_context\` - View project info\n\n**Pro Tip**: All todos and decisions are now linked to "${project.name}" automatically!${migrationTip}`
+          text: `🎉 **Project Initialized Successfully!**\n\n✅ **Workspace**: ${path}${isGit}\n📁 **Project**: ${project.name}\n⚙️  **Tech Stack**: ${project.techStack?.join(', ') || 'None'}\n🏗️  **Architecture**: ${project.architecture || 'Generic'}\n\n📂 **Structure Preview**:\n${structure}\n\n🚀 **Context Sync Active!**\n\n**Available Commands**:\n• \`todo_create "task"\` - Add project todos\n• \`save_decision "choice"\` - Record decisions\n• \`git_status\` - Check repository status\n• \`search_content "term"\` - Find code\n• \`get_project_context\` - View project info\n• 📝 **Notion tools** - \`notion_create_page\`, \`notion_search\`, etc.\n\n**Pro Tip**: All todos and decisions are now linked to "${project.name}" automatically!\n\n💡 **Want Notion integration?** Run \`context-sync-setup\` to save docs and pull specs from Notion!${migrationTip}`
         }]
       };
     } catch (error) {
@@ -2665,6 +2875,7 @@ private getRelativePath(filePath: string): string {
     response += `• 🔍 Code search and analysis\n`;
     response += `• 📋 Todo management with auto-linking\n`;
     response += `• 🔄 Cross-platform context sync\n`;
+    response += `• 📝 **Notion Integration** - Save docs, pull specs, export ADRs\n`;
     response += `• ⚡ Performance monitoring\n`;
     response += `• 🧠 Intelligent file skimming for large codebases\n\n`;
     
@@ -2673,6 +2884,13 @@ private getRelativePath(filePath: string): string {
     response += `• "Check platform status" - Verify platform configurations\n`;
     response += `• "Get performance report" - View system metrics\n`;
     response += `• "Show features" - See all available tools\n\n`;
+    
+    response += `📝 **Notion Integration** (Optional):\n`;
+    response += `• Generate and save documentation to Notion\n`;
+    response += `• Pull project specs from Notion for implementation\n`;
+    response += `• Export architecture decisions as ADRs\n`;
+    response += `• Create project dashboards automatically\n`;
+    response += `• Run \`context-sync-setup\` to enable (2 min setup)\n\n`;
     
     response += `**Ready to get started?** Choose an option above! 🚀`;
     
@@ -2751,7 +2969,26 @@ private getRelativePath(filePath: string): string {
     response += `2. Verify each maintains separate session state\n`;
     response += `3. Check todo auto-linking per session\n\n`;
     
-    response += `💡 **Usage:** Use this tool to debug session isolation and project state consistency.`;
+    // Notion integration status
+    response += `� **Notion Integration:**\n`;
+    const notionConfigPath = join(os.homedir(), '.context-sync', 'config.json');
+    let notionConfigured = false;
+    try {
+      if (fs.existsSync(notionConfigPath)) {
+        const config = JSON.parse(fs.readFileSync(notionConfigPath, 'utf-8'));
+        notionConfigured = !!(config.notion?.token);
+      }
+    } catch {
+      // Ignore config read errors
+    }
+    response += `• Status: ${notionConfigured ? '✅ Configured' : '⚪ Not configured'}\n`;
+    if (!notionConfigured) {
+      response += `• Setup: Run \`context-sync-setup\` to enable Notion features\n`;
+    }
+    response += `• Tools: notion_create_page, notion_search, notion_read_page, etc.\n\n`;
+    
+    response += `�💡 **Usage:** Use this tool to debug session isolation and project state consistency.\n`;
+    response += `💡 **Notion Issues?** Re-run \`context-sync-setup\` to reconfigure or test connection.`;
     
     return {
       content: [
@@ -3874,7 +4111,7 @@ private getRelativePath(filePath: string): string {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     
-    console.error('Context Sync MCP server v1.0.0 running on stdio');
+    console.error('Context Sync MCP server v1.0.3 running on stdio');
   }
 
   close(): void {
