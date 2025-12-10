@@ -12,6 +12,7 @@ export type AIPlatform =
   | 'tabnine'         // TabNine
   | 'windsurf'        // Windsurf
   | 'zed'             // Zed Editor
+  | 'notion'          // Notion (documentation/knowledge management)
   | 'other';
 
 export interface PlatformSession {
@@ -416,6 +417,7 @@ export class PlatformSync {
       tabnine: PlatformSync.isConfigured('tabnine'),
       windsurf: PlatformSync.isConfigured('windsurf'),
       zed: PlatformSync.isConfigured('zed'),
+      notion: PlatformSync.isConfigured('notion'),
       other: false,
     };
   }

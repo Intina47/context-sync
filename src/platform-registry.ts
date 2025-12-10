@@ -93,6 +93,16 @@ export const PLATFORM_REGISTRY: Record<AIPlatform, PlatformMetadata> = {
     features: ['Enterprise focus', 'On-premise deployment', 'Security compliance', 'Team management']
   },
 
+  notion: {
+    name: 'Notion',
+    category: 'extended',
+    description: 'Documentation and knowledge management platform with official MCP server',
+    website: 'https://www.notion.so',
+    setupComplexity: 'easy',
+    mcpSupport: 'native',
+    status: 'stable',
+    features: ['Documentation management', 'Knowledge base', 'Page creation', 'Content search', 'Database integration']
+  },
   
   other: {
     name: 'Other Platform',

@@ -1,10 +1,29 @@
-# Context Sync
-[![MCP Badge](https://lobehub.com/badge/mcp/intina47-context-sync)](https://lobehub.com/mcp/intina47-context-sync)
-<div align="center">
-
-<h1>🧠 The Memory Layer for AI Development</h1>
+<h1>Context Sync: 🧠 The Memory Layer for AI Development</h1>
 
 **Finally, AI that remembers.**
+
+---
+
+<div align="center" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; margin: 20px 0;">
+
+## 🎉 **NEW in v1.0.3:** Your AI Can Now Write Directly to <img src="https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png" alt="Notion" width="28" height="28" style="vertical-align: middle;"/> Notion
+
+**Ask AI to generate feature docs → AI writes them to Notion. Pull project specs from Notion → AI understands your plan instantly.**
+
+💡 "Create API documentation in Notion" • 📄 "Export this architecture decision to Notion" • 🔍 "Read the product spec from Notion and implement it"
+
+```bash
+npm install -g @context-sync/server
+context-sync-setup  # Interactive wizard for Notion integration
+```
+
+[See What's Possible →](#-notion-integration) | [Full Changelog](./CHANGELOG.md)
+
+</div>
+
+---
+
+<div align="center">
 
 *Context Sync is the open-source infrastructure that gives AI systems persistent memory across all your development tools, sessions, and projects.*
 
@@ -399,6 +418,44 @@ After installing Context Sync globally:
 </details>
 
 </details>
+
+---
+
+## 🔗 Notion Integration
+
+**New in v1.0.3:** Sync your AI context directly to Notion!
+
+Context Sync now includes native Notion API integration with **interactive setup wizard**:
+
+```bash
+# Install Context Sync
+npm install -g @context-sync/server
+
+# Run the setup wizard
+context-sync-setup
+
+# The wizard will:
+# 1. Open your browser to Notion's integration page
+# 2. Guide you step-by-step (just copy/paste 2 values)
+# 3. Test the connection automatically
+# 4. Save everything for you
+```
+
+**Features:**
+- 🔍 **Search** your Notion workspace
+- 📖 **Read** and **update** pages with proper formatting
+- 📝 **Create** new documentation automatically
+- 🎯 **Export decisions** as Architecture Decision Records (ADRs)
+- 📊 **Generate project dashboards** with tech stack and architecture
+- ✨ **Markdown support** - Beautiful, formatted pages in Notion
+
+**Benefits:**
+- ✅ **Smart updates** - Skip wizard if already configured
+- ✅ **User-friendly setup** - Select pages by number, not UUID
+- ✅ **Input validation** - Catches errors before API calls
+- ✅ **Native integration** - Works seamlessly with Context Sync tools
+
+📚 **[Full Notion Integration Guide →](./documentation/NOTION_INTEGRATION.md)**
 
 ---
 

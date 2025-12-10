@@ -14,11 +14,13 @@ const colors = {
   yellow: '\x1b[33m',
   red: '\x1b[31m',
   gray: '\x1b[90m',
-  bold: '\x1b[1m'
+  bold: '\x1b[1m',
+  white: '\x1b[37m'
 };
 
 function log(color, message) {
-  console.log(color + message + colors.reset);
+  // Use console.error to ensure output is visible during npm install
+  console.error(color + message + colors.reset);
 }
 
 // Get version from package.json
@@ -37,13 +39,24 @@ const isGlobalInstall = process.env.npm_config_global === 'true' ||
                         process.env.npm_config_location === 'global';
 
 const version = getVersion();
-log(colors.cyan + colors.bold, `\n🧠 Context Sync MCP Server v${version}\n`);
+
+// ALWAYS show banner - use process.stdout.write to bypass npm suppression
+process.stdout.write('\n' + '='.repeat(80) + '\n');
+process.stdout.write('\x1b[36m\x1b[1m🧠 Context Sync MCP Server v' + version + '\x1b[0m\n');
+process.stdout.write('='.repeat(80) + '\n\n');
 
 if (!isGlobalInstall) {
   log(colors.yellow, '⚠️  Detected local installation.');
   log(colors.yellow, 'For automatic setup, install globally:\n');
   log(colors.reset, '  npm install -g @context-sync/server\n');
   log(colors.gray, 'Skipping automatic configuration.\n');
+  
+  // Still show Notion message even for local installs
+  log(colors.cyan + colors.bold, '🎯 NEW: Notion Integration Available!\n');
+  log(colors.gray, '📝 Sync your AI context directly to Notion:\n');
+  log(colors.green + colors.bold, '🚀 To set up, run:\n');
+  log(colors.cyan + colors.bold, '   npx context-sync-setup\n');
+  
   process.exit(0);
 }
 
@@ -83,6 +96,64 @@ log(colors.green, `✅ Package found: ${packagePath}\n`);
 log(colors.cyan + colors.bold, '🌍 Universal AI Platform Auto-Configuration\n');
 log(colors.gray, 'Context Sync will now automatically detect and configure all installed AI platforms...\n');
 
+// ============================================================================
+// SETUP WIZARD INTEGRATION
+// ============================================================================
+async function runSetupWizard() {
+  try {
+    // Check if Notion is already configured
+    const configPath = path.join(os.homedir(), '.context-sync', 'config.json');
+    let skipWizard = false;
+    
+    if (fs.existsSync(configPath)) {
+      try {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (config.notion?.token && config.notion?.configuredAt) {
+          log(colors.green, '\n✅ Notion integration already configured');
+          log(colors.gray, '   Configured at: ' + new Date(config.notion.configuredAt).toLocaleString());
+          if (config.notion.defaultParentPageId) {
+            log(colors.gray, '   Default parent page: Set');
+          }
+          log(colors.gray, '\n💡 To reconfigure Notion integration:');
+          log(colors.gray, '   Edit: ' + configPath);
+          log(colors.gray, '   Or reinstall: npm install -g @context-sync/server\n');
+          skipWizard = true;
+        }
+      } catch (error) {
+        // If we can't read config, proceed with wizard
+        log(colors.gray, '⚠️  Could not read existing config, running setup wizard...\n');
+      }
+    }
+    
+    if (skipWizard) {
+      return;
+    }
+    
+    // Show optional Notion integration info - ALWAYS visible with prominent formatting
+    console.error('\n' + '━'.repeat(80));
+    log(colors.cyan + colors.bold, '🎯 NEW: Notion Integration Available!');
+    console.error('━'.repeat(80));
+    log(colors.gray, '\n📝 Context Sync can now sync your AI context directly to Notion:\n');
+    
+    log(colors.white, '   • Generate feature docs and export to Notion');
+    log(colors.white, '   • Pull project specs from Notion for AI to implement');
+    log(colors.white, '   • Export architecture decisions as ADRs');
+    log(colors.white, '   • Create beautifully formatted pages automatically\n');
+    
+    log(colors.green + colors.bold, '🚀 To set up Notion integration, run:\n');
+    log(colors.cyan + colors.bold, '   context-sync-setup\n');
+    log(colors.gray, '   (or: npx context-sync-setup)\n');
+    
+    log(colors.gray, '   The interactive wizard will guide you through connecting Notion.');
+    console.error('━'.repeat(80) + '\n');
+    
+  } catch (error) {
+    log(colors.yellow, '\n⚠️  Setup wizard encountered an issue.');
+    log(colors.gray, 'You can run it manually later with: npm run setup\n');
+    log(colors.gray, `Details: ${error.message}\n`);
+  }
+}
+
 // Use our new auto-configuration system
 async function runAutoConfiguration() {
   const autoConfigurator = new PlatformAutoConfigurator(packagePath, false);
@@ -91,7 +162,7 @@ async function runAutoConfiguration() {
     const results = await autoConfigurator.configureAllPlatforms();
     // Generate and display report
     const report = autoConfigurator.generateReport();
-    console.log(report);
+    console.error(report);
 
     // Show platform-specific next steps
     if (results.configured.length > 0) {
@@ -153,6 +224,9 @@ async function runAutoConfiguration() {
       
       printManualInstructions(packagePath);
     }
+
+    // Run the setup wizard for additional integrations (Notion, etc.)
+    await runSetupWizard();
 
     log(colors.reset, '📚 Documentation: ' + colors.cyan + 'https://github.com/Intina47/context-sync');
     log(colors.reset, '💬 Issues: ' + colors.cyan + 'https://github.com/Intina47/context-sync/issues');

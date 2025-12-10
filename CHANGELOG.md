@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.2] - 2025-12-10
+
+### 🎉 Major Feature Release: Native Notion Integration
+
+**Sync Your AI Context Directly to Notion!**
+
+Context Sync now includes built-in Notion API integration, allowing you to export project dashboards, architecture decisions, and documentation directly to your Notion workspace.
+
+### ✨ New Features
+
+#### 🔗 Native Notion Integration
+
+- **Automatic setup wizard** - Interactive browser-based integration creation
+- **6 new MCP tools** - Search, read, create, update pages, export decisions, generate dashboards
+- **Beautiful formatting** - Markdown converts to properly formatted Notion blocks (headings, lists, bold, code)
+- **Token validation** - Tests connection before saving configuration
+- **Smart page selection** - User-friendly numbered list (no manual UUID entry required)
+- **Professional layouts** - Clean, structured pages with proper typography
+
+#### 📝 Notion MCP Tools
+
+- `notion_search` - Search your Notion workspace
+- `notion_read_page` - Read page content as markdown
+- `notion_create_page` - Create new documentation pages
+- `notion_update_page` - Update existing pages
+- `sync_decision_to_notion` - Export architecture decisions as ADRs
+- `create_project_dashboard` - Generate project overview pages
+
+#### 🛡️ Smart Installation
+
+- **Skip wizard on updates** - Detects existing config, only runs on first install
+- **UUID validation** - Validates page IDs before API calls to prevent errors
+- **Configuration status** - Shows setup timestamp and parent page details
+- **Title truncation** - Long page names displayed cleanly (60 char limit)
+- **Helpful error messages** - Clear guidance when issues occur
+
+### 🧹 Code Cleanup
+
+- Removed test scripts and temporary files
+- Consolidated documentation (single Notion guide)
+- Updated README with Notion integration details
+- Cleaned up old release notes
+
+---
+
 ## [0.6.0] - 2025-10-28
 
 ### 🎉 Major Feature Release: Performance Optimizations & VS Code / GitHub Copilot Support
