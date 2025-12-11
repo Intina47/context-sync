@@ -252,34 +252,39 @@
   },
   {
     "name": "analyze_dependencies",
-    "description": "Analyze project dependencies and import relationships",
+    "description": "Analyze import/export dependencies for a file. Returns all imports, exports, files that import this file, and circular dependencies.",
     "arguments": [
       {
-        "name": "path",
+        "name": "filePath",
         "type": "string",
-        "desc": "Path to analyze (optional)"
+        "desc": "Path to the file to analyze (relative to workspace)"
       }
     ]
   },
   {
     "name": "get_dependency_tree",
-    "description": "Get dependency tree for a specific file",
+    "description": "Get a tree view of all dependencies for a file, showing nested imports up to a specified depth.",
     "arguments": [
       {
-        "name": "path",
+        "name": "filePath",
         "type": "string",
-        "desc": "Path to the file"
+        "desc": "Path to the file (relative to workspace)"
+      },
+      {
+        "name": "depth",
+        "type": "number",
+        "desc": "Maximum depth to traverse (default: 3, max: 10)"
       }
     ]
   },
   {
     "name": "find_importers",
-    "description": "Find all files that import a specific module",
+    "description": "Find all files that import a given file. Useful for understanding what depends on this file.",
     "arguments": [
       {
-        "name": "modulePath",
+        "name": "filePath",
         "type": "string",
-        "desc": "Path to the module"
+        "desc": "Path to the file (relative to workspace)"
       }
     ]
   },
@@ -317,33 +322,38 @@
   },
   {
     "name": "trace_execution_path",
-    "description": "Trace the execution path of a function call",
+    "description": "Trace all possible execution paths from one function to another. Shows the call chain.",
     "arguments": [
       {
-        "name": "functionName",
+        "name": "startFunction",
         "type": "string",
-        "desc": "Name of the function to trace"
+        "desc": "Starting function name"
       },
       {
-        "name": "startFile",
+        "name": "endFunction",
         "type": "string",
-        "desc": "Starting file path (optional)"
+        "desc": "Target function name"
+      },
+      {
+        "name": "maxDepth",
+        "type": "number",
+        "desc": "Maximum depth to search (default: 10)"
       }
     ]
   },
   {
     "name": "get_call_tree",
-    "description": "Get a tree of function calls in a file",
+    "description": "Get a tree view of function calls starting from a given function.",
     "arguments": [
       {
-        "name": "path",
+        "name": "functionName",
         "type": "string",
-        "desc": "Path to the file"
+        "desc": "Name of the function"
       },
       {
-        "name": "maxDepth",
+        "name": "depth",
         "type": "number",
-        "desc": "Maximum depth of the call tree (optional)"
+        "desc": "Maximum depth (default: 3)"
       }
     ]
   },
@@ -360,17 +370,12 @@
   },
   {
     "name": "get_type_info",
-    "description": "Get detailed information about a type",
+    "description": "Get complete information about a type including properties, methods, and usage.",
     "arguments": [
       {
         "name": "typeName",
         "type": "string",
         "desc": "Name of the type"
-      },
-      {
-        "name": "filePath",
-        "type": "string",
-        "desc": "Path to the file (optional)"
       }
     ]
   },
@@ -439,7 +444,7 @@
   },
   {
     "name": "todo_update",
-    "description": "Update a todo item",
+    "description": "Update a todo item. Only provided fields will be updated.",
     "arguments": [
       {
         "name": "id",
@@ -452,14 +457,34 @@
         "desc": "New title (optional)"
       },
       {
+        "name": "description",
+        "type": "string",
+        "desc": "New description (optional)"
+      },
+      {
         "name": "status",
         "type": "string",
-        "desc": "New status (optional)"
+        "desc": "New status: pending, in_progress, completed, cancelled (optional)"
       },
       {
         "name": "priority",
         "type": "string",
-        "desc": "New priority (optional)"
+        "desc": "New priority: low, medium, high, urgent (optional)"
+      },
+      {
+        "name": "tags",
+        "type": "array",
+        "desc": "New tags - replaces existing tags (optional)"
+      },
+      {
+        "name": "dueDate",
+        "type": "string",
+        "desc": "New due date in ISO 8601 format (optional)"
+      },
+      {
+        "name": "projectId",
+        "type": "string",
+        "desc": "New project ID (optional)"
       }
     ]
   },
