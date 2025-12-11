@@ -125,7 +125,18 @@ npm install -g @context-sync/server
 
 **That's it.** Context Sync auto-configures and guides you through first-time setup with natural language instructions.
 
-### Option 2: Docker (One Command Setup)
+### Option 2: Docker MCP Toolkit (Easiest!)
+
+```bash
+# In Docker Desktop: MCP Toolkit → Catalog → Search "Context Sync" → Add
+# Then in your AI agent: "Connect to Context Sync"
+```
+
+**Truly zero setup!** Docker MCP Toolkit handles installation, configuration, and connection automatically. Just add from the catalog and start using.
+
+> 🐳 **Docker MCP Toolkit**: See [docker/DOCKER_MCP_TOOLKIT.md](docker/DOCKER_MCP_TOOLKIT.md) for dynamic installation and automatic setup with AI agents.
+
+### Option 3: Docker Manual Setup
 
 ```bash
 # Using Docker Compose
@@ -137,9 +148,9 @@ docker run -d --name context-sync-mcp \
   intina47/context-sync-mcp:latest
 ```
 
-**Zero environment setup needed!** Perfect for containerized workflows and Docker MCP Toolkit integration.
+**Zero environment setup needed!** Perfect for containerized workflows without Docker MCP Toolkit.
 
-> 🐳 **Docker Integration**: See [DOCKER_MCP_INTEGRATION.md](DOCKER_MCP_INTEGRATION.md) for complete Docker setup guide and Docker MCP Toolkit usage.
+> 🐳 **Docker Integration**: See [DOCKER_MCP_INTEGRATION.md](DOCKER_MCP_INTEGRATION.md) for complete Docker setup guide.
 
 
 ### 🎯 See the Problem in Action

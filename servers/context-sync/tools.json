@@ -1,0 +1,541 @@
+[
+  {
+    "name": "set_workspace",
+    "description": "Set workspace directory and initialize project. Automatically detects project type, validates path, and offers to initialize Context Sync features with user consent.",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Absolute path to the project directory (must exist and be accessible)"
+      }
+    ]
+  },
+  {
+    "name": "get_project_context",
+    "description": "Get the current project context including recent decisions and conversations",
+    "arguments": []
+  },
+  {
+    "name": "save_decision",
+    "description": "Save an important technical decision or architectural choice",
+    "arguments": [
+      {
+        "name": "type",
+        "type": "string",
+        "desc": "Type of decision (architecture, library, pattern, configuration, other)"
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "desc": "Description of the decision"
+      },
+      {
+        "name": "reasoning",
+        "type": "string",
+        "desc": "Reasoning behind the decision (optional)"
+      }
+    ]
+  },
+  {
+    "name": "save_conversation",
+    "description": "Save a conversation snippet for future reference",
+    "arguments": [
+      {
+        "name": "content",
+        "type": "string",
+        "desc": "Content of the conversation"
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "desc": "Role (user or assistant)"
+      }
+    ]
+  },
+  {
+    "name": "read_file",
+    "description": "Read a file from the current workspace",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Path to the file relative to workspace"
+      }
+    ]
+  },
+  {
+    "name": "get_project_structure",
+    "description": "Get the file/folder structure of current workspace",
+    "arguments": [
+      {
+        "name": "depth",
+        "type": "number",
+        "desc": "Maximum depth to traverse (optional)"
+      }
+    ]
+  },
+  {
+    "name": "scan_workspace",
+    "description": "Scan workspace and get overview of important files",
+    "arguments": []
+  },
+  {
+    "name": "create_file",
+    "description": "Preview file creation (does NOT create the file yet)",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Relative path for new file"
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "desc": "File content"
+      },
+      {
+        "name": "overwrite",
+        "type": "boolean",
+        "desc": "Overwrite if exists (default: false)"
+      }
+    ]
+  },
+  {
+    "name": "modify_file",
+    "description": "Preview file modification (does NOT modify the file yet)",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Path to the file"
+      },
+      {
+        "name": "changes",
+        "type": "array",
+        "desc": "Array of file changes"
+      }
+    ]
+  },
+  {
+    "name": "delete_file",
+    "description": "Preview file deletion (does NOT delete the file yet)",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Path to the file"
+      }
+    ]
+  },
+  {
+    "name": "apply_create_file",
+    "description": "Actually create the file after user approval",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Path for the new file"
+      },
+      {
+        "name": "content",
+        "type": "string",
+        "desc": "File content"
+      }
+    ]
+  },
+  {
+    "name": "apply_modify_file",
+    "description": "Actually modify the file after user approval",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Path to the file"
+      },
+      {
+        "name": "changes",
+        "type": "array",
+        "desc": "Array of file changes to apply"
+      }
+    ]
+  },
+  {
+    "name": "apply_delete_file",
+    "description": "Actually delete the file after user approval",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Path to the file"
+      }
+    ]
+  },
+  {
+    "name": "undo_file_change",
+    "description": "Undo the last modification to a file",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Path to the file"
+      },
+      {
+        "name": "steps",
+        "type": "number",
+        "desc": "Number of changes to undo (default: 1)"
+      }
+    ]
+  },
+  {
+    "name": "search_files",
+    "description": "Search for files by name or pattern in the workspace",
+    "arguments": [
+      {
+        "name": "pattern",
+        "type": "string",
+        "desc": "Search pattern (supports glob patterns)"
+      }
+    ]
+  },
+  {
+    "name": "search_content",
+    "description": "Search for content within files in the workspace",
+    "arguments": [
+      {
+        "name": "query",
+        "type": "string",
+        "desc": "Search query"
+      },
+      {
+        "name": "filePattern",
+        "type": "string",
+        "desc": "File pattern to search in (optional)"
+      }
+    ]
+  },
+  {
+    "name": "find_symbol",
+    "description": "Find symbol definitions (functions, classes, etc.) in the workspace",
+    "arguments": [
+      {
+        "name": "symbol",
+        "type": "string",
+        "desc": "Symbol name to search for"
+      }
+    ]
+  },
+  {
+    "name": "git_status",
+    "description": "Get Git repository status",
+    "arguments": []
+  },
+  {
+    "name": "git_diff",
+    "description": "Get Git diff for staged or unstaged changes",
+    "arguments": [
+      {
+        "name": "staged",
+        "type": "boolean",
+        "desc": "Show staged changes (default: false)"
+      }
+    ]
+  },
+  {
+    "name": "git_branch_info",
+    "description": "Get information about Git branches",
+    "arguments": []
+  },
+  {
+    "name": "suggest_commit_message",
+    "description": "Suggest a commit message based on Git changes",
+    "arguments": []
+  },
+  {
+    "name": "analyze_dependencies",
+    "description": "Analyze project dependencies and import relationships",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Path to analyze (optional)"
+      }
+    ]
+  },
+  {
+    "name": "get_dependency_tree",
+    "description": "Get dependency tree for a specific file",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Path to the file"
+      }
+    ]
+  },
+  {
+    "name": "find_importers",
+    "description": "Find all files that import a specific module",
+    "arguments": [
+      {
+        "name": "modulePath",
+        "type": "string",
+        "desc": "Path to the module"
+      }
+    ]
+  },
+  {
+    "name": "detect_circular_deps",
+    "description": "Detect circular dependencies in the project",
+    "arguments": []
+  },
+  {
+    "name": "analyze_call_graph",
+    "description": "Analyze function call relationships in a file",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Path to the file"
+      }
+    ]
+  },
+  {
+    "name": "find_callers",
+    "description": "Find all places where a function is called",
+    "arguments": [
+      {
+        "name": "functionName",
+        "type": "string",
+        "desc": "Name of the function"
+      },
+      {
+        "name": "filePath",
+        "type": "string",
+        "desc": "Path to the file containing the function (optional)"
+      }
+    ]
+  },
+  {
+    "name": "trace_execution_path",
+    "description": "Trace the execution path of a function call",
+    "arguments": [
+      {
+        "name": "functionName",
+        "type": "string",
+        "desc": "Name of the function to trace"
+      },
+      {
+        "name": "startFile",
+        "type": "string",
+        "desc": "Starting file path (optional)"
+      }
+    ]
+  },
+  {
+    "name": "get_call_tree",
+    "description": "Get a tree of function calls in a file",
+    "arguments": [
+      {
+        "name": "path",
+        "type": "string",
+        "desc": "Path to the file"
+      },
+      {
+        "name": "maxDepth",
+        "type": "number",
+        "desc": "Maximum depth of the call tree (optional)"
+      }
+    ]
+  },
+  {
+    "name": "find_type_definition",
+    "description": "Find the definition of a type or interface",
+    "arguments": [
+      {
+        "name": "typeName",
+        "type": "string",
+        "desc": "Name of the type"
+      }
+    ]
+  },
+  {
+    "name": "get_type_info",
+    "description": "Get detailed information about a type",
+    "arguments": [
+      {
+        "name": "typeName",
+        "type": "string",
+        "desc": "Name of the type"
+      },
+      {
+        "name": "filePath",
+        "type": "string",
+        "desc": "Path to the file (optional)"
+      }
+    ]
+  },
+  {
+    "name": "find_type_usages",
+    "description": "Find all usages of a type in the project",
+    "arguments": [
+      {
+        "name": "typeName",
+        "type": "string",
+        "desc": "Name of the type"
+      }
+    ]
+  },
+  {
+    "name": "todo_create",
+    "description": "Create a new todo item for the current project",
+    "arguments": [
+      {
+        "name": "title",
+        "type": "string",
+        "desc": "Title of the todo item"
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "desc": "Detailed description (optional)"
+      },
+      {
+        "name": "priority",
+        "type": "string",
+        "desc": "Priority level: low, medium, high, urgent (default: medium)"
+      },
+      {
+        "name": "tags",
+        "type": "array",
+        "desc": "Tags to categorize the todo (optional)"
+      },
+      {
+        "name": "dueDate",
+        "type": "string",
+        "desc": "Due date in ISO 8601 format (optional)"
+      }
+    ]
+  },
+  {
+    "name": "todo_list",
+    "description": "List todos for the current project with optional filters",
+    "arguments": [
+      {
+        "name": "status",
+        "type": "string",
+        "desc": "Filter by status (optional)"
+      },
+      {
+        "name": "priority",
+        "type": "string",
+        "desc": "Filter by priority (optional)"
+      },
+      {
+        "name": "tags",
+        "type": "array",
+        "desc": "Filter by tags (optional)"
+      }
+    ]
+  },
+  {
+    "name": "todo_update",
+    "description": "Update a todo item",
+    "arguments": [
+      {
+        "name": "id",
+        "type": "string",
+        "desc": "The ID of the todo to update"
+      },
+      {
+        "name": "title",
+        "type": "string",
+        "desc": "New title (optional)"
+      },
+      {
+        "name": "status",
+        "type": "string",
+        "desc": "New status (optional)"
+      },
+      {
+        "name": "priority",
+        "type": "string",
+        "desc": "New priority (optional)"
+      }
+    ]
+  },
+  {
+    "name": "todo_complete",
+    "description": "Mark a todo as completed",
+    "arguments": [
+      {
+        "name": "id",
+        "type": "string",
+        "desc": "The ID of the todo to complete"
+      }
+    ]
+  },
+  {
+    "name": "todo_delete",
+    "description": "Delete a todo item",
+    "arguments": [
+      {
+        "name": "id",
+        "type": "string",
+        "desc": "The ID of the todo to delete"
+      }
+    ]
+  },
+  {
+    "name": "todo_stats",
+    "description": "Get statistics about todos for the current project",
+    "arguments": []
+  },
+  {
+    "name": "switch_platform",
+    "description": "Switch to a different AI platform (Claude, Cursor, etc.)",
+    "arguments": [
+      {
+        "name": "platform",
+        "type": "string",
+        "desc": "Platform name"
+      }
+    ]
+  },
+  {
+    "name": "get_platform_status",
+    "description": "Get status of all configured AI platforms",
+    "arguments": []
+  },
+  {
+    "name": "get_started",
+    "description": "Get started guide for Context Sync",
+    "arguments": []
+  },
+  {
+    "name": "migrate_database",
+    "description": "Migrate and optimize the Context Sync database",
+    "arguments": [
+      {
+        "name": "dryRun",
+        "type": "boolean",
+        "desc": "Preview changes without applying them (default: false)"
+      }
+    ]
+  },
+  {
+    "name": "analyze_conversation_context",
+    "description": "Analyze conversation context and suggest improvements",
+    "arguments": [
+      {
+        "name": "conversationText",
+        "type": "string",
+        "desc": "Conversation text to analyze"
+      }
+    ]
+  },
+  {
+    "name": "suggest_missing_context",
+    "description": "Suggest missing context that could be helpful",
+    "arguments": []
+  }
+]

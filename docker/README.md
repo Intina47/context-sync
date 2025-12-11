@@ -34,16 +34,22 @@ docker run -d \
 docker logs -f context-sync-mcp
 ```
 
-### Option 3: Using Docker MCP Toolkit
+### Option 3: Using Docker MCP Toolkit (Easiest!)
 
-Once published to the Docker MCP Registry:
+The Docker MCP Toolkit provides **dynamic installation** and **automatic setup** with your AI agents:
 
-```bash
-# Pull and run from Docker MCP Toolkit
-docker run --rm -p 3000:3000 intina47/context-sync-mcp:latest
-```
+1. Open Docker Desktop → **MCP Toolkit** → **Catalog**
+2. Search for **"Context Sync"** and click **Add**
+3. In your AI agent (Claude Desktop, VS Code), say: **"Connect to Context Sync"**
+4. Start using immediately!
 
-Or select **"Context Sync"** directly from the Docker MCP Toolkit UI.
+**See [DOCKER_MCP_TOOLKIT.md](DOCKER_MCP_TOOLKIT.md) for complete Docker MCP Toolkit usage guide.**
+
+This approach provides:
+- ✅ Zero manual configuration
+- ✅ Automatic connection to AI agents
+- ✅ Dynamic tool discovery
+- ✅ Multi-agent support out of the box
 
 ## 📋 Prerequisites
 
