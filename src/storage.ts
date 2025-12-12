@@ -8,6 +8,10 @@ import type {
   ProjectContext,
   Conversation,
   Decision,
+  Learning,
+  ProblemSolution,
+  Comparison,
+  AntiPattern,
   ContextSummary,
   StorageInterface,
 } from './types.js';
@@ -75,10 +79,60 @@ export class Storage implements StorageInterface {
         FOREIGN KEY (project_id) REFERENCES projects(id)
       );
 
+      CREATE TABLE IF NOT EXISTS learnings (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        insight TEXT NOT NULL,
+        context TEXT,
+        confidence REAL,
+        timestamp INTEGER NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS problem_solutions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        problem TEXT NOT NULL,
+        solution TEXT NOT NULL,
+        confidence REAL,
+        timestamp INTEGER NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS comparisons (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        option_a TEXT NOT NULL,
+        option_b TEXT NOT NULL,
+        winner TEXT,
+        reasoning TEXT,
+        confidence REAL,
+        timestamp INTEGER NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS anti_patterns (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        description TEXT NOT NULL,
+        why TEXT NOT NULL,
+        confidence REAL,
+        timestamp INTEGER NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_conversations_project 
         ON conversations(project_id, timestamp DESC);
       CREATE INDEX IF NOT EXISTS idx_decisions_project 
         ON decisions(project_id, timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_learnings_project 
+        ON learnings(project_id, timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_problem_solutions_project 
+        ON problem_solutions(project_id, timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_comparisons_project 
+        ON comparisons(project_id, timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_anti_patterns_project 
+        ON anti_patterns(project_id, timestamp DESC);
     `);
   }
 
@@ -378,6 +432,176 @@ export class Storage implements StorageInterface {
     for (const row of stmt.iterate() as any) {
       yield this.rowToProject(row);
     }
+  }
+
+  // ========== NEW CONTEXT TYPES ==========
+
+  addLearning(learning: Omit<Learning, 'id' | 'timestamp'>): Learning {
+    const id = randomUUID();
+    const timestamp = Date.now();
+
+    this.getStatement(`
+      INSERT INTO learnings (id, project_id, insight, context, confidence, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      learning.projectId,
+      learning.insight,
+      learning.context || null,
+      learning.confidence || null,
+      timestamp
+    );
+
+    return {
+      id,
+      ...learning,
+      timestamp: new Date(timestamp),
+    };
+  }
+
+  getLearnings(projectId: string, limit: number = 50): Learning[] {
+    const rows = this.getStatement(`
+      SELECT * FROM learnings 
+      WHERE project_id = ? 
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `).all(projectId, limit) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      projectId: row.project_id,
+      insight: row.insight,
+      context: row.context,
+      confidence: row.confidence,
+      timestamp: new Date(row.timestamp),
+    }));
+  }
+
+  addProblemSolution(problem: Omit<ProblemSolution, 'id' | 'timestamp'>): ProblemSolution {
+    const id = randomUUID();
+    const timestamp = Date.now();
+
+    this.getStatement(`
+      INSERT INTO problem_solutions (id, project_id, problem, solution, confidence, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      problem.projectId,
+      problem.problem,
+      problem.solution,
+      problem.confidence || null,
+      timestamp
+    );
+
+    return {
+      id,
+      ...problem,
+      timestamp: new Date(timestamp),
+    };
+  }
+
+  getProblemSolutions(projectId: string, limit: number = 50): ProblemSolution[] {
+    const rows = this.getStatement(`
+      SELECT * FROM problem_solutions 
+      WHERE project_id = ? 
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `).all(projectId, limit) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      projectId: row.project_id,
+      problem: row.problem,
+      solution: row.solution,
+      confidence: row.confidence,
+      timestamp: new Date(row.timestamp),
+    }));
+  }
+
+  addComparison(comparison: Omit<Comparison, 'id' | 'timestamp'>): Comparison {
+    const id = randomUUID();
+    const timestamp = Date.now();
+
+    this.getStatement(`
+      INSERT INTO comparisons (id, project_id, option_a, option_b, winner, reasoning, confidence, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      comparison.projectId,
+      comparison.optionA,
+      comparison.optionB,
+      comparison.winner || null,
+      comparison.reasoning || null,
+      comparison.confidence || null,
+      timestamp
+    );
+
+    return {
+      id,
+      ...comparison,
+      timestamp: new Date(timestamp),
+    };
+  }
+
+  getComparisons(projectId: string, limit: number = 50): Comparison[] {
+    const rows = this.getStatement(`
+      SELECT * FROM comparisons 
+      WHERE project_id = ? 
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `).all(projectId, limit) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      projectId: row.project_id,
+      optionA: row.option_a,
+      optionB: row.option_b,
+      winner: row.winner,
+      reasoning: row.reasoning,
+      confidence: row.confidence,
+      timestamp: new Date(row.timestamp),
+    }));
+  }
+
+  addAntiPattern(antiPattern: Omit<AntiPattern, 'id' | 'timestamp'>): AntiPattern {
+    const id = randomUUID();
+    const timestamp = Date.now();
+
+    this.getStatement(`
+      INSERT INTO anti_patterns (id, project_id, description, why, confidence, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      antiPattern.projectId,
+      antiPattern.description,
+      antiPattern.why,
+      antiPattern.confidence || null,
+      timestamp
+    );
+
+    return {
+      id,
+      ...antiPattern,
+      timestamp: new Date(timestamp),
+    };
+  }
+
+  getAntiPatterns(projectId: string, limit: number = 50): AntiPattern[] {
+    const rows = this.getStatement(`
+      SELECT * FROM anti_patterns 
+      WHERE project_id = ? 
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `).all(projectId, limit) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      projectId: row.project_id,
+      description: row.description,
+      why: row.why,
+      confidence: row.confidence,
+      timestamp: new Date(row.timestamp),
+    }));
   }
 
   getContextSummary(projectId: string): ContextSummary {

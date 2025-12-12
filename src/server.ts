@@ -1200,7 +1200,7 @@ export class ContextSyncServer {
       for (const item of autoSaveCandidates) {
         const { context, score } = item;
         
-        // Save to database based on type
+        // Save to database based on type (using specialized tables)
         if (context.type === 'decision') {
           this.storage.addDecision({
             projectId: project.id,
@@ -1212,28 +1212,48 @@ export class ContextSyncServer {
           responseText += `  ✅ ${context.type} (${score.score.toFixed(2)})\n`;
           responseText += `     ${context.description}\n`;
         } else if (context.type === 'problem-solution') {
-          // Save as decision with problem-solution format
-          this.storage.addDecision({
+          this.storage.addProblemSolution({
             projectId: project.id,
-            type: 'pattern',
-            description: `Problem: ${context.problem}`,
-            reasoning: `Solution: ${context.solution}`,
+            problem: context.problem,
+            solution: context.solution,
+            confidence: context.confidence,
           });
           saved.push(`Problem-Solution: ${context.problem}`);
           responseText += `  ✅ ${context.type} (${score.score.toFixed(2)})\n`;
           responseText += `     Problem: ${context.problem}\n`;
           responseText += `     Solution: ${context.solution}\n`;
         } else if (context.type === 'learning') {
-          // Save as decision with learning type
-          this.storage.addDecision({
+          this.storage.addLearning({
             projectId: project.id,
-            type: 'other',
-            description: `Learning: ${context.insight}`,
-            reasoning: context.context,
+            insight: context.insight,
+            context: context.context,
+            confidence: context.confidence,
           });
           saved.push(`Learning: ${context.insight}`);
           responseText += `  ✅ ${context.type} (${score.score.toFixed(2)})\n`;
           responseText += `     ${context.insight}\n`;
+        } else if (context.type === 'comparison') {
+          this.storage.addComparison({
+            projectId: project.id,
+            optionA: context.optionA,
+            optionB: context.optionB,
+            winner: context.winner,
+            reasoning: context.reasoning,
+            confidence: context.confidence,
+          });
+          saved.push(`Comparison: ${context.optionA} vs ${context.optionB}`);
+          responseText += `  ✅ ${context.type} (${score.score.toFixed(2)})\n`;
+          responseText += `     ${context.optionA} vs ${context.optionB}\n`;
+        } else if (context.type === 'anti-pattern') {
+          this.storage.addAntiPattern({
+            projectId: project.id,
+            description: context.description,
+            why: context.why,
+            confidence: context.confidence,
+          });
+          saved.push(`Anti-pattern: ${context.description}`);
+          responseText += `  ✅ ${context.type} (${score.score.toFixed(2)})\n`;
+          responseText += `     ${context.description}\n`;
         }
         
         responseText += `     📊 ${score.reasons.join(', ')}\n\n`;
