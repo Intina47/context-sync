@@ -27,6 +27,8 @@ import { PathNormalizer } from './path-normalizer.js';
 import { PerformanceMonitor } from './performance-monitor.js';
 import { todoToolDefinitions } from './todo-tools.js';
 import { ContextAnalyzer } from './context-analyzer.js';
+import { ContextExtractor } from './context-extractor.js';
+import { ContextQualityScorer } from './context-quality-scorer.js';
 import type { ProjectContext } from './types.js';
 import * as fs from 'fs';
 import { NotionIntegration } from './notion-integration.js';
@@ -419,13 +421,14 @@ export class ContextSyncServer {
       // V0.2.0 handlers  
       // Prepend announcement to the response of the first tool called
       if (name === 'get_project_context') {
-        const result = await this.handleGetContext();
+        const result = await this.handleGetContext(args as any);
         if (announcement && result.content[0].type === 'text') {
           result.content[0].text = this.prependAnnouncement(result.content[0].text, announcement);
         }
         return result;
       }
       
+      if (name === 'conversation_checkpoint') return await this.handleConversationCheckpoint(args as any);
       if (name === 'save_decision') return this.handleSaveDecision(args as any);
       if (name === 'save_conversation') return this.handleSaveConversation(args as any);
 
@@ -514,8 +517,36 @@ export class ContextSyncServer {
     return [
       {
         name: 'get_project_context',
-        description: 'Get the current project context including recent decisions and conversations',
-        inputSchema: { type: 'object', properties: {} },
+        description: 'Get the current project context including recent decisions and conversations. Optionally analyze recent conversation messages to detect and suggest valuable context to save.',
+        inputSchema: { 
+          type: 'object', 
+          properties: {
+            messages: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional: Recent conversation messages to analyze for valuable context'
+            }
+          }
+        },
+      },
+      {
+        name: 'conversation_checkpoint',
+        description: 'Analyze a conversation segment and automatically capture valuable context (decisions, learnings, solutions). Returns what was saved and what is suggested for user review.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            messages: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Conversation messages to analyze (user + AI messages)'
+            },
+            autoSave: {
+              type: 'boolean',
+              description: 'If true, automatically save high-confidence context (default: true)'
+            }
+          },
+          required: ['messages']
+        },
       },
       {
         name: 'save_decision',
@@ -1059,7 +1090,7 @@ export class ContextSyncServer {
     return text;
   }
 
-  private async handleGetContext(announcement?: string | null) {
+  private async handleGetContext(args?: any) {
     const project = this.getCurrentProject();
     
     if (!project) {
@@ -1072,13 +1103,172 @@ export class ContextSyncServer {
     }
 
     const summary = this.storage.getContextSummary(project.id);
-    const contextText = this.formatContextSummary(summary);
+    let contextText = this.formatContextSummary(summary);
+    
+    // If messages provided, analyze them for valuable context
+    if (args?.messages && Array.isArray(args.messages) && args.messages.length > 0) {
+      const extractor = new ContextExtractor();
+      const scorer = new ContextQualityScorer();
+      
+      const extracted = extractor.extractFromConversation(args.messages);
+      const scored = scorer.scoreAll(extracted);
+      
+      if (scored.length > 0) {
+        contextText += '\n\n💡 **Detected Valuable Context in Recent Conversation:**\n\n';
+        
+        for (const item of scored) {
+          const saveStatus = item.score.shouldSave ? '🟢 AUTO-SAVE' : '🟡 SUGGEST';
+          contextText += `${saveStatus} (${item.score.score.toFixed(2)}) - ${item.context.type}\n`;
+          
+          if (item.context.type === 'decision') {
+            contextText += `  📌 ${item.context.description}\n`;
+            if (item.context.reasoning) contextText += `  💭 ${item.context.reasoning}\n`;
+          } else if (item.context.type === 'problem-solution') {
+            contextText += `  ❌ Problem: ${item.context.problem}\n`;
+            contextText += `  ✅ Solution: ${item.context.solution}\n`;
+          } else if (item.context.type === 'learning') {
+            contextText += `  💡 ${item.context.insight}\n`;
+          }
+          
+          contextText += `  📊 ${item.score.reasons.join(', ')}\n\n`;
+        }
+        
+        contextText += '💡 **Tip**: Use `conversation_checkpoint` to automatically save this context!\n';
+      }
+    }
     
     return {
       content: [{
         type: 'text',
-        text: this.prependAnnouncement(contextText, announcement),
+        text: contextText,
       }],
+    };
+  }
+
+  /**
+   * Conversation Checkpoint - Analyze and auto-save valuable context
+   * This is the main entry point for active context collection
+   */
+  private async handleConversationCheckpoint(args: any) {
+    const project = this.getCurrentProject();
+    
+    if (!project) {
+      return {
+        content: [{ type: 'text', text: 'No active project. Use set_workspace first.' }],
+      };
+    }
+
+    const messages = args.messages || [];
+    const autoSave = args.autoSave !== false; // Default: true
+    
+    if (messages.length === 0) {
+      return {
+        content: [{ type: 'text', text: '⚠️  No messages provided to analyze.' }],
+      };
+    }
+
+    // Extract patterns
+    const extractor = new ContextExtractor();
+    const scorer = new ContextQualityScorer();
+    
+    const start = Date.now();
+    const extracted = extractor.extractFromConversation(messages);
+    const extractTime = Date.now() - start;
+    
+    if (extracted.length === 0) {
+      return {
+        content: [{ 
+          type: 'text', 
+          text: `📊 Analyzed ${messages.length} messages in ${extractTime}ms\n\n✨ No valuable context patterns detected.` 
+        }],
+      };
+    }
+
+    // Score and categorize
+    const autoSaveCandidates = scorer.getAutoSaveCandidates(extracted);
+    const suggestCandidates = scorer.getSuggestCandidates(extracted);
+    
+    let responseText = `📊 **Conversation Checkpoint**\n\n`;
+    responseText += `⏱️  Analyzed ${messages.length} messages in ${extractTime}ms\n`;
+    responseText += `📦 Found ${extracted.length} context pattern(s)\n\n`;
+    
+    // Auto-save high confidence items
+    const saved: string[] = [];
+    if (autoSave && autoSaveCandidates.length > 0) {
+      responseText += `🟢 **Auto-Saved (${autoSaveCandidates.length}):**\n\n`;
+      
+      for (const item of autoSaveCandidates) {
+        const { context, score } = item;
+        
+        // Save to database based on type
+        if (context.type === 'decision') {
+          this.storage.addDecision({
+            projectId: project.id,
+            type: 'architecture', // Default type
+            description: context.description,
+            reasoning: context.reasoning || undefined,
+          });
+          saved.push(`Decision: ${context.description}`);
+          responseText += `  ✅ ${context.type} (${score.score.toFixed(2)})\n`;
+          responseText += `     ${context.description}\n`;
+        } else if (context.type === 'problem-solution') {
+          // Save as decision with problem-solution format
+          this.storage.addDecision({
+            projectId: project.id,
+            type: 'pattern',
+            description: `Problem: ${context.problem}`,
+            reasoning: `Solution: ${context.solution}`,
+          });
+          saved.push(`Problem-Solution: ${context.problem}`);
+          responseText += `  ✅ ${context.type} (${score.score.toFixed(2)})\n`;
+          responseText += `     Problem: ${context.problem}\n`;
+          responseText += `     Solution: ${context.solution}\n`;
+        } else if (context.type === 'learning') {
+          // Save as decision with learning type
+          this.storage.addDecision({
+            projectId: project.id,
+            type: 'other',
+            description: `Learning: ${context.insight}`,
+            reasoning: context.context,
+          });
+          saved.push(`Learning: ${context.insight}`);
+          responseText += `  ✅ ${context.type} (${score.score.toFixed(2)})\n`;
+          responseText += `     ${context.insight}\n`;
+        }
+        
+        responseText += `     📊 ${score.reasons.join(', ')}\n\n`;
+      }
+    }
+    
+    // Suggest medium confidence items
+    if (suggestCandidates.length > 0) {
+      responseText += `\n🟡 **Suggestions (${suggestCandidates.length}):**\n\n`;
+      
+      for (const item of suggestCandidates) {
+        const { context, score } = item;
+        responseText += `  💡 ${context.type} (${score.score.toFixed(2)})\n`;
+        
+        if (context.type === 'decision') {
+          responseText += `     ${context.description}\n`;
+        } else if (context.type === 'comparison') {
+          responseText += `     ${context.optionA} vs ${context.optionB}\n`;
+        } else if (context.type === 'anti-pattern') {
+          responseText += `     ${context.description}\n`;
+        }
+        
+        responseText += `     📊 ${score.reasons.join(', ')}\n`;
+        responseText += `     ℹ️  Use save_decision to manually save this\n\n`;
+      }
+    }
+    
+    // Summary
+    responseText += `\n📈 **Summary:**\n`;
+    responseText += `  • Auto-saved: ${autoSaveCandidates.length}\n`;
+    responseText += `  • Suggested: ${suggestCandidates.length}\n`;
+    responseText += `  • Performance: ${extractTime}ms\n`;
+    
+    return {
+      content: [{ type: 'text', text: responseText }],
     };
   }
 
@@ -3908,7 +4098,7 @@ private getRelativePath(filePath: string): string {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     
-    console.error('Context Sync MCP server v1.0.3 running on stdio');
+    console.error('Context Sync MCP server v1.0.4 running on stdio');
   }
 
   close(): void {
