@@ -50,6 +50,12 @@ export class DependencyAnalyzer {
   private dependencyCache: Map<string, DependencyGraph>;
   private fileWatcher: chokidar.FSWatcher | null = null;
   private fileSizeGuard: FileSizeGuard;
+  // Performance: File index for O(1) importer lookups instead of O(n) scans
+  private fileIndex: Map<string, Set<string>> | null = null;
+  // Performance: Debounce file watcher to prevent thrashing
+  private invalidateDebounceTimer: NodeJS.Timeout | null = null;
+  private pendingInvalidations: Set<string> = new Set();
+  private readonly DEBOUNCE_MS = 300;
   
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
@@ -105,23 +111,58 @@ export class DependencyAnalyzer {
   }
 
   /**
-   * Invalidate caches for a specific file
+   * Invalidate caches for a specific file (debounced)
    */
   private invalidateCache(filePath: string): void {
-    // Remove file from cache
-    this.fileCache.delete(filePath);
+    // Add to pending invalidations
+    this.pendingInvalidations.add(filePath);
     
-    // Remove dependency graph from cache
-    this.dependencyCache.delete(filePath);
+    // Clear existing timer
+    if (this.invalidateDebounceTimer) {
+      clearTimeout(this.invalidateDebounceTimer);
+    }
     
-    // Also invalidate any dependent files (files that import this file)
-    for (const [cachedFile, graph] of this.dependencyCache.entries()) {
-      if (graph.dependencies.includes(filePath) || graph.importers.includes(filePath)) {
-        this.dependencyCache.delete(cachedFile);
+    // Set new timer to batch invalidations
+    this.invalidateDebounceTimer = setTimeout(() => {
+      this.flushInvalidations();
+    }, this.DEBOUNCE_MS);
+  }
+  
+  /**
+   * Flush all pending cache invalidations
+   */
+  private flushInvalidations(): void {
+    if (this.pendingInvalidations.size === 0) {
+      return;
+    }
+    
+    const filesToInvalidate = Array.from(this.pendingInvalidations);
+    this.pendingInvalidations.clear();
+    this.invalidateDebounceTimer = null;
+    
+    console.error(`🔄 Flushing ${filesToInvalidate.length} cache invalidations...`);
+    
+    // Invalidate file index once (not per file)
+    this.fileIndex = null;
+    
+    // Process each file
+    for (const filePath of filesToInvalidate) {
+      // Remove file from cache
+      this.fileCache.delete(filePath);
+      
+      // Remove dependency graph from cache
+      this.dependencyCache.delete(filePath);
+      
+      // Also invalidate any dependent files (files that import this file)
+      for (const [cachedFile, graph] of this.dependencyCache.entries()) {
+        if (graph.dependencies.includes(filePath) || graph.importers.includes(filePath)) {
+          this.dependencyCache.delete(cachedFile);
+        }
       }
     }
     
-    console.error(`🔄 Dependency cache invalidated: ${path.relative(this.workspacePath, filePath)}`);
+    const relPaths = filesToInvalidate.map(f => path.relative(this.workspacePath, f)).join(', ');
+    console.error(`✅ Cache invalidated for: ${relPaths.length > 100 ? relPaths.slice(0, 97) + '...' : relPaths}`);
   }
 
   /**
@@ -299,27 +340,49 @@ export class DependencyAnalyzer {
   }
 
   /**
-   * Find all files that import the given file
+   * Build file index for fast importer lookups
+   * Maps file path -> Set of files that import it
    */
-  public findImporters(filePath: string, maxFiles: number = 1000): string[] {
-    const absolutePath = this.resolveFilePath(filePath);
-    const importers: string[] = [];
+  private buildFileIndex(maxFiles: number = 1000): Map<string, Set<string>> {
+    const index = new Map<string, Set<string>>();
     const allFiles = this.getAllProjectFiles(maxFiles);
-
+    
+    console.error(`📊 Building file index for ${allFiles.length} files...`);
+    
     for (const file of allFiles) {
-      if (file === absolutePath) continue;
-      
       const imports = this.getImports(file);
       for (const imp of imports) {
-        const resolvedImport = this.resolveImportPath(file, imp.source);
-        if (resolvedImport === absolutePath) {
-          importers.push(file);
-          break;
+        if (!imp.isExternal) {
+          const resolvedPath = this.resolveImportPath(file, imp.source);
+          if (resolvedPath) {
+            if (!index.has(resolvedPath)) {
+              index.set(resolvedPath, new Set());
+            }
+            index.get(resolvedPath)!.add(file);
+          }
         }
       }
     }
+    
+    console.error(`✅ File index built with ${index.size} entries`);
+    return index;
+  }
 
-    return importers;
+  /**
+   * Find all files that import the given file
+   * Performance: O(1) with file index vs O(n) without
+   */
+  public findImporters(filePath: string, maxFiles: number = 1000): string[] {
+    const absolutePath = this.resolveFilePath(filePath);
+    
+    // Build index on first use
+    if (!this.fileIndex) {
+      this.fileIndex = this.buildFileIndex(maxFiles);
+    }
+    
+    // O(1) lookup!
+    const importers = this.fileIndex.get(absolutePath);
+    return importers ? Array.from(importers) : [];
   }
 
   /**
@@ -556,9 +619,17 @@ export class DependencyAnalyzer {
   }
 
   /**
-   * Dispose resources (cleanup file watcher)
+   * Dispose resources (cleanup file watcher and pending timers)
    */
   public dispose(): void {
+    // Clear debounce timer and flush pending invalidations
+    if (this.invalidateDebounceTimer) {
+      clearTimeout(this.invalidateDebounceTimer);
+      this.invalidateDebounceTimer = null;
+    }
+    this.flushInvalidations();
+    
+    // Close file watcher
     if (this.fileWatcher) {
       this.fileWatcher.close();
       this.fileWatcher = null;

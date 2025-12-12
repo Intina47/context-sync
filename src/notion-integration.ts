@@ -125,6 +125,7 @@ export class NotionIntegration {
 
   /**
    * Create a new documentation page in Notion
+   * Automatically handles content chunking if it exceeds Notion's 100-block limit
    */
   async createPage(title: string, content: string, parentPageId?: string): Promise<NotionPageResult> {
     try {
@@ -144,22 +145,60 @@ export class NotionIntegration {
         );
       }
 
-      const response = await this.notion.pages.create({
-        parent: { page_id: parent },
-        properties: {
-          title: {
-            title: [{ text: { content: title } }]
-          }
-        },
-        children: this.contentToBlocks(content)
-      }) as any;
+      const allBlocks = this.contentToBlocks(content);
+      
+      // Notion API limit: 100 blocks per request
+      const MAX_BLOCKS = 100;
+      
+      if (allBlocks.length > MAX_BLOCKS) {
+        // Create page with first 100 blocks
+        const initialBlocks = allBlocks.slice(0, MAX_BLOCKS);
+        
+        const response = await this.notion.pages.create({
+          parent: { page_id: parent },
+          properties: {
+            title: {
+              title: [{ text: { content: title } }]
+            }
+          },
+          children: initialBlocks
+        }) as any;
 
-      return {
-        id: response.id,
-        title,
-        url: response.url,
-        lastEditedTime: response.last_edited_time
-      };
+        // Append remaining blocks in chunks of 100
+        const remainingBlocks = allBlocks.slice(MAX_BLOCKS);
+        for (let i = 0; i < remainingBlocks.length; i += MAX_BLOCKS) {
+          const chunk = remainingBlocks.slice(i, i + MAX_BLOCKS);
+          await this.notion.blocks.children.append({
+            block_id: response.id,
+            children: chunk
+          });
+        }
+
+        return {
+          id: response.id,
+          title,
+          url: response.url,
+          lastEditedTime: response.last_edited_time
+        };
+      } else {
+        // Content fits in one request
+        const response = await this.notion.pages.create({
+          parent: { page_id: parent },
+          properties: {
+            title: {
+              title: [{ text: { content: title } }]
+            }
+          },
+          children: allBlocks
+        }) as any;
+
+        return {
+          id: response.id,
+          title,
+          url: response.url,
+          lastEditedTime: response.last_edited_time
+        };
+      }
     } catch (error: any) {
       throw new Error(`Failed to create page: ${error.message}`);
     }
@@ -167,6 +206,7 @@ export class NotionIntegration {
 
   /**
    * Update existing page content
+   * Automatically handles content chunking if it exceeds Notion's 100-block limit
    */
   async updatePage(pageId: string, content: string): Promise<void> {
     try {
@@ -185,11 +225,17 @@ export class NotionIntegration {
         await this.notion.blocks.delete({ block_id: (block as any).id });
       }
 
-      // Add new content
-      await this.notion.blocks.children.append({
-        block_id: pageId,
-        children: this.contentToBlocks(content)
-      });
+      // Add new content in chunks if needed
+      const allBlocks = this.contentToBlocks(content);
+      const MAX_BLOCKS = 100;
+      
+      for (let i = 0; i < allBlocks.length; i += MAX_BLOCKS) {
+        const chunk = allBlocks.slice(i, i + MAX_BLOCKS);
+        await this.notion.blocks.children.append({
+          block_id: pageId,
+          children: chunk
+        });
+      }
     } catch (error: any) {
       throw new Error(`Failed to update page: ${error.message}`);
     }

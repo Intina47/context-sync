@@ -43,9 +43,10 @@ export class ContextSyncServer {
   private fileWriter: FileWriter;
   private fileSearcher: FileSearcher;
   private gitIntegration: GitIntegration | null = null;
-  private dependencyAnalyzer: DependencyAnalyzer | null = null; 
-  private callGraphAnalyzer: CallGraphAnalyzer | null = null;
-  private typeAnalyzer: TypeAnalyzer | null = null;
+  // Lazy-loaded analyzers for better performance
+  private _dependencyAnalyzer: DependencyAnalyzer | null = null; 
+  private _callGraphAnalyzer: CallGraphAnalyzer | null = null;
+  private _typeAnalyzer: TypeAnalyzer | null = null;
   private platformSync: PlatformSync;
   private todoManager: TodoManager;
   private todoHandlers: ReturnType<typeof createTodoHandlers>;
@@ -358,6 +359,45 @@ export class ContextSyncServer {
     return prompt;
   }
 
+  /**
+   * Lazy getter for DependencyAnalyzer - only creates when needed
+   */
+  private get dependencyAnalyzer(): DependencyAnalyzer | null {
+    if (!this._dependencyAnalyzer) {
+      const workspace = this.workspaceDetector.getCurrentWorkspace();
+      if (workspace) {
+        this._dependencyAnalyzer = new DependencyAnalyzer(workspace);
+      }
+    }
+    return this._dependencyAnalyzer;
+  }
+
+  /**
+   * Lazy getter for CallGraphAnalyzer - only creates when needed
+   */
+  private get callGraphAnalyzer(): CallGraphAnalyzer | null {
+    if (!this._callGraphAnalyzer) {
+      const workspace = this.workspaceDetector.getCurrentWorkspace();
+      if (workspace) {
+        this._callGraphAnalyzer = new CallGraphAnalyzer(workspace);
+      }
+    }
+    return this._callGraphAnalyzer;
+  }
+
+  /**
+   * Lazy getter for TypeAnalyzer - only creates when needed
+   */
+  private get typeAnalyzer(): TypeAnalyzer | null {
+    if (!this._typeAnalyzer) {
+      const workspace = this.workspaceDetector.getCurrentWorkspace();
+      if (workspace) {
+        this._typeAnalyzer = new TypeAnalyzer(workspace);
+      }
+    }
+    return this._typeAnalyzer;
+  }
+
   private setupToolHandlers(): void {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
@@ -413,9 +453,8 @@ export class ContextSyncServer {
       
       // V0.3.0 - Other tools
       if (name === 'undo_file_change') return this.handleUndoFileChange(args as any);
-      if (name === 'search_files') return this.handleSearchFiles(args as any);
-      if (name === 'search_content') return this.handleSearchContent(args as any);
-      if (name === 'find_symbol') return this.handleFindSymbol(args as any);
+      if (name === 'search_files') return await this.handleSearchFiles(args as any);
+      if (name === 'search_content') return await this.handleSearchContent(args as any);
       if (name === 'git_status') return this.handleGitStatus();
       if (name === 'git_diff') return this.handleGitDiff(args as any);
       if (name === 'git_branch_info') return this.handleGitBranchInfo(args as any);
@@ -423,15 +462,10 @@ export class ContextSyncServer {
 
       // V0.4.0 - Dependency Analysis
       if (name === 'analyze_dependencies') return this.handleAnalyzeDependencies(args as any);
-      if (name === 'get_dependency_tree') return this.handleGetDependencyTree(args as any);
-      if (name === 'find_importers') return this.handleFindImporters(args as any);
       if (name === 'detect_circular_deps') return this.handleDetectCircularDeps(args as any);
 
-      // V0.4.0 - Call Graph Analysis (ADD THESE)
+      // V0.4.0 - Call Graph Analysis
       if (name === 'analyze_call_graph') return this.handleAnalyzeCallGraph(args as any);
-      if (name === 'find_callers') return this.handleFindCallers(args as any);
-      if (name === 'trace_execution_path') return this.handleTraceExecutionPath(args as any);
-      if (name === 'get_call_tree') return this.handleGetCallTree(args as any);
 
       // V0.4.0 - Type Analysis
       if (name === 'find_type_definition') return await this.handleFindTypeDefinition(args as any);
@@ -439,22 +473,9 @@ export class ContextSyncServer {
       if (name === 'find_type_usages') return await this.handleFindTypeUsages(args as any);
 
       if (name === 'switch_platform') return this.handleSwitchPlatform(args as any);
-      if (name === 'get_platform_status') return this.handleGetPlatformStatus();
-      if (name === 'get_platform_context') return this.handleGetPlatformContext(args as any);
-      if (name === 'discover_ai_platforms') return this.handleDiscoverAIPlatforms(args as any);
-      if (name === 'get_platform_recommendations') return this.handleGetPlatformRecommendations(args as any);
-      if (name === 'setup_cursor') return this.handleSetupCursor();
       
       if (name === 'get_started') {
         const result = await this.handleGetStarted();
-        if (announcement && result.content[0].type === 'text') {
-          result.content[0].text = this.prependAnnouncement(result.content[0].text, announcement);
-        }
-        return result;
-      }
-      
-      if (name === 'debug_session') {
-        const result = await this.handleDebugSession();
         if (announcement && result.content[0].type === 'text') {
           result.content[0].text = this.prependAnnouncement(result.content[0].text, announcement);
         }
@@ -476,10 +497,6 @@ export class ContextSyncServer {
       if (name === 'migrate_database') return this.handleMigrateDatabase(args as any);
       if (name === 'get_migration_stats') return this.handleGetMigrationStats();
       if (name === 'check_migration_suggestion') return this.handleCheckMigrationSuggestion();
-      
-      // V1.0.0 - Smart Context Analysis
-      if (name === 'analyze_conversation_context') return this.handleAnalyzeConversationContext(args as any);
-      if (name === 'suggest_missing_context') return this.handleSuggestMissingContext(args as any);
       
       // V1.0.0 - Notion Integration
       if (name === 'notion_search' && this.notionHandlers) return this.notionHandlers.handleNotionSearch(args as any);
@@ -719,18 +736,6 @@ export class ContextSyncServer {
           required: ['query'],
         },
       },
-      {
-        name: 'find_symbol',
-        description: 'Find function, class, or variable definitions',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            symbol: { type: 'string' },
-            type: { type: 'string', enum: ['function', 'class', 'variable', 'all'] },
-          },
-          required: ['symbol'],
-        },
-      },
       
       // Git tools
       {
@@ -786,38 +791,6 @@ export class ContextSyncServer {
               },
             },
             {
-              name: 'get_dependency_tree',
-              description: 'Get a tree view of all dependencies for a file, showing nested imports up to a specified depth.',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  filePath: { 
-                    type: 'string',
-                    description: 'Path to the file (relative to workspace)' 
-                  },
-                  depth: { 
-                    type: 'number',
-                    description: 'Maximum depth to traverse (default: 3, max: 10)' 
-                  },
-                },
-                required: ['filePath'],
-              },
-            },
-            {
-              name: 'find_importers',
-              description: 'Find all files that import a given file. Useful for understanding what depends on this file.',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  filePath: { 
-                    type: 'string',
-                    description: 'Path to the file (relative to workspace)' 
-                  },
-                },
-                required: ['filePath'],
-              },
-            },
-            {
               name: 'detect_circular_deps',
               description: 'Detect circular dependencies starting from a file. Shows all circular dependency chains.',
               inputSchema: {
@@ -846,62 +819,8 @@ export class ContextSyncServer {
           required: ['functionName'],
         },
       },
-      {
-        name: 'find_callers',
-        description: 'Find all functions that call a given function. Useful for impact analysis.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            functionName: { 
-              type: 'string',
-              description: 'Name of the function' 
-            },
-          },
-          required: ['functionName'],
-        },
-      },
-      {
-        name: 'trace_execution_path',
-        description: 'Trace all possible execution paths from one function to another. Shows the call chain.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            startFunction: { 
-              type: 'string',
-              description: 'Starting function name' 
-            },
-            endFunction: { 
-              type: 'string',
-              description: 'Target function name' 
-            },
-            maxDepth: { 
-              type: 'number',
-              description: 'Maximum depth to search (default: 10)' 
-            },
-          },
-          required: ['startFunction', 'endFunction'],
-        },
-      },
-      {
-        name: 'get_call_tree',
-        description: 'Get a tree view of function calls starting from a given function.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            functionName: { 
-              type: 'string',
-              description: 'Name of the function' 
-            },
-            depth: { 
-              type: 'number',
-              description: 'Maximum depth (default: 3)' 
-            },
-          },
-          required: ['functionName'],
-        },
-      },
 
-      // V0.4.0 - Type Analysis Tools (ADD THESE)
+      // V0.4.0 - Type Analysis Tools
       {
         name: 'find_type_definition',
         description: 'Find where a type, interface, class, or enum is defined.',
@@ -965,83 +884,8 @@ export class ContextSyncServer {
         },
       },
       {
-        name: 'get_platform_status',
-        description: 'Check which AI platforms have Context Sync configured',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'get_platform_context',
-        description: 'Get context specific to a platform (conversations, decisions)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            platform: {
-              type: 'string',
-              enum: ['claude', 'cursor', 'copilot', 'other'],
-              description: 'Platform to get context for (defaults to current platform)',
-            },
-          },
-        },
-      },
-      {
-        name: 'discover_ai_platforms',
-        description: 'Discover and explore available AI platforms with setup information and compatibility details',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            category: {
-              type: 'string',
-              enum: ['all', 'core', 'extended', 'api'],
-              description: 'Filter platforms by category (default: all)',
-            },
-            includeSetupInstructions: {
-              type: 'boolean',
-              description: 'Include detailed setup instructions for each platform',
-            },
-          },
-        },
-      },
-      {
-        name: 'get_platform_recommendations',
-        description: 'Get personalized AI platform recommendations based on user needs and current setup',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            useCase: {
-              type: 'string',
-              enum: ['coding', 'research', 'writing', 'local', 'enterprise', 'beginner'],
-              description: 'Primary use case for AI assistance',
-            },
-            priority: {
-              type: 'string',
-              enum: ['ease_of_use', 'privacy', 'features', 'cost', 'performance'],
-              description: 'Most important factor in platform selection',
-            },
-          },
-        },
-      },
-      {
-        name: 'setup_cursor',
-        description: 'Get instructions for setting up Context Sync in Cursor IDE',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
         name: 'get_started',
         description: 'Get started with Context Sync - shows installation status, current state, and guided next steps',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'debug_session',
-        description: 'Debug session state and project information for multi-project testing',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -1095,37 +939,6 @@ export class ContextSyncServer {
         inputSchema: {
           type: 'object',
           properties: {},
-        },
-      },
-      {
-        name: 'analyze_conversation_context',
-        description: 'Analyze recent conversation for important context that should be saved automatically. Detects decisions, todos, and insights that need to be preserved in Context Sync.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            conversationText: {
-              type: 'string',
-              description: 'Recent conversation text to analyze for context'
-            },
-            autoSave: {
-              type: 'boolean',
-              description: 'If true, automatically save detected context (default: false)'
-            }
-          },
-          required: ['conversationText']
-        },
-      },
-      {
-        name: 'suggest_missing_context',
-        description: 'Analyze current project state and suggest what important context might be missing from Context Sync. Helps ensure comprehensive project documentation.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            includeFileAnalysis: {
-              type: 'boolean',
-              description: 'If true, analyze recent file changes for undocumented decisions (default: true)'
-            }
-          }
         },
       },
     ];
@@ -1460,26 +1273,10 @@ export class ContextSyncServer {
         this.gitIntegration = null;
       }
 
-      try {
-        this.dependencyAnalyzer = new DependencyAnalyzer(path);
-      } catch (error) {
-        console.warn(`Dependency analyzer failed for ${path}:`, error);
-        this.dependencyAnalyzer = null;
-      }
-
-      try {
-        this.callGraphAnalyzer = new CallGraphAnalyzer(path);
-      } catch (error) {
-        console.warn(`Call graph analyzer failed for ${path}:`, error);
-        this.callGraphAnalyzer = null;
-      }
-
-      try {
-        this.typeAnalyzer = new TypeAnalyzer(path);
-      } catch (error) {
-        console.warn(`Type analyzer failed for ${path}:`, error);
-        this.typeAnalyzer = null;
-      }
+      // Invalidate lazy-loaded analyzers - they'll be recreated on next access
+      this._dependencyAnalyzer = null;
+      this._callGraphAnalyzer = null;
+      this._typeAnalyzer = null;
 
     } catch (error) {
       throw new Error(`Failed to initialize workspace: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1780,8 +1577,8 @@ export class ContextSyncServer {
     };
   }
 
-  private handleSearchFiles(args: any) {
-    const results = this.fileSearcher.searchFiles(args.pattern, {
+  private async handleSearchFiles(args: any) {
+    const results = await this.fileSearcher.searchFilesAsync(args.pattern, {
       maxResults: args.maxResults,
       ignoreCase: args.ignoreCase,
     });
@@ -1809,8 +1606,8 @@ export class ContextSyncServer {
     };
   }
 
-  private handleSearchContent(args: any) {
-    const results = this.fileSearcher.searchContent(args.query, {
+  private async handleSearchContent(args: any) {
+    const results = await this.fileSearcher.searchContentAsync(args.query, {
       regex: args.regex,
       caseSensitive: args.caseSensitive,
       filePattern: args.filePattern,
