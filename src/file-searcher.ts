@@ -1,6 +1,7 @@
 // File and Content Search Operations
 
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { WorkspaceDetector } from './workspace-detector.js';
 import { FileSizeGuard } from './file-size-guard.js';
@@ -52,7 +53,37 @@ export class FileSearcher {
   }
 
   /**
-   * Search for files by name or pattern
+   * Search for files by name or pattern (async version with parallel processing)
+   */
+  async searchFilesAsync(pattern: string, options: SearchOptions = {}): Promise<FileMatch[]> {
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    if (!workspace) {
+      return [];
+    }
+
+    const {
+      maxResults = 50,
+      ignoreCase = true,
+      filePattern
+    } = options;
+
+    const results: FileMatch[] = [];
+    const searchPattern = ignoreCase ? pattern.toLowerCase() : pattern;
+
+    await this.searchRecursiveAsync(
+      workspace,
+      searchPattern,
+      results,
+      maxResults,
+      ignoreCase,
+      filePattern
+    );
+
+    return results;
+  }
+
+  /**
+   * Search for files by name or pattern (sync version - deprecated, use searchFilesAsync)
    */
   searchFiles(pattern: string, options: SearchOptions = {}): FileMatch[] {
     const workspace = this.workspaceDetector.getCurrentWorkspace();
@@ -82,7 +113,46 @@ export class FileSearcher {
   }
 
   /**
-   * Search file contents for text or regex
+   * Search file contents for text or regex (async version with parallel processing)
+   */
+  async searchContentAsync(
+    query: string,
+    options: ContentSearchOptions = {}
+  ): Promise<ContentMatch[]> {
+    // Reset file size guard for new search operation
+    this.fileSizeGuard.reset();
+    
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    if (!workspace) {
+      return [];
+    }
+
+    const {
+      maxResults = 100,
+      regex = false,
+      caseSensitive = false,
+      contextLines = 2,
+      filePattern
+    } = options;
+
+    const results: ContentMatch[] = [];
+    const searchRegex = this.createSearchRegex(query, regex, caseSensitive);
+
+    await this.searchContentRecursiveAsync(
+      workspace,
+      query,
+      searchRegex,
+      results,
+      maxResults,
+      contextLines,
+      filePattern
+    );
+
+    return results;
+  }
+
+  /**
+   * Search file contents for text or regex (sync version - deprecated, use searchContentAsync)
    */
   searchContent(
     query: string,
@@ -183,6 +253,92 @@ export class FileSearcher {
 
   // ========== PRIVATE HELPER METHODS ==========
 
+  /**
+   * Async recursive search with parallel directory processing
+   */
+  private async searchRecursiveAsync(
+    dirPath: string,
+    pattern: string,
+    results: FileMatch[],
+    maxResults: number,
+    ignoreCase: boolean,
+    filePattern?: string
+  ): Promise<void> {
+    if (results.length >= maxResults) return;
+
+    try {
+      const entries = await fsp.readdir(dirPath, { withFileTypes: true });
+      
+      // Separate directories and files
+      const directories: string[] = [];
+      const files: Array<{ name: string; fullPath: string }> = [];
+
+      for (const entry of entries) {
+        if (this.shouldIgnore(entry.name)) continue;
+        const fullPath = path.join(dirPath, entry.name);
+        
+        if (entry.isDirectory()) {
+          directories.push(fullPath);
+        } else {
+          files.push({ name: entry.name, fullPath });
+        }
+      }
+
+      // Process files in parallel batches
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < files.length && results.length < maxResults; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE);
+        const filePromises = batch.map(async ({ name, fullPath }) => {
+          try {
+            const displayName = ignoreCase ? name.toLowerCase() : name;
+            
+            // Check file pattern if specified
+            if (filePattern && !this.matchesPattern(name, filePattern)) {
+              return null;
+            }
+
+            // Check if name matches search pattern
+            if (displayName.includes(pattern)) {
+              const stats = await fsp.stat(fullPath);
+              const relativePath = path.relative(
+                this.workspaceDetector.getCurrentWorkspace()!,
+                fullPath
+              );
+
+              return {
+                path: relativePath,
+                name: name,
+                size: stats.size,
+                language: this.detectLanguage(name)
+              };
+            }
+            return null;
+          } catch {
+            return null;
+          }
+        });
+
+        const batchResults = await Promise.all(filePromises);
+        for (const result of batchResults) {
+          if (result && results.length < maxResults) {
+            results.push(result);
+          }
+        }
+      }
+
+      // Process directories recursively in parallel (batches of 3 to avoid overwhelming)
+      const DIR_BATCH_SIZE = 3;
+      for (let i = 0; i < directories.length && results.length < maxResults; i += DIR_BATCH_SIZE) {
+        const batch = directories.slice(i, i + DIR_BATCH_SIZE);
+        await Promise.all(
+          batch.map(dir => this.searchRecursiveAsync(dir, pattern, results, maxResults, ignoreCase, filePattern))
+        );
+      }
+    } catch (error) {
+      // Ignore errors (permission denied, etc.)
+    }
+  }
+
   private searchRecursive(
     dirPath: string,
     pattern: string,
@@ -231,6 +387,115 @@ export class FileSearcher {
       }
     } catch (error) {
       // Ignore errors (permission denied, etc.)
+    }
+  }
+
+  /**
+   * Async recursive content search with parallel file processing
+   */
+  private async searchContentRecursiveAsync(
+    dirPath: string,
+    originalQuery: string,
+    searchRegex: RegExp,
+    results: ContentMatch[],
+    maxResults: number,
+    contextLines: number,
+    filePattern?: string
+  ): Promise<void> {
+    if (results.length >= maxResults) return;
+
+    try {
+      const entries = await fsp.readdir(dirPath, { withFileTypes: true });
+      
+      // Separate directories and files
+      const directories: string[] = [];
+      const textFiles: Array<{ name: string; fullPath: string }> = [];
+
+      for (const entry of entries) {
+        if (this.shouldIgnore(entry.name)) continue;
+        const fullPath = path.join(dirPath, entry.name);
+        
+        if (entry.isDirectory()) {
+          directories.push(fullPath);
+        } else if (this.isTextFile(entry.name)) {
+          // Check file pattern
+          if (filePattern && !this.matchesPattern(entry.name, filePattern)) {
+            continue;
+          }
+          textFiles.push({ name: entry.name, fullPath });
+        }
+      }
+
+      // Process files in parallel batches
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < textFiles.length && results.length < maxResults; i += BATCH_SIZE) {
+        const batch = textFiles.slice(i, i + BATCH_SIZE);
+        const filePromises = batch.map(async ({ name, fullPath }) => {
+          try {
+            // Try intelligent skimming first for large files
+            const skimResult = this.fileSkimmer.readFile(fullPath, [originalQuery]);
+            
+            let content = skimResult.content;
+            
+            // If file was too large even for skimming, use fallback
+            if (!content) {
+              const guardResult = this.fileSizeGuard.readFile(fullPath, 'utf8');
+              if (guardResult.skipped) {
+                return []; // Skip files that are still too large
+              }
+              content = guardResult.content;
+            }
+            
+            const lines = content.split('\n');
+            const relativePath = path.relative(
+              this.workspaceDetector.getCurrentWorkspace()!,
+              fullPath
+            );
+
+            const fileMatches: ContentMatch[] = [];
+            for (let i = 0; i < lines.length && fileMatches.length + results.length < maxResults; i++) {
+              const line = lines[i];
+              const match = line.match(searchRegex);
+
+              if (match) {
+                fileMatches.push({
+                  path: relativePath,
+                  line: i + 1,
+                  content: line.trim(),
+                  match: match[0],
+                  context: {
+                    before: this.getContext(lines, i, -contextLines),
+                    after: this.getContext(lines, i, contextLines)
+                  }
+                });
+              }
+            }
+            return fileMatches;
+          } catch {
+            return [];
+          }
+        });
+
+        const batchResults = await Promise.all(filePromises);
+        for (const fileMatches of batchResults) {
+          for (const match of fileMatches) {
+            if (results.length < maxResults) {
+              results.push(match);
+            }
+          }
+        }
+      }
+
+      // Process directories recursively in parallel (batches of 3)
+      const DIR_BATCH_SIZE = 3;
+      for (let i = 0; i < directories.length && results.length < maxResults; i += DIR_BATCH_SIZE) {
+        const batch = directories.slice(i, i + DIR_BATCH_SIZE);
+        await Promise.all(
+          batch.map(dir => this.searchContentRecursiveAsync(dir, originalQuery, searchRegex, results, maxResults, contextLines, filePattern))
+        );
+      }
+    } catch (error) {
+      // Ignore errors
     }
   }
 
