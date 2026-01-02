@@ -1,0 +1,45 @@
+name: context-sync
+image: intina47/context-sync-mcp
+type: server
+meta:
+  category: productivity
+  tags:
+    - productivity
+    - ai
+    - memory
+    - context
+    - workspace
+    - git
+    - code-analysis
+about:
+  title: Context Sync - AI Memory Layer
+  description: MCP server for AI context sync with persistent memory, workspace file access, and intelligent code operations. Enables AI agents to maintain context across sessions with 40+ tools for project management, file operations, Git integration, and code analysis.
+  icon: https://avatars.githubusercontent.com/u/78519682?v=4
+source:
+  project: https://github.com/Intina47/context-sync
+  commit: be02c34c6da8e4bc7b3c0d3f3e0e5c5e3e0e5c5e
+config:
+  description: Configure Context Sync MCP server for persistent AI memory and workspace access
+  env:
+    - name: CONTEXT_SYNC_DB_PATH
+      example: /data/context-sync.db
+      value: '{{context-sync.db_path}}'
+    - name: NODE_ENV
+      example: production
+      value: production
+  volumes:
+    - name: context-sync-data
+      path: /data
+      description: Persistent storage for Context Sync database
+    - name: workspace
+      path: /workspace
+      description: Your project workspace for file operations (optional)
+      required: false
+  parameters:
+    type: object
+    properties:
+      db_path:
+        type: string
+        title: Database Path
+        description: Path to the SQLite database file
+        default: /data/context-sync.db

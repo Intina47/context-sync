@@ -1,0 +1,52 @@
+services:
+  context-sync-mcp:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prebuilt
+    image: intina47/context-sync-mcp:latest
+    container_name: context-sync-mcp
+    restart: unless-stopped
+    
+    # Environment variables
+    environment:
+      - NODE_ENV=production
+      - CONTEXT_SYNC_DB_PATH=/data/context-sync.db
+    
+    # Volumes for persistent data
+    volumes:
+      # Persistent database storage
+      - context-sync-data:/data
+      # Optional: Mount your workspace for file operations
+      # Uncomment and adjust the path to your workspace
+      # - ${PWD}:/workspace:ro              # Current directory
+      # - ~/projects/my-app:/workspace:ro    # Specific project
+    
+    # Stdin/Stdout for MCP communication
+    stdin_open: true
+    tty: true
+    
+    # Optional: Expose port for future HTTP/WebSocket transport
+    # ports:
+    #   - "3000:3000"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    
+    # Resource limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+volumes:
+  context-sync-data:
+    driver: local

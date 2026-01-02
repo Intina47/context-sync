@@ -1,0 +1,50 @@
+# Dockerfile for Context Sync MCP Server (Prebuilt)
+# This Dockerfile expects the project to be already built on the host
+# Use this when you've already run `npm run build` locally
+
+FROM node:20-slim
+
+# Install runtime dependencies for native modules
+RUN apt-get update && apt-get install -y \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install only production dependencies
+# Use npm ci for reproducible builds (requires package-lock.json)
+# Falls back to npm install if ci fails (e.g., missing lock file or corrupted cache)
+RUN npm ci --only=production || \
+    (echo "Warning: npm ci failed, falling back to npm install" && npm install --production) && \
+    test -d node_modules/@modelcontextprotocol || (echo "Dependencies not installed correctly!" && exit 1)
+
+# Copy pre-built distribution
+COPY dist/ ./dist/
+COPY bin/ ./bin/
+
+# Copy additional files
+COPY LICENSE ./
+COPY README.md ./
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV CONTEXT_SYNC_DB_PATH=/data/context-sync.db
+
+# Create data directory for persistent storage
+RUN mkdir -p /data && chown -R node:node /data /app
+
+# Switch to non-root user for security
+USER node
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD node -e "console.log('Context Sync MCP Server is running')" || exit 1
+
+# Expose port for potential HTTP/WebSocket transport (optional)
+EXPOSE 3000
+
+# Default command - run the MCP server
+CMD ["node", "dist/index.js"]
