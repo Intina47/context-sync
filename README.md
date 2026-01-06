@@ -49,6 +49,7 @@ npm install -g @context-sync/server
 **Supports:**
 <!-- PLATFORM BADGES - PROMINENT -->
 <p>
+  <img src="https://img.shields.io/badge/Notion-Supported-000000?style=for-the-badge&logo=zed&logoColor=white" alt="Notion">
   <img src="https://img.shields.io/badge/Cursor-Supported-00D4AA?style=for-the-badge&logo=cursor&logoColor=white" alt="Cursor">
   <img src="https://img.shields.io/badge/Claude%20Desktop-Supported-6366f1?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Desktop">
   <img src="https://img.shields.io/badge/VS%20Code-Supported-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="VS Code">
