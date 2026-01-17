@@ -23,6 +23,7 @@ import { migrateToV2, isV2Schema } from './schema-v2.js';
 
 export class Storage implements StorageInterface {
   private db: Database.Database;
+  private dbPath: string;
   
   // Prepared statement cache for 2-5x faster queries with LRU eviction
   private preparedStatements: Map<string, Database.Statement> = new Map();
@@ -31,15 +32,15 @@ export class Storage implements StorageInterface {
   constructor(dbPath?: string) {
     // Default to user's home directory
     const defaultPath = path.join(os.homedir(), '.context-sync', 'data.db');
-    const actualPath = dbPath || defaultPath;
+    this.dbPath = dbPath || defaultPath;
     
     // Ensure directory exists
-    const dir = path.dirname(actualPath);
+    const dir = path.dirname(this.dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    this.db = new Database(actualPath);
+    this.db = new Database(this.dbPath);
     this.initDatabase();
     createTodoTable(this.db);
     
@@ -661,6 +662,13 @@ export class Storage implements StorageInterface {
 
   getDb(): Database.Database {
     return this.db;
+  }
+
+  /**
+   * Get the database file path
+   */
+  getDbPath(): string {
+    return this.dbPath;
   }
 
   /**

@@ -887,7 +887,21 @@ Example: Jot project
         response += `   • Complexity: ${analysis.metrics.complexity}\n`;
       }
       
-      response += `\n🧠 **Deep context captured. Ready to work!**`;
+      // Install git hooks for automatic context capture
+      const GitHookManager = require('./git-hook-manager').GitHookManager;
+      const hookManager = new GitHookManager(projectPath, this.storage.getDbPath());
+      
+      if (hookManager.isGitRepo()) {
+        const result = hookManager.installHooks();
+        if (result.success) {
+          response += `\n\n🪝 **Git Hooks:** Installed ${result.installed.length} hook(s) (${result.installed.join(', ')})`;
+          response += `\n   Context Sync will now automatically track commits, pushes, merges, and branch switches!`;
+        } else {
+          response += `\n\n⚠️ **Git Hooks:** Failed to install (${result.errors.join(', ')})`;
+        }
+      }
+      
+      response += `\n\n🧠 **Deep context captured. Ready to work!**`;
 
       return {
         content: [{ type: 'text', text: response }],
