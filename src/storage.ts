@@ -19,6 +19,7 @@ import {createTodoTable} from './todo-schema.js';
 import { PathNormalizer } from './path-normalizer.js';
 import { PerformanceMonitor } from './performance-monitor.js';
 import { MigrationPrompter } from './migration-prompter.js';
+import { migrateToV2, isV2Schema } from './schema-v2.js';
 
 export class Storage implements StorageInterface {
   private db: Database.Database;
@@ -41,6 +42,11 @@ export class Storage implements StorageInterface {
     this.db = new Database(actualPath);
     this.initDatabase();
     createTodoTable(this.db);
+    
+    // Migrate to v2 schema if needed
+    if (!isV2Schema(this.db)) {
+      migrateToV2(this.db);
+    }
   }
 
   private initDatabase(): void {

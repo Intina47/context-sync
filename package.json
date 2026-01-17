@@ -1,12 +1,12 @@
 {
   "name": "@context-sync/server",
-  "version": "1.0.3",
+  "version": "2.0.0",
   "description": "Universal Context layer McP server",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/index-v2.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "context-sync": "./dist/index.js",
+    "context-sync": "./dist/index-v2.js",
     "context-sync-setup": "./bin/setup.cjs"
   },
   "scripts": {
@@ -19,7 +19,9 @@
     "start": "node dist/index.js",
     "watch": "tsx watch src/index.ts",
     "test": "node -e \"console.log('✅ Context Sync v1.0.3 - All systems ready!')\"",
-    "prepublishOnly": "npm run build && npm test"
+    "benchmark": "tsx test-context-quality.ts",
+    "quality": "npm run benchmark",
+    "prepublishOnly": "npm run build && npm run benchmark"
   },
   "keywords": [
     "Context Sync",
@@ -74,13 +76,15 @@
     "CHANGELOG.md"
   ],
   "dependencies": {
+    "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^0.5.0",
     "@notionhq/client": "^5.4.0",
     "better-sqlite3": "^11.0.0",
     "chokidar": "^4.0.3",
     "commander": "^12.0.0",
     "js-yaml": "^4.1.1",
-    "readline-sync": "^1.4.10"
+    "readline-sync": "^1.4.10",
+    "simple-git": "^3.30.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.9",

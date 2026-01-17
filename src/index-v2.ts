@@ -1,40 +1,36 @@
 #!/usr/bin/env node
 
-import { ContextSyncServer } from './server.js';
+import { ContextSyncServerV2 } from './server-v2.js';
 
 async function main() {
   // Support custom database path for development/testing
-  // Priority: CLI argument > Environment variable > Default
   let storagePath: string | undefined;
   
   // Check for --db-path argument
   const dbPathIndex = process.argv.indexOf('--db-path');
   if (dbPathIndex !== -1 && process.argv[dbPathIndex + 1]) {
     storagePath = process.argv[dbPathIndex + 1];
-    console.error(`Using custom database: ${storagePath}`);
+    console.error(`🧠 Context Sync v2.0 - Using custom database: ${storagePath}`);
   }
   // Check for environment variable
   else if (process.env.CONTEXT_SYNC_DB_PATH) {
     storagePath = process.env.CONTEXT_SYNC_DB_PATH;
-    console.error(`Using database from env: ${storagePath}`);
-  }
-  // Check for --dev flag (uses dev database)
-  else if (process.argv.includes('--dev')) {
-    const os = require('os');
-    const path = require('path');
-    storagePath = path.join(os.homedir(), '.context-sync', 'dev-data.db');
-    console.error(`Using development database: ${storagePath}`);
+    console.error(`🧠 Context Sync v2.0 - Using database from env: ${storagePath}`);
+  } else {
+    console.error('🧠 Context Sync v2.0 - 9 Essential Tools');
   }
 
-  const server = new ContextSyncServer(storagePath);
-
+  const server = new ContextSyncServerV2(storagePath);
+  
   // Handle graceful shutdown
   process.on('SIGINT', () => {
+    console.error('\n👋 Shutting down Context Sync v2.0...');
     server.close();
     process.exit(0);
   });
 
   process.on('SIGTERM', () => {
+    console.error('\n👋 Shutting down Context Sync v2.0...');
     server.close();
     process.exit(0);
   });
@@ -43,6 +39,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  console.error('❌ Failed to start Context Sync v2.0:', error);
   process.exit(1);
 });
