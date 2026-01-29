@@ -10,9 +10,11 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { exec } = require('child_process');
+const PLATFORM_CONFIGS = require('./platform-configs.cjs');
 
 const CONFIG_DIR = path.join(os.homedir(), '.context-sync');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+const STATUS_FILE = path.join(CONFIG_DIR, 'install-status.json');
 
 // Color codes
 const colors = {
@@ -67,6 +69,84 @@ function promptToken() {
 
     return token;
   }
+}
+
+function getPlatformLabel(platformId) {
+  const config = PLATFORM_CONFIGS[platformId];
+  return config?.name || platformId;
+}
+
+function loadInstallStatus() {
+  try {
+    if (fs.existsSync(STATUS_FILE)) {
+      const data = fs.readFileSync(STATUS_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    // Ignore install status parsing errors
+  }
+  return null;
+}
+
+function renderList(items, color = colors.white) {
+  items.forEach(item => {
+    log(color, `  - ${item}`);
+  });
+}
+
+function showAutoConfigSummary(status) {
+  printHeader('Auto-Configuration Summary');
+
+  if (!status || !status.results) {
+    log(colors.gray, 'No auto-configuration status found.');
+    log(colors.gray, 'Install globally to auto-configure platforms:');
+    log(colors.white, '  npm install -g @context-sync/server\n');
+    return;
+  }
+
+  const timestamp = status.timestamp ? new Date(status.timestamp).toLocaleString() : 'Unknown time';
+  log(colors.gray, `Last install status: ${status.outcome || 'unknown'} (${timestamp})`);
+
+  if (status.needsManual) {
+    log(colors.yellow, 'Manual configuration may be required for some platforms.');
+  }
+
+  const configured = status.results.configured || [];
+  if (configured.length > 0) {
+    log(colors.green, '\nConfigured platforms:');
+    renderList(configured.map(getPlatformLabel), colors.white);
+  } else {
+    log(colors.yellow, '\nNo platforms were auto-configured during install.');
+  }
+
+  const skipped = status.results.skipped || [];
+  const errors = status.results.errors || [];
+
+  if (skipped.length > 0 || errors.length > 0 || status.error) {
+    log(colors.yellow, '\nAuto-configuration issues:');
+
+    if (skipped.length > 0) {
+      skipped.forEach(({ platform, reason }) => {
+        const label = getPlatformLabel(platform);
+        log(colors.white, `  - ${label}: ${reason}`);
+      });
+    }
+
+    if (errors.length > 0) {
+      errors.forEach(({ platform, error }) => {
+        const label = getPlatformLabel(platform);
+        log(colors.white, `  - ${label}: ${error}`);
+      });
+    }
+
+    if (status.error) {
+      log(colors.white, `  - Install error: ${status.error}`);
+    }
+  } else {
+    log(colors.green, '\nNo auto-configuration issues were reported.');
+  }
+
+  log(colors.gray, '\nFor manual setup steps, see docs/CONFIG.md.\n');
 }
 
 async function fetchNotionPages(token) {
@@ -272,6 +352,10 @@ async function main() {
   // Load existing config
   const config = loadConfig();
 
+  // Show auto-config summary from install
+  const installStatus = loadInstallStatus();
+  showAutoConfigSummary(installStatus);
+
   log(colors.white, 'Welcome to Context Sync!\n');
   log(colors.gray, 'This wizard configures Notion only.\n');
 
@@ -299,6 +383,5 @@ main().catch(error => {
   log(colors.red, `\nERROR Setup failed: ${error.message}`);
   process.exit(1);
 });
-
 
 
