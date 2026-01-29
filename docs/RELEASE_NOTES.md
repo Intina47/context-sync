@@ -23,3 +23,4 @@ This release is a major v2-focused cleanup. It removes legacy v1 tooling and nar
 ## Notes
 - Auto-config does not run on local installs; use global install or manual config.
 - Notion setup is intentionally manual via the wizard.
+- Fixed Windows setup command failing due to a stray BOM in the setup script.
