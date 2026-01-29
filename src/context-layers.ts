@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Context Layers - Intentional, not pattern-based
  * What AI needs to onboard quickly
  */
@@ -106,3 +106,4 @@ export interface RememberInput {
   content: string;
   metadata?: Record<string, any>;
 }
+

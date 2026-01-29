@@ -1,12 +1,12 @@
-/**
- * Database schema update for v2.0 - Context Layers
+﻿/**
+ * Database schema update - Context Layers
  * Adds new tables for intentional context capture
  */
 
 import Database from 'better-sqlite3';
 
-export function migrateToV2(db: Database.Database): void {
-  console.log('📦 Migrating database to v2.0 schema...');
+export function migrateSchema(db: Database.Database): void {
+  console.log(' Migrating database schema...');
 
   // Create new context layer tables
   db.exec(`
@@ -180,16 +180,16 @@ export function migrateToV2(db: Database.Database): void {
       ON caveats(project_id, resolved, severity DESC, timestamp DESC);
   `);
 
-  console.log('✅ Database migrated to v2.0');
+  console.log(' Database migration complete');
 }
 
 /**
- * Check if v2 tables exist
+ * Check if schema tables exist
  */
-export function isV2Schema(db: Database.Database): boolean {
+export function isSchemaCurrent(db: Database.Database): boolean {
   try {
-    // Check for all v2 tables (both context layers and enhanced project identity)
-    const v2Tables = [
+    // Check for all schema tables (both context layers and enhanced project identity)
+    const schemaTables = [
       'active_work',
       'constraints',
       'problems',
@@ -207,14 +207,14 @@ export function isV2Schema(db: Database.Database): boolean {
       'project_metrics'
     ];
 
-    for (const table of v2Tables) {
+    for (const table of schemaTables) {
       const result = db.prepare(`
         SELECT name FROM sqlite_master 
         WHERE type='table' AND name=?
       `).get(table);
       
       if (!result) {
-        console.log(`📦 Missing v2 table: ${table}`);
+        console.log(` Missing schema table: ${table}`);
         return false;
       }
     }
@@ -224,3 +224,5 @@ export function isV2Schema(db: Database.Database): boolean {
     return false;
   }
 }
+
+

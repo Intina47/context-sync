@@ -1,5 +1,5 @@
-/**
- * Optimized Read File Engine
+﻿/**
+ * Read File Engine
  * Provides rich file context: content + metadata + relationships + complexity
  */
 
@@ -37,7 +37,7 @@ interface FileContext {
   complexity: FileComplexity;
 }
 
-export class OptimizedReadFileEngine {
+export class ReadFileEngine {
   private projectPath: string;
   private git: ReturnType<typeof simpleGit>;
 
@@ -365,3 +365,4 @@ export class OptimizedReadFileEngine {
     return ['package.json', 'tsconfig.json', '.eslintrc'];
   }
 }
+

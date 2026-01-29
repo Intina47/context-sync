@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Core Tool Definitions - The 9 Essential Tools
  * Set of core tools: 8 project tools + 1 documentation tool (Notion)
  */
@@ -29,7 +29,7 @@ export const CORE_TOOLS = [
     name: 'remember',
     description: `Store important context about the project. Use when the user shares something that matters for future sessions: active work, architectural constraints, problems encountered, goals, decisions, notes, or **caveats** (AI mistakes/tech debt).
 
-**🚨 NEW: CAVEAT TYPE - Track AI Mistakes & Tech Debt**
+** NEW: CAVEAT TYPE - Track AI Mistakes & Tech Debt**
 
 When you (the AI) realize something went wrong, ALWAYS call remember with type='caveat':
 - You tried something that didn't work
@@ -73,12 +73,12 @@ remember(
 \`\`\`
 
 **When to Use Caveats:**
-✅ "Actually, I realize..." → CAVEAT
-✅ "Let me try a different approach..." → CAVEAT (first approach failed)
-✅ "Hmm, that didn't work..." → CAVEAT
-✅ "Wait, on second thought..." → CAVEAT (assumption was wrong)
-✅ Made changes but didn't run build/test → CAVEAT (unverified)
-✅ Used workaround instead of proper fix → CAVEAT (shortcut)
+ "Actually, I realize..."  CAVEAT
+ "Let me try a different approach..."  CAVEAT (first approach failed)
+ "Hmm, that didn't work..."  CAVEAT
+ "Wait, on second thought..."  CAVEAT (assumption was wrong)
+ Made changes but didn't run build/test  CAVEAT (unverified)
+ Used workaround instead of proper fix  CAVEAT (shortcut)
 
 **This makes Context Sync the FIRST tool to track AI mistakes as technical context!**
 
@@ -103,10 +103,10 @@ When the user says "cs remember" or "remember this conversation" WITHOUT specify
    - Metadata: Include file paths, code snippets, links, or other relevant context
 
 **Example Checkpoint Analysis:**
-If conversation discusses "building TypeScript v2 server with 8 core tools, tested successfully via MCP":
-- Call remember(type="active_work", content="Building Context Sync v2 server with 8 core tools (set_project, remember, recall, etc.)", metadata={files: ["src/server-v2.ts", "src/core-tools.ts"]})
+If conversation discusses "building the TypeScript server with 8 core tools, tested successfully via MCP":
+- Call remember(type="active_work", content="Building Context Sync server with 8 core tools (set_project, remember, recall, etc.)", metadata={files: ["src/server.ts", "src/core-tools.ts"]})
 - Call remember(type="decision", content="Reduced from 50+ tools to 8 core tools, moved rest to internal utilities for simplicity", metadata={reasoning: "Users overwhelmed by too many tools"})
-- Call remember(type="active_work", content="Testing v2 implementation via MCP protocol in Cursor", metadata={status: "All 8 tools tested successfully"})
+- Call remember(type="active_work", content="Testing implementation via MCP protocol in Cursor", metadata={status: "All 8 tools tested successfully"})
 
 **When to Use Checkpoint Mode:**
 - User says "cs remember" with no arguments
@@ -115,7 +115,7 @@ If conversation discusses "building TypeScript v2 server with 8 core tools, test
 - End of significant work session
 
 **When to Use Direct Mode:**
-- User specifies what to remember: "cs remember: using TypeScript for v2"
+- User specifies what to remember: "cs remember: using TypeScript for the server"
 - Clear type indicated: "cs constraint: must support SQLite"
 - Single piece of information to save
 
@@ -296,3 +296,5 @@ This approach leverages YOUR (the AI's) conversation understanding while keeping
     }
   }
 ] as const;
+
+

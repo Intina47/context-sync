@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Project Scanner - Layer 1: File System Access
  * Reads ALL config files ONCE, caches in memory
  */
@@ -126,7 +126,7 @@ export class ProjectScanner {
       }
 
       if (contributors) {
-        const lines = contributors.trim().split('\n').filter(l => l.trim());
+        const lines = contributors.trim().split('\n').filter((line: string) => line.trim());
         files.git.contributors = lines.length;
       }
     } catch {
@@ -190,3 +190,4 @@ export class ProjectScanner {
     }
   }
 }
+

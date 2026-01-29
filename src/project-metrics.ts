@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Project Metrics Analyzer
  * Calculates LOC, file counts, complexity from scanned files
  */
@@ -125,3 +125,4 @@ export class MetricsAnalyzer {
     return count;
   }
 }
+

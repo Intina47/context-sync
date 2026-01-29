@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Notion tool handlers for Context Sync MCP Server
  */
 
@@ -11,7 +11,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: '❌ Notion is not configured. Run `context-sync setup` to configure Notion integration.',
+            text: ' Notion is not configured. Run `context-sync setup` to configure Notion integration.',
           }],
           isError: true,
         };
@@ -20,7 +20,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
       try {
         const results = await notionIntegration.searchPages(args.query);
         
-        let response = `🔍 **Notion Search Results for "${args.query}"**\n\n`;
+        let response = ` **Notion Search Results for "${args.query}"**\n\n`;
         response += `Found ${results.pages.length} page(s)\n\n`;
         
         results.pages.forEach((page, i) => {
@@ -31,10 +31,10 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         });
         
         if (results.pages.length === 0) {
-          response += `💡 **Tips:**\n`;
-          response += `• Make sure pages are shared with your Notion integration\n`;
-          response += `• Try a different search query\n`;
-          response += `• Check your Notion workspace permissions\n`;
+          response += ` **Tips:**\n`;
+          response += ` Make sure pages are shared with your Notion integration\n`;
+          response += ` Try a different search query\n`;
+          response += ` Check your Notion workspace permissions\n`;
         }
         
         return {
@@ -44,7 +44,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: `❌ **Failed to search Notion**\n\nError: ${error.message}`,
+            text: ` **Failed to search Notion**\n\nError: ${error.message}`,
           }],
           isError: true,
         };
@@ -56,7 +56,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: '❌ Notion is not configured. Run `context-sync setup` to configure Notion integration.',
+            text: ' Notion is not configured. Run `context-sync setup` to configure Notion integration.',
           }],
           isError: true,
         };
@@ -65,8 +65,8 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
       try {
         const page = await notionIntegration.readPage(args.pageId);
         
-        let response = `📄 **${page.title}**\n\n`;
-        response += `🔗 ${page.url}\n\n`;
+        let response = ` **${page.title}**\n\n`;
+        response += ` ${page.url}\n\n`;
         response += `---\n\n`;
         response += page.content;
         
@@ -77,7 +77,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: `❌ **Failed to read page**\n\nError: ${error.message}\n\nMake sure:\n• The page ID is correct\n• The page is shared with your integration`,
+            text: ` **Failed to read page**\n\nError: ${error.message}\n\nMake sure:\n The page ID is correct\n The page is shared with your integration`,
           }],
           isError: true,
         };
@@ -89,7 +89,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: '❌ Notion is not configured. Run `context-sync setup` to configure Notion integration.',
+            text: ' Notion is not configured. Run `context-sync setup` to configure Notion integration.',
           }],
           isError: true,
         };
@@ -98,14 +98,14 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
       try {
         const page = await notionIntegration.createPage(args.title, args.content, args.parentPageId);
         
-        let response = `✅ **Page Created Successfully!**\n\n`;
-        response += `📄 **${page.title}**\n`;
-        response += `🔗 ${page.url}\n`;
-        response += `🆔 Page ID: ${page.id}\n\n`;
-        response += `💡 You can now:\n`;
-        response += `• Open the page in Notion\n`;
-        response += `• Read it with: notion_read_page pageId:"${page.id}"\n`;
-        response += `• Update it with: notion_update_page\n`;
+        let response = ` **Page Created Successfully!**\n\n`;
+        response += ` **${page.title}**\n`;
+        response += ` ${page.url}\n`;
+        response += ` Page ID: ${page.id}\n\n`;
+        response += ` You can now:\n`;
+        response += ` Open the page in Notion\n`;
+        response += ` Read it with: notion_read_page pageId:"${page.id}"\n`;
+        response += ` Update it with: notion_update_page\n`;
         
         return {
           content: [{ type: 'text', text: response }],
@@ -114,7 +114,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: `❌ **Failed to create page**\n\nError: ${error.message}\n\nMake sure:\n• A default parent page is configured, or provide parentPageId\n• The parent page is shared with your integration`,
+            text: ` **Failed to create page**\n\nError: ${error.message}\n\nMake sure:\n A default parent page is configured, or provide parentPageId\n The parent page is shared with your integration`,
           }],
           isError: true,
         };
@@ -126,7 +126,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: '❌ Notion is not configured. Run `context-sync setup` to configure Notion integration.',
+            text: ' Notion is not configured. Run `context-sync setup` to configure Notion integration.',
           }],
           isError: true,
         };
@@ -135,10 +135,10 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
       try {
         await notionIntegration.updatePage(args.pageId, args.content);
         
-        let response = `✅ **Page Updated Successfully!**\n\n`;
-        response += `📄 Page ID: ${args.pageId}\n`;
-        response += `✨ Content has been replaced with new content\n\n`;
-        response += `💡 Read the updated page with: notion_read_page pageId:"${args.pageId}"\n`;
+        let response = ` **Page Updated Successfully!**\n\n`;
+        response += ` Page ID: ${args.pageId}\n`;
+        response += ` Content has been replaced with new content\n\n`;
+        response += ` Read the updated page with: notion_read_page pageId:"${args.pageId}"\n`;
         
         return {
           content: [{ type: 'text', text: response }],
@@ -147,7 +147,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: `❌ **Failed to update page**\n\nError: ${error.message}`,
+            text: ` **Failed to update page**\n\nError: ${error.message}`,
           }],
           isError: true,
         };
@@ -159,7 +159,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: '❌ Notion is not configured. Run `context-sync setup` to configure Notion integration.',
+            text: ' Notion is not configured. Run `context-sync setup` to configure Notion integration.',
           }],
           isError: true,
         };
@@ -174,7 +174,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
           return {
             content: [{
               type: 'text',
-              text: `❌ Decision with ID "${args.decisionId}" not found.\n\nUse get_project_context to see available decisions.`,
+              text: ` Decision with ID "${args.decisionId}" not found.\n\nUse get_project_context to see available decisions.`,
             }],
             isError: true,
           };
@@ -182,10 +182,10 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
 
         const page = await notionIntegration.syncDecision(decision);
         
-        let response = `✅ **Decision Synced to Notion!**\n\n`;
-        response += `📋 **ADR: ${decision.description}**\n`;
-        response += `🔗 ${page.url}\n`;
-        response += `🆔 Page ID: ${page.id}\n\n`;
+        let response = ` **Decision Synced to Notion!**\n\n`;
+        response += ` **ADR: ${decision.description}**\n`;
+        response += ` ${page.url}\n`;
+        response += ` Page ID: ${page.id}\n\n`;
         response += `The decision has been formatted as an Architecture Decision Record (ADR) in Notion.\n`;
         
         return {
@@ -195,7 +195,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: `❌ **Failed to sync decision**\n\nError: ${error.message}`,
+            text: ` **Failed to sync decision**\n\nError: ${error.message}`,
           }],
           isError: true,
         };
@@ -207,7 +207,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: '❌ Notion is not configured. Run `context-sync setup` to configure Notion integration.',
+            text: ' Notion is not configured. Run `context-sync setup` to configure Notion integration.',
           }],
           isError: true,
         };
@@ -220,7 +220,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
           return {
             content: [{
               type: 'text',
-              text: '❌ No project specified and no current project set. Use set_workspace first or provide projectId.',
+              text: ' No project specified and no current project set. Use set_workspace first or provide projectId.',
             }],
             isError: true,
           };
@@ -232,7 +232,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
           return {
             content: [{
               type: 'text',
-              text: `❌ Project with ID "${projectId}" not found.`,
+              text: ` Project with ID "${projectId}" not found.`,
             }],
             isError: true,
           };
@@ -240,15 +240,15 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
 
         const page = await notionIntegration.createProjectDashboard(project);
         
-        let response = `✅ **Project Dashboard Created!**\n\n`;
-        response += `📊 **Project: ${project.name}**\n`;
-        response += `🔗 ${page.url}\n`;
-        response += `🆔 Page ID: ${page.id}\n\n`;
+        let response = ` **Project Dashboard Created!**\n\n`;
+        response += ` **Project: ${project.name}**\n`;
+        response += ` ${page.url}\n`;
+        response += ` Page ID: ${page.id}\n\n`;
         response += `The dashboard includes:\n`;
-        response += `• Project overview\n`;
-        response += `• Tech stack\n`;
-        response += `• Architecture notes\n`;
-        response += `• Creation & update timestamps\n`;
+        response += ` Project overview\n`;
+        response += ` Tech stack\n`;
+        response += ` Architecture notes\n`;
+        response += ` Creation & update timestamps\n`;
         
         return {
           content: [{ type: 'text', text: response }],
@@ -257,7 +257,7 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
         return {
           content: [{
             type: 'text',
-            text: `❌ **Failed to create dashboard**\n\nError: ${error.message}`,
+            text: ` **Failed to create dashboard**\n\nError: ${error.message}`,
           }],
           isError: true,
         };
@@ -265,3 +265,5 @@ export function createNotionHandlers(notionIntegration: NotionIntegration | null
     },
   };
 }
+
+

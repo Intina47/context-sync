@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Project Analyzers - Layer 2: Interpretation
  * Work on cached ProjectFiles data, no file system access
  */
@@ -463,3 +463,4 @@ export class DatabaseAnalyzer {
     return databases;
   }
 }
+

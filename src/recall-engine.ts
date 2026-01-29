@@ -1,5 +1,5 @@
-/**
- * Optimized Recall Engine
+﻿/**
+ * Recall Engine
  * The 80% impact tool - transforms raw context into actionable intelligence
  */
 
@@ -24,7 +24,7 @@ interface RecallSynthesis {
   decisions: ContextItem[];
   notes: ContextItem[];
   caveats: ContextItem[]; // AI mistakes, tech debt
-  relationships: Map<string, string[]>; // decision → affected files
+  relationships: Map<string, string[]>; // decision  affected files
   gaps: string[]; // Missing context warnings
   suggestions: string[]; // Concrete next actions
   freshness: {
@@ -35,7 +35,7 @@ interface RecallSynthesis {
   };
 }
 
-export class OptimizedRecallEngine {
+export class RecallEngine {
   private db: Database;
   private projectId: string;
 
@@ -299,7 +299,7 @@ export class OptimizedRecallEngine {
   }
 
   /**
-   * Build relationship graph (decisions → files, problems → constraints)
+   * Build relationship graph (decisions  files, problems  constraints)
    */
   private buildRelationships(context: ContextItem[]): Map<string, string[]> {
     const relationships = new Map<string, string[]>();
@@ -328,21 +328,21 @@ export class OptimizedRecallEngine {
     const hasProblems = context.some(c => c.type === 'problem');
 
     if (!hasActiveWork) {
-      gaps.push('⚠️ No active work tracked - what are you currently working on?');
+      gaps.push(' No active work tracked - what are you currently working on?');
     }
 
     if (!hasGoals) {
-      gaps.push('⚠️ No goals defined - what are you trying to achieve?');
+      gaps.push(' No goals defined - what are you trying to achieve?');
     }
 
     if (hasProblems && !hasConstraints) {
-      gaps.push('⚠️ Problems exist but no constraints documented - consider adding architectural constraints');
+      gaps.push(' Problems exist but no constraints documented - consider adding architectural constraints');
     }
 
     // Check for stale context
     const staleItems = context.filter(c => c.staleness === 'expired');
     if (staleItems.length > context.length / 2) {
-      gaps.push('⚠️ Most context is >1 week old - consider updating or archiving');
+      gaps.push(' Most context is >1 week old - consider updating or archiving');
     }
 
     return gaps;
@@ -442,7 +442,7 @@ export class OptimizedRecallEngine {
       // Notion integration: suggest documentation search
       if (this.mentionsDocumentation(work.content)) {
         const keywords = this.extractKeywords(work.content);
-        suggestions.push(`📚 Search Notion docs: notion action=search query="${keywords}"`);
+        suggestions.push(` Search Notion docs: notion action=search query="${keywords}"`);
       }
     }
 
@@ -451,14 +451,14 @@ export class OptimizedRecallEngine {
     if (recentDecisions.length > 0) {
       const decision = recentDecisions[0];
       if (this.mentionsArchitecture(decision.content)) {
-        suggestions.push(`📐 Find architecture docs: notion action=search query="architecture"`);
+        suggestions.push(` Find architecture docs: notion action=search query="architecture"`);
       }
     }
 
     // Based on constraints
     const constraints = context.filter(c => c.type === 'constraint');
     if (constraints.length > 0 && this.mentionsDocumentation(constraints[0].content)) {
-      suggestions.push(`📖 Check constraint documentation in Notion`);
+      suggestions.push(` Check constraint documentation in Notion`);
     }
 
     // Based on problems
@@ -469,7 +469,7 @@ export class OptimizedRecallEngine {
       // Suggest searching Notion for similar issues
       const keywords = this.extractKeywords(problems[0].content);
       if (keywords) {
-        suggestions.push(`🔍 Search past solutions: notion action=search query="${keywords}"`);
+        suggestions.push(` Search past solutions: notion action=search query="${keywords}"`);
       }
     }
 
@@ -532,3 +532,5 @@ export class OptimizedRecallEngine {
     return { fresh, recent, stale, expired };
   }
 }
+
+

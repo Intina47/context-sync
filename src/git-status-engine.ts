@@ -1,5 +1,5 @@
-/**
- * Optimized Git Status Engine
+﻿/**
+ * Git Status Engine
  * 
  * Layer 1: Fast git status with categorization
  * Layer 2: Impact analysis and change classification
@@ -15,7 +15,7 @@
 
 import simpleGit, { SimpleGit, StatusResult } from 'simple-git';
 import * as path from 'path';
-import { OptimizedReadFileEngine } from './optimized-readfile-engine.js';
+import { ReadFileEngine } from './read-file-engine.js';
 
 interface FileChange {
   path: string;
@@ -57,15 +57,15 @@ interface GitStatusResult {
   };
 }
 
-export class OptimizedGitStatusEngine {
+export class GitStatusEngine {
   private git: SimpleGit;
   private workspacePath: string;
-  private readFileEngine: OptimizedReadFileEngine;
+  private readFileEngine: ReadFileEngine;
 
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
     this.git = simpleGit(workspacePath);
-    this.readFileEngine = new OptimizedReadFileEngine(workspacePath);
+    this.readFileEngine = new ReadFileEngine(workspacePath);
   }
 
   /**
@@ -382,3 +382,4 @@ export class OptimizedGitStatusEngine {
     return extensions.some(ext => filePath.endsWith(ext));
   }
 }
+

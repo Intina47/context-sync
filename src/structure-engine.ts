@@ -1,5 +1,5 @@
-/**
- * Optimized Structure Engine
+﻿/**
+ * Structure Engine
  * 
  * Layer 1: Fast directory tree generation
  * Layer 2: Complexity analysis per directory
@@ -16,7 +16,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { OptimizedReadFileEngine } from './optimized-readfile-engine.js';
+import { ReadFileEngine } from './read-file-engine.js';
 
 interface DirectoryNode {
   name: string;
@@ -55,14 +55,14 @@ interface StructureResult {
   insights: string[];
 }
 
-export class OptimizedStructureEngine {
+export class StructureEngine {
   private workspacePath: string;
-  private readFileEngine: OptimizedReadFileEngine;
+  private readFileEngine: ReadFileEngine;
   private analysisCache: Map<string, DirectoryNode>;
 
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
-    this.readFileEngine = new OptimizedReadFileEngine(workspacePath);
+    this.readFileEngine = new ReadFileEngine(workspacePath);
     this.analysisCache = new Map();
   }
 
@@ -269,8 +269,8 @@ export class OptimizedStructureEngine {
     if (depth === 0) {
       result += `${node.name}/\n`;
     } else {
-      const connector = isLast ? '└── ' : '├── ';
-      const icon = node.type === 'directory' ? '📁 ' : '📄 ';
+      const connector = isLast ? ' ' : ' ';
+      const icon = node.type === 'directory' ? ' ' : ' ';
       
       let line = `${prefix}${connector}${icon}${node.name}`;
       
@@ -283,9 +283,9 @@ export class OptimizedStructureEngine {
             line += `, ${meta.totalLOC.toLocaleString()} LOC`;
           }
           if (meta.avgComplexity) {
-            const emoji = meta.avgComplexity === 'low' ? '🟢' : 
-                         meta.avgComplexity === 'medium' ? '🟡' : 
-                         meta.avgComplexity === 'high' ? '🟠' : '🔴';
+            const emoji = meta.avgComplexity === 'low' ? '' : 
+                         meta.avgComplexity === 'medium' ? '' : 
+                         meta.avgComplexity === 'high' ? '' : '';
             line += `, ${emoji} ${meta.avgComplexity}`;
           }
           line += ')';
@@ -300,7 +300,7 @@ export class OptimizedStructureEngine {
     }
 
     if (depth < maxDepth && node.children) {
-      const newPrefix = depth === 0 ? '' : prefix + (isLast ? '    ' : '│   ');
+      const newPrefix = depth === 0 ? '' : prefix + (isLast ? '    ' : '   ');
       
       for (let i = 0; i < node.children.length; i++) {
         const child = node.children[i];
@@ -465,7 +465,7 @@ export class OptimizedStructureEngine {
     // Test insights
     const hasTests = this.hasTestDirectory(node);
     if (!hasTests) {
-      insights.push('⚠️  No test directory detected - consider adding tests');
+      insights.push('  No test directory detected - consider adding tests');
     }
 
     // Architecture insights
@@ -551,3 +551,5 @@ export class OptimizedStructureEngine {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 }
+
+

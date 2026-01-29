@@ -1,4 +1,4 @@
-// Git Integration for Version Control Operations
+﻿// Git Integration for Version Control Operations
 
 import * as fs from 'fs';
 import * as path from 'path';

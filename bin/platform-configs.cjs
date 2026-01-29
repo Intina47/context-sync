@@ -7,7 +7,6 @@
 
 const path = require('path');
 const os = require('os');
-const fs = require('fs');
 
 // Platform configuration database with auto-detection and setup methods
 const PLATFORM_CONFIGS = {
@@ -18,6 +17,7 @@ const PLATFORM_CONFIGS = {
   claude: {
     name: 'Claude Desktop',
     mcpSupport: 'native',
+    enabled: true,
     detection: {
       // Check if Claude Desktop is installed
       paths: {
@@ -46,13 +46,9 @@ const PLATFORM_CONFIGS = {
         linux: path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json')
       },
       format: 'json',
-      structure: {
-        mcpServers: {
-          'context-sync': {
-            command: 'node',
-            args: ['{{packagePath}}']
-          }
-        }
+      adapter: {
+        kind: 'json',
+        containerKey: 'mcpServers'
       }
     }
   },
@@ -60,6 +56,7 @@ const PLATFORM_CONFIGS = {
   cursor: {
     name: 'Cursor IDE',
     mcpSupport: 'native',
+    enabled: true,
     detection: {
       // Check if Cursor is installed
       paths: {
@@ -88,14 +85,12 @@ const PLATFORM_CONFIGS = {
         linux: path.join(os.homedir(), '.cursor', 'mcp.json')
       },
       format: 'json',
-      structure: {
-        mcpServers: {
-          'context-sync': {
-            command: 'node',
-            args: ['{{packagePath}}'],
-            type: 'stdio'
-          }
-        }
+      adapter: {
+        kind: 'json',
+        containerKey: 'mcpServers'
+      },
+      serverOverrides: {
+        type: 'stdio'
       }
     }
   },
@@ -103,6 +98,7 @@ const PLATFORM_CONFIGS = {
   copilot: {
     name: 'GitHub Copilot (VS Code)',
     mcpSupport: 'extension',
+    enabled: true,
     detection: {
       // Check if VS Code is installed (required for Copilot)
       paths: {
@@ -137,15 +133,13 @@ const PLATFORM_CONFIGS = {
         linux: path.join(os.homedir(), '.config', 'Code', 'User', 'mcp.json')
       },
       format: 'json',
-      structure: {
-        servers: {
-          'context-sync': {
-            command: 'node',
-            args: ['{{packagePath}}'],
-            type: 'stdio'
-          }
-        },
-        inputs: []
+      adapter: {
+        kind: 'json',
+        containerKey: 'servers',
+        rootExtras: { inputs: [] }
+      },
+      serverOverrides: {
+        type: 'stdio'
       }
     }
   },
@@ -157,6 +151,7 @@ const PLATFORM_CONFIGS = {
   continue: {
     name: 'Continue.dev',
     mcpSupport: 'native',
+    enabled: true,
     detection: {
       // Continue can be detected via global config, workspace config, or VS Code extension
       paths: {
@@ -189,17 +184,7 @@ const PLATFORM_CONFIGS = {
       // Workspace config: .continue/mcpServers/*.yaml files (direct server definition)
       workspaceRelativePath: path.join('.continue', 'mcpServers'),
       format: 'continue-yaml',
-      // Workspace-level YAML structure (direct server definition, NOT nested)
-      workspaceStructure: {
-        name: 'Context Sync',
-        type: 'stdio',
-        command: 'npx',
-        args: ['-y', '@context-sync/server'],
-        env: {}
-      },
-      // Global config structure (part of mcpServers array)
-      globalStructure: {
-        name: 'Context Sync',
+      serverOverrides: {
         type: 'stdio',
         command: 'npx',
         args: ['-y', '@context-sync/server'],
@@ -211,6 +196,7 @@ const PLATFORM_CONFIGS = {
   zed: {
     name: 'Zed Editor',
     mcpSupport: 'native',
+    enabled: true,
     detection: {
       paths: {
         darwin: [
@@ -236,15 +222,13 @@ const PLATFORM_CONFIGS = {
         linux: path.join(os.homedir(), '.config', 'zed', 'settings.json')
       },
       format: 'json-merge',
-      structure: {
-        context_servers: {
-          'context-sync': {
-            source: 'custom',
-            command: 'node',
-            args: ['{{packagePath}}'],
-            env: {}
-          }
-        }
+      adapter: {
+        kind: 'json',
+        containerKey: 'context_servers'
+      },
+      serverOverrides: {
+        source: 'custom',
+        env: {}
       }
     }
   },
@@ -252,6 +236,7 @@ const PLATFORM_CONFIGS = {
   windsurf: {
     name: 'Windsurf by Codeium',
     mcpSupport: 'native',
+    enabled: true,
     detection: {
       paths: {
         darwin: [
@@ -276,13 +261,9 @@ const PLATFORM_CONFIGS = {
         linux: path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json')
       },
       format: 'json',
-      structure: {
-        mcpServers: {
-          'context-sync': {
-            command: 'node',
-            args: ['{{packagePath}}']
-          }
-        }
+      adapter: {
+        kind: 'json',
+        containerKey: 'mcpServers'
       }
     }
   },
@@ -290,6 +271,7 @@ const PLATFORM_CONFIGS = {
   codeium: {
     name: 'Codeium',
     mcpSupport: 'extension',
+    enabled: true,
     detection: {
       // Codeium is usually a VS Code extension
       paths: {
@@ -307,16 +289,10 @@ const PLATFORM_CONFIGS = {
         linux: path.join(os.homedir(), '.config', 'Code', 'User', 'settings.json')
       },
       format: 'json-setting',
-      settingKey: 'codeium.mcp',
-      structure: {
-        'codeium.mcp': {
-          servers: {
-            'context-sync': {
-              command: 'node',
-              args: ['{{packagePath}}']
-            }
-          }
-        }
+      adapter: {
+        kind: 'json',
+        flatKey: 'codeium.mcp',
+        containerKey: 'servers'
       }
     }
   },
@@ -324,6 +300,7 @@ const PLATFORM_CONFIGS = {
   tabnine: {
     name: 'TabNine',
     mcpSupport: 'extension',
+    enabled: true,
     detection: {
       // TabNine has both standalone and extension versions
       paths: {
@@ -350,44 +327,114 @@ const PLATFORM_CONFIGS = {
         linux: path.join(os.homedir(), '.config', 'TabNine', 'config.json')
       },
       format: 'json',
-      structure: {
-        mcp: {
-          servers: {
-            'context-sync': {
-              command: 'node',
-              args: ['{{packagePath}}']
-            }
-          }
-        }
+      adapter: {
+        kind: 'json',
+        containerKey: 'mcp.servers'
       }
     }
   },
 
   // ============================================================================
-  // API PLATFORMS (Custom Integration Required)
+  // CLI/IDE PLATFORMS (New)
   // ============================================================================
 
-  ollama: {
-    name: 'Ollama',
-    mcpSupport: 'custom',
+  codex: {
+    name: 'OpenAI Codex CLI',
+    mcpSupport: 'cli',
+    enabled: true,
     detection: {
-      // Check if Ollama is installed
-      command: 'ollama --version',
       paths: {
-        darwin: ['/usr/local/bin/ollama', '/opt/homebrew/bin/ollama'],
-        win32: [path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe')],
-        linux: ['/usr/bin/ollama', '/usr/local/bin/ollama']
+        darwin: [path.join(os.homedir(), '.codex', 'config.toml')],
+        win32: [path.join(os.homedir(), '.codex', 'config.toml')],
+        linux: [path.join(os.homedir(), '.codex', 'config.toml')]
       }
     },
     config: {
-      // Ollama doesn't use MCP directly, but we can create a bridge
-      note: 'Ollama requires custom bridge integration - no direct MCP support',
-      bridgeRequired: true
+      paths: {
+        darwin: path.join(os.homedir(), '.codex', 'config.toml'),
+        win32: path.join(os.homedir(), '.codex', 'config.toml'),
+        linux: path.join(os.homedir(), '.codex', 'config.toml')
+      },
+      format: 'toml',
+      tomlTableKey: 'mcp_servers.context-sync',
+      omitName: true,
+      serverOverrides: {
+        command: 'npx',
+        args: ['-y', '@context-sync/server']
+      }
     }
-  }
+  },
 
-  // Note: OpenAI API, Claude API, Gemini, CodeWhisperer are API-only
-  // and don't have local installations to detect or configure
+  'claude-code': {
+    name: 'Claude Code',
+    mcpSupport: 'cli',
+    enabled: true,
+    detection: {
+      command: 'claude mcp list',
+      paths: {
+        darwin: [path.join(os.homedir(), '.claude', 'mcp_servers.json')],
+        win32: [path.join(os.homedir(), '.claude', 'mcp_servers.json')],
+        linux: [path.join(os.homedir(), '.claude', 'mcp_servers.json')]
+      }
+    },
+    config: {
+      paths: {
+        darwin: path.join(os.homedir(), '.claude', 'mcp_servers.json'),
+        win32: path.join(os.homedir(), '.claude', 'mcp_servers.json'),
+        linux: path.join(os.homedir(), '.claude', 'mcp_servers.json')
+      },
+      format: 'json',
+      adapter: {
+        kind: 'json',
+        containerKey: 'mcpServers'
+      },
+      serverOverrides: {
+        command: 'npx',
+        args: ['-y', '@context-sync/server']
+      }
+    }
+  },
+
+  antigravity: {
+    name: 'Google Antigravity',
+    mcpSupport: 'native',
+    enabled: true,
+    detection: {
+      paths: {
+        darwin: [path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json')],
+        win32: [path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json')],
+        linux: [path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json')]
+      }
+    },
+    config: {
+      paths: {
+        darwin: path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json'),
+        win32: path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json'),
+        linux: path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json')
+      },
+      format: 'json',
+      adapter: {
+        kind: 'json',
+        containerKey: 'mcpServers'
+      },
+      serverOverrides: {
+        command: 'npx',
+        args: ['-y', '@context-sync/server']
+      }
+    }
+  },
+
+  // ============================================================================
+  // TODO PLATFORMS (Stubs - configuration pending)
+  // ============================================================================
+
+  'continue-dev': {
+    name: 'Continue.dev (App)',
+    mcpSupport: 'unknown',
+    enabled: false,
+    todo: true,
+    note: 'TODO: clarify if distinct from Continue extension and add config paths'
+  }
 };
 
 module.exports = PLATFORM_CONFIGS;

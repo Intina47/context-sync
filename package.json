@@ -1,12 +1,12 @@
 {
   "name": "@context-sync/server",
-  "version": "2.0.0",
+  "version": "1.0.5",
   "description": "Universal Context layer McP server",
   "type": "module",
-  "main": "dist/index-v2.js",
+  "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "context-sync": "./dist/index-v2.js",
+    "context-sync": "./dist/index.js",
     "context-sync-setup": "./bin/setup.cjs"
   },
   "scripts": {
@@ -19,9 +19,7 @@
     "start": "node dist/index.js",
     "watch": "tsx watch src/index.ts",
     "test": "node -e \"console.log('✅ Context Sync v1.0.3 - All systems ready!')\"",
-    "benchmark": "tsx test-context-quality.ts",
-    "quality": "npm run benchmark",
-    "prepublishOnly": "npm run build && npm run benchmark"
+    "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
     "Context Sync",
@@ -81,7 +79,7 @@
     "@notionhq/client": "^5.4.0",
     "better-sqlite3": "^11.0.0",
     "chokidar": "^4.0.3",
-    "commander": "^12.0.0",
+    "commander": "^11.0.5",
     "js-yaml": "^4.1.1",
     "readline-sync": "^1.4.10",
     "simple-git": "^3.30.0"
@@ -101,6 +99,10 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "overrides": {
+    "detect-libc": "2.1.2",
+    "http-errors": "1.8.1"
   },
   "os": [
     "darwin",

@@ -1,6 +1,6 @@
-/**
- * Optimized Project Detector V2
- * Uses 3-layer architecture: Scanner → Analyzer → Cache
+﻿/**
+ * Project Profiler
+ * Uses 3-layer architecture: Scanner -> Analyzer -> Cache
  * 5-10x faster first scan, 160x faster cached
  */
 
@@ -42,7 +42,7 @@ export interface ProjectAnalysis {
   scanTimeMs: number;
 }
 
-export class OptimizedProjectDetector {
+export class ProjectProfiler {
   /**
    * Analyze a project (with caching)
    */
@@ -158,3 +158,4 @@ export class OptimizedProjectDetector {
     return Array.from(stack);
   }
 }
+

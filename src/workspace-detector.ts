@@ -1,4 +1,4 @@
-// IDE Workspace Detection and File Reading
+﻿// IDE Workspace Detection and File Reading
 
 import * as fs from 'fs';
 import { promises as fsAsync } from 'fs';
@@ -55,7 +55,7 @@ export class WorkspaceDetector {
       console.error('Error auto-detecting project:', error);
     });
     
-    console.error(`📂 Workspace set: ${workspacePath}`);
+    console.error(` Workspace set: ${workspacePath}`);
   }
 
   /**
@@ -85,20 +85,21 @@ export class WorkspaceDetector {
     });
 
     this.fileWatcher
-      .on('change', (filePath) => {
+      .on('change', (filePath: string) => {
         this.invalidateFileCache(filePath);
       })
-      .on('add', (filePath) => {
+      .on('add', (filePath: string) => {
         this.invalidateFileCache(filePath);
       })
-      .on('unlink', (filePath) => {
+      .on('unlink', (filePath: string) => {
         this.invalidateFileCache(filePath);
       })
-      .on('error', (error) => {
-        console.error('File watcher error:', error);
+      .on('error', (error: unknown) => {
+        const message = error instanceof Error ? error : String(error);
+        console.error('File watcher error:', message);
       });
 
-    console.error('📁 File watcher active for cache invalidation');
+    console.error(' File watcher active for cache invalidation');
   }
 
   /**
@@ -108,7 +109,7 @@ export class WorkspaceDetector {
     // Remove from file cache
     if (this.fileCache.has(filePath)) {
       this.fileCache.delete(filePath);
-      console.error(`🔄 Cache invalidated: ${path.relative(this.currentWorkspace || '', filePath)}`);
+      console.error(` Cache invalidated: ${path.relative(this.currentWorkspace || '', filePath)}`);
     }
 
     // Also remove any related cached files (for relative path variations)
@@ -152,12 +153,12 @@ export class WorkspaceDetector {
       const stats = await fsAsync.stat(fullPath);
       
       if (stats.size > this.MAX_FILE_SIZE) {
-        console.error(`⚠️  File too large (${(stats.size / 1024 / 1024).toFixed(1)}MB), skipping: ${relativePath}`);
+        console.error(`  File too large (${(stats.size / 1024 / 1024).toFixed(1)}MB), skipping: ${relativePath}`);
         return null;
       }
       
       if (stats.size > this.WARN_FILE_SIZE) {
-        console.error(`⚠️  Large file detected (${(stats.size / 1024 / 1024).toFixed(1)}MB): ${relativePath}`);
+        console.error(`  Large file detected (${(stats.size / 1024 / 1024).toFixed(1)}MB): ${relativePath}`);
       }
       
       const content = await fsAsync.readFile(fullPath, 'utf8');
@@ -215,12 +216,12 @@ export class WorkspaceDetector {
       for (let index = 0; index < filtered.length; index++) {
         const entry = filtered[index];
         const isLast = index === filtered.length - 1;
-        const marker = isLast ? '└── ' : '├── ';
+        const marker = isLast ? ' ' : ' ';
         const fullPath = path.join(dirPath, entry.name);
 
         if (entry.isDirectory()) {
-          output.push(`${prefix}${marker}📁 ${entry.name}/`);
-          const newPrefix = prefix + (isLast ? '    ' : '│   ');
+          output.push(`${prefix}${marker} ${entry.name}/`);
+          const newPrefix = prefix + (isLast ? '    ' : '   ');
           await this.buildStructure(fullPath, newPrefix, depth + 1, maxDepth, output);
         } else {
           const icon = this.getFileIcon(entry.name);
@@ -377,20 +378,20 @@ export class WorkspaceDetector {
     const ext = path.extname(filename).toLowerCase();
     
     const iconMap: Record<string, string> = {
-      '.ts': '📘',
-      '.tsx': '⚛️',
-      '.js': '📜',
-      '.jsx': '⚛️',
-      '.json': '📋',
-      '.md': '📝',
-      '.css': '🎨',
-      '.html': '🌐',
-      '.py': '🐍',
-      '.rs': '🦀',
-      '.go': '🔷',
+      '.ts': '',
+      '.tsx': '',
+      '.js': '',
+      '.jsx': '',
+      '.json': '',
+      '.md': '',
+      '.css': '',
+      '.html': '',
+      '.py': '',
+      '.rs': '',
+      '.go': '',
     };
 
-    return iconMap[ext] || '📄';
+    return iconMap[ext] || '';
   }
 
   /**
@@ -445,7 +446,8 @@ export class WorkspaceDetector {
     if (this.fileWatcher) {
       this.fileWatcher.close();
       this.fileWatcher = null;
-      console.error('📁 File watcher disposed');
+      console.error(' File watcher disposed');
     }
   }
 }
+

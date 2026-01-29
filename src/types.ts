@@ -1,4 +1,4 @@
-// Core types for Context Sync
+﻿// Core types for Context Sync
 
 export interface ProjectContext {
   id: string;
@@ -29,50 +29,10 @@ export interface Decision {
   timestamp: Date;
 }
 
-export interface Learning {
-  id: string;
-  projectId: string;
-  insight: string;
-  context?: string;
-  confidence?: number;
-  timestamp: Date;
-}
-
-export interface ProblemSolution {
-  id: string;
-  projectId: string;
-  problem: string;
-  solution: string;
-  confidence?: number;
-  timestamp: Date;
-}
-
-export interface Comparison {
-  id: string;
-  projectId: string;
-  optionA: string;
-  optionB: string;
-  winner?: string;
-  reasoning?: string;
-  confidence?: number;
-  timestamp: Date;
-}
-
-export interface AntiPattern {
-  id: string;
-  projectId: string;
-  description: string;
-  why: string;
-  confidence?: number;
-  timestamp: Date;
-}
-
 export interface ContextSummary {
   project: ProjectContext;
   recentDecisions: Decision[];
   recentConversations: Conversation[];
-  recentLearnings?: Learning[];
-  recentProblems?: ProblemSolution[];
   keyPoints: string[];
 }
 
@@ -89,31 +49,10 @@ export interface StorageInterface {
   // Conversations
   addConversation(conv: Omit<Conversation, 'id' | 'timestamp'>): Conversation;
   getRecentConversations(projectId: string, limit?: number): Conversation[];
-  streamConversations(projectId: string, limit?: number): Generator<Conversation>;
   
   // Decisions
   addDecision(decision: Omit<Decision, 'id' | 'timestamp'>): Decision;
   getDecisions(projectId: string): Decision[];
-  streamDecisions(projectId: string, limit?: number): Generator<Decision>;
-  
-  // Learnings
-  addLearning(learning: Omit<Learning, 'id' | 'timestamp'>): Learning;
-  getLearnings(projectId: string, limit?: number): Learning[];
-  
-  // Problem Solutions
-  addProblemSolution(problem: Omit<ProblemSolution, 'id' | 'timestamp'>): ProblemSolution;
-  getProblemSolutions(projectId: string, limit?: number): ProblemSolution[];
-  
-  // Comparisons
-  addComparison(comparison: Omit<Comparison, 'id' | 'timestamp'>): Comparison;
-  getComparisons(projectId: string, limit?: number): Comparison[];
-  
-  // Anti-patterns
-  addAntiPattern(antiPattern: Omit<AntiPattern, 'id' | 'timestamp'>): AntiPattern;
-  getAntiPatterns(projectId: string, limit?: number): AntiPattern[];
-  
-  // Projects streaming
-  streamAllProjects(): Generator<ProjectContext>;
   
   // Context
   getContextSummary(projectId: string): ContextSummary;

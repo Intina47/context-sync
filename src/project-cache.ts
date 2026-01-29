@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Project Cache - Layer 3: Optimization
  * Intelligent caching with invalidation based on git HEAD + file mtimes
  */
@@ -152,3 +152,4 @@ export class ProjectCache {
 
 // Global cache instance
 export const projectCache = new ProjectCache();
+

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Git Hook Manager
  * Automatically installs git hooks to capture development events
  * Auto-remembers: commits, pushes, merges, branch switches
@@ -202,7 +202,7 @@ try {
   );
 
   db.close();
-  console.log('✅ Context Sync: Captured commit ' + commitHash.substring(0, 7));
+  console.log(' Context Sync: Captured commit ' + commitHash.substring(0, 7));
 } catch (error) {
   // Fail silently to not interrupt git workflow
   console.error('Context Sync hook error:', error.message);
@@ -268,7 +268,7 @@ try {
   );
 
   db.close();
-  console.log('✅ Context Sync: Tracked push to ' + remote + '/' + branch);
+  console.log(' Context Sync: Tracked push to ' + remote + '/' + branch);
 } catch (error) {
   console.error('Context Sync hook error:', error.message);
 }
@@ -332,7 +332,7 @@ try {
   );
 
   db.close();
-  console.log('✅ Context Sync: Captured merge ' + fromBranch + ' → ' + branch);
+  console.log(' Context Sync: Captured merge ' + fromBranch + '  ' + branch);
 } catch (error) {
   console.error('Context Sync hook error:', error.message);
 }
@@ -412,7 +412,7 @@ try {
   );
 
   db.close();
-  console.log('✅ Context Sync: Tracked branch switch ' + prevBranch + ' → ' + newBranch);
+  console.log(' Context Sync: Tracked branch switch ' + prevBranch + '  ' + newBranch);
 } catch (error) {
   console.error('Context Sync hook error:', error.message);
 }
@@ -420,3 +420,5 @@ try {
 `;
   }
 }
+
+

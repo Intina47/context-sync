@@ -1,5 +1,5 @@
-/**
- * Optimized Remember Engine
+﻿/**
+ * Remember Engine
  * Smart context storage with auto-detection, deduplication, and validation
  * Auto-enriches with git context AND file context (complexity, imports, relationships)
  */
@@ -7,7 +7,7 @@
 import type { Database } from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import simpleGit from 'simple-git';
-import { OptimizedReadFileEngine } from './optimized-readfile-engine.js';
+import { ReadFileEngine } from './read-file-engine.js';
 
 interface RememberInput {
   type: 'active_work' | 'constraint' | 'problem' | 'goal' | 'decision' | 'note' | 'caveat';
@@ -36,17 +36,17 @@ interface RememberResult {
   };
 }
 
-export class OptimizedRememberEngine {
+export class RememberEngine {
   private db: Database;
   private projectId: string;
   private projectPath: string;
-  private readFileEngine: OptimizedReadFileEngine;
+  private readFileEngine: ReadFileEngine;
 
   constructor(db: Database, projectId: string, projectPath: string) {
     this.db = db;
     this.projectId = projectId;
     this.projectPath = projectPath;
-    this.readFileEngine = new OptimizedReadFileEngine(projectPath);
+    this.readFileEngine = new ReadFileEngine(projectPath);
   }
 
   /**
@@ -102,7 +102,7 @@ export class OptimizedRememberEngine {
           ...status.modified,
           ...status.created,
           ...status.deleted,
-          ...status.renamed.map(r => r.to)
+          ...status.renamed.map((entry: { to: string }) => entry.to)
         ],
         stagedFiles: status.staged,
         lastCommit: log.latest?.message || 'No commits'
@@ -594,3 +594,4 @@ export class OptimizedRememberEngine {
     };
   }
 }
+

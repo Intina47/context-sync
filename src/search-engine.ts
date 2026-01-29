@@ -1,5 +1,5 @@
-/**
- * Optimized Search Engine
+﻿/**
+ * Search Engine
  * 
  * Layer 1: Fast search with relevance scoring
  * Layer 2: Semantic ranking based on context
@@ -15,7 +15,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { OptimizedReadFileEngine } from './optimized-readfile-engine.js';
+import { ReadFileEngine } from './read-file-engine.js';
 
 interface SearchMatch {
   file: string;
@@ -43,14 +43,14 @@ interface SearchResult {
   };
 }
 
-export class OptimizedSearchEngine {
+export class SearchEngine {
   private workspacePath: string;
-  private readFileEngine: OptimizedReadFileEngine;
+  private readFileEngine: ReadFileEngine;
   private fileCache: Map<string, { mtime: number; content: string }>;
 
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
-    this.readFileEngine = new OptimizedReadFileEngine(workspacePath);
+    this.readFileEngine = new ReadFileEngine(workspacePath);
     this.fileCache = new Map();
   }
 
@@ -101,7 +101,7 @@ export class OptimizedSearchEngine {
         matchType = 'fuzzy';
         score = 60;
       }
-      // Fuzzy match (initials, e.g., "oce" matches "optimized-recall-engine")
+      // Fuzzy match (initials, e.g., "re" matches "recall-engine")
       else if (this.fuzzyMatch(searchFileName, searchQuery)) {
         matchType = 'fuzzy';
         score = 40;
@@ -452,3 +452,4 @@ export class OptimizedSearchEngine {
     return filePath.includes(pattern);
   }
 }
+

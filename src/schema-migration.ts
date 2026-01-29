@@ -1,7 +1,7 @@
-/**
- * V2 Migration Engine
- * Safely migrates v1 context data to v2 schema without data loss
- * Runs automatically on first v2 startup
+﻿/**
+ * Schema Migration Engine
+ * Safely migrates v1 context data to the current schema without data loss
+ * Runs automatically on first startup
  */
 
 import Database from 'better-sqlite3';
@@ -16,7 +16,7 @@ interface MigrationResult {
   backupPath?: string;
 }
 
-export class V2Migrator {
+export class SchemaMigrator {
   private db: Database.Database;
   private backupDb?: Database.Database;
 
@@ -28,18 +28,18 @@ export class V2Migrator {
    * Check if migration is needed
    */
   needsMigration(): boolean {
-    // Check if v1 tables have data but v2 tables are empty
+    // Check if v1 tables have data but schema tables are empty
     const v1HasData = this.hasV1Data();
-    const v2IsEmpty = this.isV2Empty();
+    const schemaIsEmpty = this.isSchemaEmpty();
     
-    return v1HasData && v2IsEmpty;
+    return v1HasData && schemaIsEmpty;
   }
 
   /**
    * Perform safe migration with backup (synchronous)
    */
   migrateSync(): MigrationResult {
-    console.log('🔄 Starting v1 → v2 migration...\n');
+    console.log(' Starting v1  schema migration...\n');
 
     const result: MigrationResult = {
       success: true,
@@ -51,62 +51,62 @@ export class V2Migrator {
 
     try {
       // 1. Create backup
-      console.log('📦 Creating backup...');
+      console.log(' Creating backup...');
       const backupPath = this.createBackup();
       result.backupPath = backupPath;
-      console.log(`✅ Backup created: ${backupPath}\n`);
+      console.log(` Backup created: ${backupPath}\n`);
 
       // 2. Start transaction for atomic migration
       this.db.exec('BEGIN TRANSACTION');
 
-      // 3. Migrate decisions → decisions (enhanced with metadata)
-      console.log('📝 Migrating decisions...');
+      // 3. Migrate decisions  decisions (enhanced with metadata)
+      console.log(' Migrating decisions...');
       const decisionCount = this.migrateDecisions();
       result.recordsCopied += decisionCount;
       result.migratedTables.push('decisions');
-      console.log(`✅ Migrated ${decisionCount} decisions\n`);
+      console.log(` Migrated ${decisionCount} decisions\n`);
 
-      // 4. Migrate conversations → notes (as general context)
-      console.log('💬 Migrating conversations to notes...');
+      // 4. Migrate conversations  notes (as general context)
+      console.log(' Migrating conversations to notes...');
       const conversationCount = this.migrateConversationsToNotes();
       result.recordsCopied += conversationCount;
-      result.migratedTables.push('conversations → notes');
-      console.log(`✅ Migrated ${conversationCount} conversations\n`);
+      result.migratedTables.push('conversations  notes');
+      console.log(` Migrated ${conversationCount} conversations\n`);
 
-      // 5. Migrate learnings → notes (as insights)
-      console.log('💡 Migrating learnings to notes...');
+      // 5. Migrate learnings  notes (as insights)
+      console.log(' Migrating learnings to notes...');
       const learningCount = this.migrateLearningsToNotes();
       result.recordsCopied += learningCount;
-      result.migratedTables.push('learnings → notes');
-      console.log(`✅ Migrated ${learningCount} learnings\n`);
+      result.migratedTables.push('learnings  notes');
+      console.log(` Migrated ${learningCount} learnings\n`);
 
-      // 6. Migrate problem_solutions → problems (with solutions as resolution)
-      console.log('🔧 Migrating problem solutions...');
+      // 6. Migrate problem_solutions  problems (with solutions as resolution)
+      console.log(' Migrating problem solutions...');
       const problemCount = this.migrateProblemSolutions();
       result.recordsCopied += problemCount;
-      result.migratedTables.push('problem_solutions → problems');
-      console.log(`✅ Migrated ${problemCount} problem solutions\n`);
+      result.migratedTables.push('problem_solutions  problems');
+      console.log(` Migrated ${problemCount} problem solutions\n`);
 
-      // 7. Migrate comparisons → decisions (as decision rationale)
-      console.log('⚖️ Migrating comparisons to decisions...');
+      // 7. Migrate comparisons  decisions (as decision rationale)
+      console.log(' Migrating comparisons to decisions...');
       const comparisonCount = this.migrateComparisons();
       result.recordsCopied += comparisonCount;
-      result.migratedTables.push('comparisons → decisions');
-      console.log(`✅ Migrated ${comparisonCount} comparisons\n`);
+      result.migratedTables.push('comparisons  decisions');
+      console.log(` Migrated ${comparisonCount} comparisons\n`);
 
-      // 8. Migrate anti_patterns → constraints (as "don't do this" rules)
-      console.log('🚫 Migrating anti-patterns to constraints...');
+      // 8. Migrate anti_patterns  constraints (as "don't do this" rules)
+      console.log(' Migrating anti-patterns to constraints...');
       const antiPatternCount = this.migrateAntiPatterns();
       result.recordsCopied += antiPatternCount;
-      result.migratedTables.push('anti_patterns → constraints');
-      console.log(`✅ Migrated ${antiPatternCount} anti-patterns\n`);
+      result.migratedTables.push('anti_patterns  constraints');
+      console.log(` Migrated ${antiPatternCount} anti-patterns\n`);
 
-      // 9. Migrate todos → active_work (with status mapping)
-      console.log('✅ Migrating todos to active work...');
+      // 9. Migrate todos  active_work (with status mapping)
+      console.log(' Migrating todos to active work...');
       const todoCount = this.migrateTodos();
       result.recordsCopied += todoCount;
-      result.migratedTables.push('todos → active_work');
-      console.log(`✅ Migrated ${todoCount} todos\n`);
+      result.migratedTables.push('todos  active_work');
+      console.log(` Migrated ${todoCount} todos\n`);
 
       // 10. Commit transaction
       this.db.exec('COMMIT');
@@ -114,9 +114,9 @@ export class V2Migrator {
       // 10. Mark migration as complete
       this.markMigrationComplete();
 
-      console.log('✅ Migration completed successfully!');
-      console.log(`📊 Total records migrated: ${result.recordsCopied}`);
-      console.log(`💾 Backup available at: ${backupPath}\n`);
+      console.log(' Migration completed successfully!');
+      console.log(` Total records migrated: ${result.recordsCopied}`);
+      console.log(` Backup available at: ${backupPath}\n`);
 
       return result;
 
@@ -128,7 +128,7 @@ export class V2Migrator {
 
       result.success = false;
       result.errors.push(error.message);
-      console.error('❌ Migration failed:', error.message);
+      console.error(' Migration failed:', error.message);
       
       return result;
     }
@@ -177,16 +177,16 @@ export class V2Migrator {
   }
 
   /**
-   * Check if v2 tables are empty (fresh install or needs migration)
+   * Check if schema tables are empty (fresh install or needs migration)
    */
-  private isV2Empty(): boolean {
-    const v2Tables = ['active_work', 'constraints', 'problems', 'goals', 'notes'];
+  private isSchemaEmpty(): boolean {
+    const schemaTables = ['active_work', 'constraints', 'problems', 'goals', 'notes'];
     
-    for (const table of v2Tables) {
+    for (const table of schemaTables) {
       try {
         const result = this.db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get() as { count: number };
         if (result.count > 0) {
-          return false; // v2 already has data
+          return false; // schema already has data
         }
       } catch {
         // Table doesn't exist
@@ -198,11 +198,11 @@ export class V2Migrator {
   }
 
   /**
-   * Migrate decisions (v1 → v2 schema is compatible, just enhance)
+   * Migrate decisions (v1  schema is compatible, just enhance)
    */
   private migrateDecisions(): number {
     // V1 decisions table structure: id, project_id, type, description, reasoning, timestamp
-    // V2 decisions table is the same, no changes needed
+    // Decisions table is the same, no changes needed
     // But we can check if any decisions exist and are already in the right format
     
     const existing = this.db.prepare('SELECT COUNT(*) as count FROM decisions').get() as { count: number };
@@ -257,7 +257,7 @@ export class V2Migrator {
     `);
 
     for (const learning of learnings as any[]) {
-      const content = `💡 ${learning.insight}${learning.context ? `\n\nContext: ${learning.context}` : ''}`;
+      const content = ` ${learning.insight}${learning.context ? `\n\nContext: ${learning.context}` : ''}`;
       const tags = JSON.stringify(['learning', 'insight', `confidence-${learning.confidence || 'medium'}`]);
       
       insertNote.run(
@@ -380,7 +380,7 @@ export class V2Migrator {
 
   /**
    * Migrate todos to active_work
-   * Maps todo statuses: pending/in_progress → active, completed → completed
+   * Maps todo statuses: pending/in_progress  active, completed  completed
    */
   private migrateTodos(): number {
     // Check if todos table exists
@@ -455,7 +455,7 @@ export class V2Migrator {
       );
       
       INSERT INTO migration_history (id, version, completed_at)
-      VALUES ('v1-to-v2', '2.0.0', ${Date.now()});
+      VALUES ('v1-to-v2', '1.0.5', ${Date.now()});
     `);
   }
 
@@ -466,7 +466,7 @@ export class V2Migrator {
     try {
       const result = db.prepare(`
         SELECT * FROM migration_history 
-        WHERE version = '2.0.0'
+        WHERE version = '1.0.5'
       `).get();
       
       return !!result;
@@ -475,3 +475,5 @@ export class V2Migrator {
     }
   }
 }
+
+
