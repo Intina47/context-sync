@@ -1,5 +1,8 @@
 # Release notes
 
+## Unreleased
+- Added a centralized news pipeline configuration with new tech-news sources and a Product Hunt top-5 launches section.
+
 This release is a major v2-focused cleanup. It removes legacy v1 tooling and narrows the surface area to the v2 core server, engines, storage, Notion, and git hooks.
 
 ## Highlights
