@@ -1,3 +1,8 @@
+﻿/**
+ * Context Sync Server - Core Simplification
+ * 8 essential tools, everything else is internal
+ */
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -5,108 +10,84 @@ import {
   ListToolsRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { Storage } from './storage.js';
 import { ProjectDetector } from './project-detector.js';
 import { WorkspaceDetector } from './workspace-detector.js';
-import { FileWriter } from './file-writer.js';
-import { FileSearcher } from './file-searcher.js';
+import { CORE_TOOLS } from './core-tools.js';
+import type { ProjectIdentity, RememberInput, RecallResult } from './context-layers.js';
+import { ProjectProfiler } from './project-profiler.js';
+import { RecallEngine } from './recall-engine.js';
+import { RememberEngine } from './remember-engine.js';
+import { ReadFileEngine } from './read-file-engine.js';
+import { SearchEngine } from './search-engine.js';
+import { StructureEngine } from './structure-engine.js';
+import { GitStatusEngine } from './git-status-engine.js';
+import { GitContextEngine } from './git-context-engine.js';
 import { GitIntegration } from './git-integration.js';
-import { DependencyAnalyzer } from './dependency-analyzer.js';
-import { CallGraphAnalyzer } from './call-graph-analyzer.js';  
-import { TypeAnalyzer } from './type-analyzer.js';
-import { PlatformSync, type AIPlatform } from './platform-sync.js';   
-import { PLATFORM_REGISTRY, type PlatformMetadata } from './platform-registry.js';
-import { TodoManager } from './todo-manager.js';
-import { createTodoHandlers } from './todo-handlers.js';
-import { DatabaseMigrator } from './database-migrator.js';
-import { readFileSync } from 'fs';
-import { join, dirname, basename } from 'path';
-import { fileURLToPath } from 'url';
-import { PathNormalizer } from './path-normalizer.js';
-import { PerformanceMonitor } from './performance-monitor.js';
-import { todoToolDefinitions } from './todo-tools.js';
-import { ContextAnalyzer } from './context-analyzer.js';
-import type { ProjectContext } from './types.js';
-import * as fs from 'fs';
 import { NotionIntegration } from './notion-integration.js';
 import { createNotionHandlers } from './notion-handlers.js';
-import { AnnouncementTracker } from './announcement-tracker.js';
+import { SchemaMigrator } from './schema-migration.js';
+import { randomUUID } from 'crypto';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import * as os from 'os';
-import { promises as fsPromises } from 'fs';
+
+type PromptRequest = { params: { name: string } };
+type ResourceRequest = { params: { uri: string } };
+type ToolCallRequest = { params: { name: string; arguments?: unknown } };
 
 export class ContextSyncServer {
   private server: Server;
   private storage: Storage;
   private projectDetector: ProjectDetector;
   private workspaceDetector: WorkspaceDetector;
-  private fileWriter: FileWriter;
-  private fileSearcher: FileSearcher;
-  private gitIntegration: GitIntegration | null = null;
-  // Lazy-loaded analyzers for better performance
-  private _dependencyAnalyzer: DependencyAnalyzer | null = null; 
-  private _callGraphAnalyzer: CallGraphAnalyzer | null = null;
-  private _typeAnalyzer: TypeAnalyzer | null = null;
-  private platformSync: PlatformSync;
-  private todoManager: TodoManager;
-  private todoHandlers: ReturnType<typeof createTodoHandlers>;
   private notionIntegration: NotionIntegration | null = null;
-  private notionHandlers: ReturnType<typeof createNotionHandlers> | null = null;
-  private announcementTracker: AnnouncementTracker;
+  private notionHandlers: ReturnType<typeof createNotionHandlers>;
   
-  // ✅ NEW: Session-specific current project
+  // Session-specific current project
   private currentProjectId: string | null = null;
 
   constructor(storagePath?: string) {
-
     this.storage = new Storage(storagePath);
-    
-    // Check for migration prompt on startup (non-blocking)
-    this.checkStartupMigration();
-    
     this.projectDetector = new ProjectDetector(this.storage);
     this.workspaceDetector = new WorkspaceDetector(this.storage, this.projectDetector);
-    this.fileWriter = new FileWriter(this.workspaceDetector, this.storage);
-    this.fileSearcher = new FileSearcher(this.workspaceDetector);
-    this.announcementTracker = new AnnouncementTracker();
+
+    // Initialize with null integration (will be set up if config exists)
+    this.notionHandlers = createNotionHandlers(null);
+
+    // Initialize Notion integration (optional - gracefully handles missing config)
+    this.initializeNotion();
+
+    // Run v1  schema migration if needed (safe, automatic, with backup)
+    this.runMigrationIfNeeded();
 
     this.server = new Server(
       {
         name: 'context-sync',
-        version: '1.0.0',
+        version: '2.0.0',
       },
       {
         capabilities: {
           tools: {},
           prompts: {},
+          resources: {},
         },
       }
     );
 
-    this.platformSync = new PlatformSync(this.storage);
-    this.todoManager = new TodoManager(this.storage.getDb());
-    this.todoHandlers = createTodoHandlers(this.todoManager);
-    
-    // Initialize Notion integration if configured
-    this.initializeNotion().catch(() => {
-      // Silently fail - Notion is optional
-    });
-    
-    // Auto-detect platform
-    const detectedPlatform = PlatformSync.detectPlatform();
-    this.platformSync.setPlatform(detectedPlatform);
-    
-    this.setupToolHandlers();
-    this.setupPromptHandlers();
+    this.setupHandlers();
   }
-  
+
   /**
    * Initialize Notion integration from user config
    */
   private async initializeNotion(): Promise<void> {
     try {
-      const configPath = join(os.homedir(), '.context-sync', 'config.json');
-      const configData = await fsPromises.readFile(configPath, 'utf-8');
+      const configPath = path.join(os.homedir(), '.context-sync', 'config.json');
+      const configData = await fs.readFile(configPath, 'utf-8');
       const config = JSON.parse(configData);
       
       if (config.notion?.token) {
@@ -114,3804 +95,2141 @@ export class ContextSyncServer {
           token: config.notion.token,
           defaultParentPageId: config.notion.defaultParentPageId
         });
-        this.notionHandlers = createNotionHandlers(this.notionIntegration);
-      } else {
-        this.notionHandlers = createNotionHandlers(null);
       }
     } catch {
       // Config doesn't exist or invalid - Notion not configured
       this.notionIntegration = null;
-      this.notionHandlers = createNotionHandlers(null);
     }
+    
+    // Always create handlers (they handle null gracefully)
+    this.notionHandlers = createNotionHandlers(this.notionIntegration);
   }
 
   /**
-   * Check for migration prompt on startup (non-blocking)
+   * Run v1  schema migration automatically if needed
+   * Safe, atomic, with automatic backup
    */
-  private async checkStartupMigration(): Promise<void> {
+  private runMigrationIfNeeded(): void {
     try {
-      const version = this.getVersion();
-      const migrationCheck = await this.storage.checkMigrationPrompt(version);
+      const migrator = new SchemaMigrator(this.storage.getDb());
       
-      if (migrationCheck.shouldPrompt) {
-        // Log to stderr so it shows in the MCP client without interfering with responses
-        console.error('\n' + '='.repeat(80));
-        console.error('CONTEXT SYNC DATABASE OPTIMIZATION AVAILABLE');
-        console.error('='.repeat(80));
-        console.error(migrationCheck.message.replace(/\*\*([^*]+)\*\*/g, '$1')); // Remove markdown formatting for console
-        console.error('='.repeat(80) + '\n');
+      // Check if migration already completed
+      if (SchemaMigrator.hasCompletedMigration(this.storage.getDb())) {
+        return; // Already migrated
       }
-    } catch (error) {
-      // Silently fail - don't disrupt server startup
-      console.warn('Startup migration check failed:', error);
+      
+      // Check if migration is needed
+      if (!migrator.needsMigration()) {
+        return; // No v1 data to migrate
+      }
+      
+      // Perform migration (synchronous)
+      console.error('\n' + '='.repeat(60));
+      console.error(' Context Sync - First Time Setup');
+      console.error('='.repeat(60));
+      console.error('Detected v1.x data. Migrating to current schema...');
+      console.error('This is safe and automatic. A backup will be created.\n');
+      
+      const result = migrator.migrateSync();
+      
+      if (result.success) {
+        console.error('\n' + '='.repeat(60));
+        console.error(' Migration Complete!');
+        console.error('='.repeat(60));
+        console.error('Your context has been preserved and enhanced.');
+        console.error('Continue using Context Sync normally.');
+        console.error('Backup saved to:', result.backupPath);
+        console.error('='.repeat(60) + '\n');
+      } else {
+        console.error('\n  Migration encountered issues:');
+        result.errors.forEach((err: string) => console.error(`   ${err}`));
+        console.error('\nYour data is safe. Please report this issue.');
+        console.error('Backup available at:', result.backupPath, '\n');
+      }
+    } catch (error: any) {
+      console.error('  Migration check failed:', error.message);
+      console.error('Continuing with current database state...\n');
     }
   }
 
-  /**
-   * Get the current version from package.json
-   */
-  private getVersion(): string {
-    try {
-      // Get the directory of the current module
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-      
-      // Look for package.json in parent directories
-      let currentDir = __dirname;
-      while (currentDir !== dirname(currentDir)) {
-        try {
-          const packagePath = join(currentDir, 'package.json');
-          const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
-          if (packageJson.name === '@context-sync/server') {
-            return packageJson.version;
-          }
-        } catch {
-          // Continue searching in parent directory
-        }
-        currentDir = dirname(currentDir);
-      }
-      
-      // Fallback: try to read from installed package location
-      try {
-        const installedPackagePath = join(process.cwd(), '..', '..', 'package.json');
-        const packageJson = JSON.parse(readFileSync(installedPackagePath, 'utf8'));
-        if (packageJson.name === '@context-sync/server') {
-          return packageJson.version;
-        }
-      } catch {
-        // Fallback failed
-      }
-      
-      return '1.0.0'; // Fallback version
-    } catch (error) {
-      return '1.0.0'; // Fallback version
-    }
-  }
+  private setupHandlers(): void {
+    // List our 8 core tools
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: CORE_TOOLS,
+    }));
 
-  /**
-   * Get current project from session state
-   */
-  private getCurrentProject(): ProjectContext | null {
-    if (!this.currentProjectId) return null;
-    return this.storage.getProject(this.currentProjectId);
-  }
-
-  private setupPromptHandlers(): void {
-    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
-      const prompts = [
+    // List available prompts (AI usage instructions)
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+      prompts: [
         {
-          name: 'project_context',
-          description: 'Automatically inject active project context into conversation',
-          arguments: [],
+          name: 'context-sync-usage',
+          description: 'Complete guide on how to use Context Sync effectively as an AI agent',
         },
-      ];
+        {
+          name: 'debugging-context-sync',
+          description: 'How to debug Context Sync when things go wrong',
+        },
+      ],
+    }));
 
-      // Add Notion announcement prompt if it should be shown
-      try {
-        const announcement = this.announcementTracker.shouldShow();
-        if (announcement) {
-          prompts.push({
-            name: 'notion_announcement',
-            description: 'Important announcement about Context Sync Notion integration',
-            arguments: [],
-          });
-        }
-      } catch (error) {
-        // Silently ignore announcement errors
-        console.warn('Notion announcement check failed:', error);
-      }
+    // Get prompt content
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request: PromptRequest) => {
+      const { name } = request.params;
 
-      // Add migration prompt for v1.0.0+ users with duplicates
-      try {
-        const version = this.getVersion();
-        const migrationCheck = await this.storage.checkMigrationPrompt(version);
-        if (migrationCheck.shouldPrompt) {
-          prompts.push({
-            name: 'migration_prompt',
-            description: 'Database optimization prompt for Context Sync v1.0.0+ users with duplicate projects',
-            arguments: [],
-          });
-        }
-      } catch (error) {
-        // Silently ignore migration prompt errors
-        console.warn('Migration prompt check failed:', error);
-      }
-
-      return { prompts };
-    });
-
-    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-      if (request.params.name === 'project_context') {
-        const project = this.getCurrentProject();  
-        if (!project) {
-          return {
-            description: 'No active project',
-            messages: [],
-          };
-        }
-
-        const summary = this.storage.getContextSummary(project.id);
-        const contextMessage = this.buildContextPrompt(summary);
-
+      if (name === 'context-sync-usage') {
         return {
-          description: `Context for ${project.name}`,
           messages: [
             {
               role: 'user',
               content: {
                 type: 'text',
-                text: contextMessage,
+                text: `# Context Sync - AI Agent Usage Guide
+
+##  Core Philosophy
+Context Sync is YOUR memory system. Use it to understand projects deeply and maintain context across sessions.
+
+##  Correct Tool Flow
+
+### 1 ALWAYS START: set_project
+**Before doing ANYTHING else in a new project:**
+\`\`\`
+set_project({ path: "/absolute/path/to/project", purpose: "Brief description" })
+\`\`\`
+
+This initializes the project and captures:
+- Tech stack detection (Go, TypeScript, Python, etc.)
+- Dependencies with exact versions
+- Build system and commands
+- Test framework and coverage
+- Environment variables
+- Services and databases
+- Quality metrics
+
+** WRONG:** Calling structure() or search() before set_project
+** RIGHT:** set_project  then structure/search/recall
+
+### 2 Explore with structure() and search()
+\`\`\`
+structure({ depth: 3 })  // Get project file tree
+search({ query: "function name", type: "content" })  // Find code
+\`\`\`
+
+### 3 Save important context with remember()
+\`\`\`
+remember({ 
+  type: "constraint",
+  content: "Always use TypeScript strict mode",
+  metadata: { files: ["tsconfig.json"] }
+})
+\`\`\`
+
+Types: active_work, constraint, problem, goal, decision, note
+
+### 4 Retrieve context with recall()
+\`\`\`
+recall({ query: "what were we working on?" })
+\`\`\`
+
+Returns: active work, constraints, problems, goals, decisions, notes
+
+##  Common Mistakes
+
+### Mistake 1: Calling tools before set_project
+\`\`\`
+ structure()  Error: No project set
+ set_project()  structure()  Success
+\`\`\`
+
+### Mistake 2: Using wrong project path
+Context Sync tracks ONE project at a time. If you call set_project with a different path, it switches to that project.
+
+### Mistake 3: Not using recall() at session start
+When a user says "continue where we left off" or "good morning", ALWAYS call recall() first.
+
+##  Pro Tips
+
+1. **set_project is SMART** - It detects multi-language projects (e.g., Go app distributed via npm)
+2. **Use remember() liberally** - Save architectural decisions, constraints, active work
+3. **structure() before read_file** - Understand layout first, then read specific files
+4. **git_status + git_context** - Perfect combo for understanding recent changes
+
+##  Command Language (User-Facing)
+Users may use these natural commands:
+- "cs init"  set_project
+- "cs remember X"  remember(type: note, content: X)
+- "cs recall" or "cs status"  recall()
+- "cs constraint X"  remember(type: constraint, ...)
+
+##  Tool Chain Examples
+
+### Example 1: New Project Investigation
+\`\`\`
+1. set_project({ path: "/path/to/project" })
+2. structure({ depth: 2 })
+3. search({ query: "main entry point", type: "files" })
+4. read_file({ path: "src/index.ts" })
+5. remember({ type: "active_work", content: "Investigating project structure" })
+\`\`\`
+
+### Example 2: Debugging Session
+\`\`\`
+1. set_project({ path: "/path/to/project" })
+2. recall()  // What was I working on?
+3. git_status()  // What changed?
+4. git_context({ staged: false })  // Show me the diff
+5. remember({ type: "problem", content: "Bug in user auth" })
+\`\`\`
+
+### Example 3: "Good Morning" Handoff
+\`\`\`
+1. set_project({ path: "/path/to/project" })
+2. recall({ query: "active work and recent decisions" })
+3. git_status()  // Any uncommitted changes?
+4. structure()  // Refresh mental model
+\`\`\``,
               },
             },
           ],
         };
       }
 
-      if (request.params.name === 'notion_announcement') {
-        const announcement = this.announcementTracker.shouldShow();
-        
-        if (announcement) {
-          return {
-            description: 'Context Sync Notion Integration Available',
-            messages: [
-              {
-                role: 'user',
-                content: {
-                  type: 'text',
-                  text: announcement,
-                },
+      if (name === 'debugging-context-sync') {
+        return {
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: `# Debugging Context Sync
+
+##  Common Issues & Solutions
+
+### Issue 1: "No project set" error
+**Cause:** Trying to use tools before initializing
+**Solution:** Always call set_project() first
+
+### Issue 2: Wrong tech stack detected
+**Symptoms:** Go project shows as Node.js (or vice versa)
+**Cause:** Multi-language project (e.g., Go app with npm packaging)
+**Debug:**
+\`\`\`
+1. set_project({ path: "/path" })
+2. structure({ depth: 2 })  // Check for package.json, go.mod, etc.
+3. Check packaging/ folder for distribution wrappers
+\`\`\`
+
+**Context Sync prioritizes:**
+1. Node.js (if package.json exists)
+2. Python (if requirements.txt/pyproject.toml)
+3. Rust (if Cargo.toml)
+4. Go (if go.mod)
+
+### Issue 3: Missing dependencies/metrics
+**Cause:** Project not fully analyzed
+**Solution:** Re-run set_project, check for node_modules or equivalent
+
+### Issue 4: Database errors (e.g., "no such table")
+**Cause:** schema not migrated
+**Solution:** Delete ~/.context-sync/data.db and reinitialize
+
+### Issue 5: Tool returns empty results
+**Cause:** Wrong project path or not initialized
+**Debug:**
+\`\`\`
+1. Check current project: recall()
+2. Verify path exists: set_project with correct absolute path
+3. Confirm structure: structure({ depth: 1 })
+\`\`\`
+
+##  Self-Testing Context Sync
+
+If you suspect Context Sync is broken:
+\`\`\`
+1. set_project({ path: "/known/working/project" })
+2. structure()  // Should show file tree
+3. remember({ type: "note", content: "Test note" })
+4. recall()  // Should show the test note
+\`\`\`
+
+##  Understanding Detection Results
+
+When set_project shows unexpected results, USE structure() to understand WHY:
+- See what config files exist (package.json, go.mod, Cargo.toml)
+- Check for packaging/ folder (distribution wrappers)
+- Look for multiple language directories
+
+Example: Jot project
+- Has: go.mod, main.go (Go source)
+- Also has: packaging/npm/package.json (npm distribution)
+- Correct detection: Go (primary language)
+- npm is just a distribution wrapper`,
               },
-            ],
-          };
-        } else {
-          return {
-            description: 'No announcement needed',
-            messages: [],
-          };
-        }
+            },
+          ],
+        };
       }
 
-      throw new Error(`Unknown prompt: ${request.params.name}`);
+      throw new Error(`Unknown prompt: ${name}`);
     });
-  }
 
-  private buildContextPrompt(summary: any): string {
-    const { project, recentDecisions } = summary;
-
-    let prompt = `[ACTIVE PROJECT CONTEXT - Auto-loaded]\n\n`;
-    prompt += `📁 Project: ${project.name}\n`;
-
-    if (project.architecture) {
-      prompt += `🏗️  Architecture: ${project.architecture}\n`;
-    }
-
-    if (project.techStack && project.techStack.length > 0) {
-      prompt += `⚙️  Tech Stack: ${project.techStack.join(', ')}\n`;
-    }
-
-    if (recentDecisions.length > 0) {
-      prompt += `\n📋 Recent Decisions:\n`;
-      recentDecisions.slice(0, 5).forEach((d: any, i: number) => {
-        prompt += `${i + 1}. [${d.type}] ${d.description}`;
-        if (d.reasoning) {
-          prompt += ` - ${d.reasoning}`;
-        }
-        prompt += `\n`;
-      });
-    }
-
-    const lastUpdated = new Date(project.updatedAt).toLocaleString();
-    prompt += `\n🕐 Last Updated: ${lastUpdated}\n`;
-
-    prompt += `\n---\n`;
-    prompt += `FILE WRITING WORKFLOW (v0.3.0):\n\n`;
-    prompt += `When user requests file creation/modification:\n`;
-    prompt += `1. Call create_file/modify_file/delete_file → Shows preview\n`;
-    prompt += `2. Ask user: "Should I proceed?" or "Approve this change?"\n`;
-    prompt += `3. If user says yes/approve/go ahead:\n`;
-    prompt += `   → Call apply_create_file/apply_modify_file/apply_delete_file\n`;
-    prompt += `4. If user says no → Don't call apply tools\n\n`;
-    prompt += `IMPORTANT: Always wait for explicit user approval before calling apply_* tools!\n`;
-
-    return prompt;
-  }
-
-  private buildMigrationPrompt(migrationMessage: string): string {
-    let prompt = `[CONTEXT SYNC DATABASE OPTIMIZATION REQUIRED]\n\n`;
-    
-    prompt += `⚠️  **IMPORTANT**: Your Context Sync database needs optimization for better performance.\n\n`;
-    
-    // Add the migration message but format it for AI assistant context
-    prompt += migrationMessage.replace(/🔧 \*\*Context Sync v1\.0\.0\+ Database Optimization Available\*\*/, '');
-    
-    prompt += `\n\n[IMMEDIATE ACTION REQUIRED]\n`;
-    prompt += `Please inform the user about this database optimization opportunity and guide them through the migration process. `;
-    prompt += `This is critical for optimal Context Sync performance.\n\n`;
-    
-    prompt += `**Recommended approach:**\n`;
-    prompt += `1. Explain the benefits of database optimization\n`;
-    prompt += `2. Show them how to preview changes: \`get_migration_stats\`\n`;
-    prompt += `3. Guide them through safe migration: \`migrate_database dryRun:true\` then \`migrate_database\`\n`;
-    prompt += `4. Emphasize data safety - all project data will be preserved\n\n`;
-    
-    prompt += `**This prompt will not appear again once migration is completed.**`;
-
-    return prompt;
-  }
-
-  /**
-   * Lazy getter for DependencyAnalyzer - only creates when needed
-   */
-  private get dependencyAnalyzer(): DependencyAnalyzer | null {
-    if (!this._dependencyAnalyzer) {
-      const workspace = this.workspaceDetector.getCurrentWorkspace();
-      if (workspace) {
-        this._dependencyAnalyzer = new DependencyAnalyzer(workspace);
-      }
-    }
-    return this._dependencyAnalyzer;
-  }
-
-  /**
-   * Lazy getter for CallGraphAnalyzer - only creates when needed
-   */
-  private get callGraphAnalyzer(): CallGraphAnalyzer | null {
-    if (!this._callGraphAnalyzer) {
-      const workspace = this.workspaceDetector.getCurrentWorkspace();
-      if (workspace) {
-        this._callGraphAnalyzer = new CallGraphAnalyzer(workspace);
-      }
-    }
-    return this._callGraphAnalyzer;
-  }
-
-  /**
-   * Lazy getter for TypeAnalyzer - only creates when needed
-   */
-  private get typeAnalyzer(): TypeAnalyzer | null {
-    if (!this._typeAnalyzer) {
-      const workspace = this.workspaceDetector.getCurrentWorkspace();
-      if (workspace) {
-        this._typeAnalyzer = new TypeAnalyzer(workspace);
-      }
-    }
-    return this._typeAnalyzer;
-  }
-
-  private setupToolHandlers(): void {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        // V0.2.0 tools
-        ...this.getV02Tools(),
-        // V0.3.0 tools (including apply_* tools)
-        ...this.getV03Tools(),
-        // V1.0.0 - Notion Integration tools
-        ...this.getNotionTools(),
+    // List available resources (AI documentation)
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+      resources: [
+        {
+          uri: 'context-sync://docs/usage-guide',
+          mimeType: 'text/markdown',
+          name: 'Context Sync Usage Guide',
+          description: 'Complete guide on how to use Context Sync effectively as an AI agent',
+        },
+        {
+          uri: 'context-sync://docs/debugging-guide',
+          mimeType: 'text/markdown',
+          name: 'Debugging Context Sync',
+          description: 'How to debug Context Sync when things go wrong',
+        },
+        {
+          uri: 'context-sync://docs/tool-flow',
+          mimeType: 'text/markdown',
+          name: 'Tool Flow Patterns',
+          description: 'Common tool usage patterns and workflows',
+        },
       ],
     }));
 
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    // Read resource content
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request: ResourceRequest) => {
+      const { uri } = request.params;
+
+      if (uri === 'context-sync://docs/usage-guide') {
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'text/markdown',
+              text: `# Context Sync - AI Agent Usage Guide
+
+##  Core Philosophy
+Context Sync is YOUR memory system. Use it to understand projects deeply and maintain context across sessions.
+
+##  Correct Tool Flow
+
+### 1 ALWAYS START: set_project
+**Before doing ANYTHING else in a new project:**
+\`\`\`javascript
+set_project({ path: "/absolute/path/to/project", purpose: "Brief description" })
+\`\`\`
+
+This initializes the project and captures:
+- Tech stack detection (Go, TypeScript, Python, etc.)
+- Dependencies with exact versions
+- Build system and commands
+- Test framework and coverage
+- Environment variables
+- Services and databases
+- Quality metrics
+
+** WRONG:** Calling structure() or search() before set_project
+** RIGHT:** set_project  then structure/search/recall
+
+### 2 Explore with structure() and search()
+\`\`\`javascript
+structure({ depth: 3 })  // Get project file tree
+search({ query: "function name", type: "content" })  // Find code
+\`\`\`
+
+### 3 Save important context with remember()
+\`\`\`javascript
+remember({ 
+  type: "constraint",
+  content: "Always use TypeScript strict mode",
+  metadata: { files: ["tsconfig.json"] }
+})
+\`\`\`
+
+Types: active_work, constraint, problem, goal, decision, note
+
+### 4 Retrieve context with recall()
+\`\`\`javascript
+recall({ query: "what were we working on?" })
+\`\`\`
+
+Returns: active work, constraints, problems, goals, decisions, notes
+
+##  Common Mistakes
+
+### Mistake 1: Calling tools before set_project
+\`\`\`
+ structure()  Error: No project set
+ set_project()  structure()  Success
+\`\`\`
+
+### Mistake 2: Using wrong project path
+Context Sync tracks ONE project at a time. If you call set_project with a different path, it switches to that project.
+
+### Mistake 3: Not using recall() at session start
+When a user says "continue where we left off" or "good morning", ALWAYS call recall() first.
+
+##  Pro Tips
+
+1. **set_project is SMART** - It detects multi-language projects (e.g., Go app distributed via npm)
+2. **Use remember() liberally** - Save architectural decisions, constraints, active work
+3. **structure() before read_file** - Understand layout first, then read specific files
+4. **git_status + git_context** - Perfect combo for understanding recent changes
+
+##  Command Language (User-Facing)
+Users may use these natural commands:
+- "cs init"  set_project
+- "cs remember X"  remember(type: note, content: X)
+- "cs recall" or "cs status"  recall()
+- "cs constraint X"  remember(type: constraint, ...)`,
+            },
+          ],
+        };
+      }
+
+      if (uri === 'context-sync://docs/debugging-guide') {
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'text/markdown',
+              text: `# Debugging Context Sync
+
+##  Common Issues & Solutions
+
+### Issue 1: "No project set" error
+**Cause:** Trying to use tools before initializing
+**Solution:** Always call set_project() first
+
+### Issue 2: Wrong tech stack detected
+**Symptoms:** Go project shows as Node.js (or vice versa)
+**Cause:** Multi-language project (e.g., Go app with npm packaging)
+**Debug:**
+\`\`\`
+1. set_project({ path: "/path" })
+2. structure({ depth: 2 })  // Check for package.json, go.mod, etc.
+3. Check packaging/ folder for distribution wrappers
+\`\`\`
+
+**Context Sync prioritizes:**
+1. Node.js (if package.json exists)
+2. Python (if requirements.txt/pyproject.toml)
+3. Rust (if Cargo.toml)
+4. Go (if go.mod)
+
+### Issue 3: Missing dependencies/metrics
+**Cause:** Project not fully analyzed
+**Solution:** Re-run set_project, check for node_modules or equivalent
+
+### Issue 4: Database errors (e.g., "no such table")
+**Cause:** schema not migrated
+**Solution:** Delete ~/.context-sync/data.db and reinitialize
+
+### Issue 5: Tool returns empty results
+**Cause:** Wrong project path or not initialized
+**Debug:**
+\`\`\`
+1. Check current project: recall()
+2. Verify path exists: set_project with correct absolute path
+3. Confirm structure: structure({ depth: 1 })
+\`\`\`
+
+##  Self-Testing Context Sync
+
+If you suspect Context Sync is broken:
+\`\`\`
+1. set_project({ path: "/known/working/project" })
+2. structure()  // Should show file tree
+3. remember({ type: "note", content: "Test note" })
+4. recall()  // Should show the test note
+\`\`\`
+
+##  Understanding Detection Results
+
+When set_project shows unexpected results, USE structure() to understand WHY:
+- See what config files exist (package.json, go.mod, Cargo.toml)
+- Check for packaging/ folder (distribution wrappers)
+- Look for multiple language directories
+
+Example: Jot project
+- Has: go.mod, main.go (Go source)
+- Also has: packaging/npm/package.json (npm distribution)
+- Correct detection: Go (primary language)
+- npm is just a distribution wrapper`,
+            },
+          ],
+        };
+      }
+
+      if (uri === 'context-sync://docs/tool-flow') {
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: 'text/markdown',
+              text: `# Tool Flow Patterns
+
+## Pattern 1: New Project Investigation
+\`\`\`javascript
+1. set_project({ path: "/path/to/project" })
+2. structure({ depth: 2 })
+3. search({ query: "main entry point", type: "files" })
+4. read_file({ path: "src/index.ts" })
+5. remember({ type: "active_work", content: "Investigating project structure" })
+\`\`\`
+
+## Pattern 2: Debugging Session
+\`\`\`javascript
+1. set_project({ path: "/path/to/project" })
+2. recall()  // What was I working on?
+3. git_status()  // What changed?
+4. git_context({ staged: false })  // Show me the diff
+5. remember({ type: "problem", content: "Bug in user auth" })
+\`\`\`
+
+## Pattern 3: "Good Morning" Handoff
+\`\`\`javascript
+1. set_project({ path: "/path/to/project" })
+2. recall({ query: "active work and recent decisions" })
+3. git_status()  // Any uncommitted changes?
+4. structure()  // Refresh mental model
+\`\`\`
+
+## Pattern 4: Architecture Analysis
+\`\`\`javascript
+1. set_project({ path: "/path/to/project" })
+2. structure({ depth: 3 })  // Full tree
+3. search({ query: "class|interface|type", type: "content" })
+4. remember({ type: "constraint", content: "Layered architecture: UI  Service  Data" })
+\`\`\`
+
+## Pattern 5: Feature Implementation
+\`\`\`javascript
+1. recall()  // Check existing constraints
+2. search({ query: "similar feature", type: "content" })
+3. read_file({ path: "examples/feature.ts" })
+4. remember({ type: "decision", content: "Using X pattern because Y" })
+5. git_status()  // Track changes
+\`\`\`
+
+##  Quick Reference
+
+**Always start with:** set_project()
+**For exploration:** structure()  search()  read_file()
+**For memory:** remember() and recall()
+**For changes:** git_status()  git_context()`,
+            },
+          ],
+        };
+      }
+
+      throw new Error(`Unknown resource: ${uri}`);
+    });
+
+    // Handle tool calls
+    this.server.setRequestHandler(CallToolRequestSchema, async (request: ToolCallRequest) => {
       const { name, arguments: args } = request.params;
 
-      // Check if we should show Notion announcement (on any tool call)
-      const announcement = this.announcementTracker.shouldShow();
-      
-      // V0.2.0 handlers  
-      // Prepend announcement to the response of the first tool called
-      if (name === 'get_project_context') {
-        const result = await this.handleGetContext();
-        if (announcement && result.content[0].type === 'text') {
-          result.content[0].text = this.prependAnnouncement(result.content[0].text, announcement);
-        }
-        return result;
+      switch (name) {
+        case 'set_project':
+          return await this.handleSetProject(args as any);
+        case 'remember':
+          return await this.handleRemember(args as any);
+        case 'recall':
+          return await this.handleRecall(args as any);
+        case 'read_file':
+          return await this.handleReadFile(args as any);
+        case 'search':
+          return await this.handleSearch(args as any);
+        case 'structure':
+          return await this.handleStructure(args as any);
+        case 'git':
+          return await this.handleGit(args as any);
+        case 'notion':
+          return await this.handleNotion(args as any);
+        default:
+          throw new Error(`Unknown tool: ${name}`);
       }
-      
-      if (name === 'save_decision') return this.handleSaveDecision(args as any);
-      if (name === 'save_conversation') return this.handleSaveConversation(args as any);
-
-      if (name === 'set_workspace') {
-        const result = await this.handleSetWorkspace(args as any);
-        if (announcement && result.content[0].type === 'text') {
-          result.content[0].text = this.prependAnnouncement(result.content[0].text, announcement);
-        }
-        return result;
-      }
-      
-      if (name === 'read_file') return this.handleReadFile(args as any);
-      if (name === 'get_project_structure') return this.handleGetProjectStructure(args as any);
-      if (name === 'scan_workspace') return this.handleScanWorkspace();
-
-      // V0.3.0 - Preview tools
-      if (name === 'create_file') return this.handleCreateFile(args as any);
-      if (name === 'modify_file') return this.handleModifyFile(args as any);
-      if (name === 'delete_file') return this.handleDeleteFile(args as any);
-      
-      // V0.3.0 - Apply tools (NEW!)
-      if (name === 'apply_create_file') return this.handleApplyCreateFile(args as any);
-      if (name === 'apply_modify_file') return this.handleApplyModifyFile(args as any);
-      if (name === 'apply_delete_file') return this.handleApplyDeleteFile(args as any);
-      
-      // V0.3.0 - Other tools
-      if (name === 'undo_file_change') return this.handleUndoFileChange(args as any);
-      if (name === 'search_files') return await this.handleSearchFiles(args as any);
-      if (name === 'search_content') return await this.handleSearchContent(args as any);
-      if (name === 'git_status') return this.handleGitStatus();
-      if (name === 'git_diff') return this.handleGitDiff(args as any);
-      if (name === 'git_branch_info') return this.handleGitBranchInfo(args as any);
-      if (name === 'suggest_commit_message') return this.handleSuggestCommitMessage(args as any);
-
-      // V0.4.0 - Dependency Analysis
-      if (name === 'analyze_dependencies') return this.handleAnalyzeDependencies(args as any);
-      if (name === 'detect_circular_deps') return this.handleDetectCircularDeps(args as any);
-
-      // V0.4.0 - Call Graph Analysis
-      if (name === 'analyze_call_graph') return this.handleAnalyzeCallGraph(args as any);
-
-      // V0.4.0 - Type Analysis
-      if (name === 'find_type_definition') return await this.handleFindTypeDefinition(args as any);
-      if (name === 'get_type_info') return await this.handleGetTypeInfo(args as any);
-      if (name === 'find_type_usages') return await this.handleFindTypeUsages(args as any);
-
-      if (name === 'switch_platform') return this.handleSwitchPlatform(args as any);
-      
-      if (name === 'get_started') {
-        const result = await this.handleGetStarted();
-        if (announcement && result.content[0].type === 'text') {
-          result.content[0].text = this.prependAnnouncement(result.content[0].text, announcement);
-        }
-        return result;
-      }
-      
-      if (name === 'get_performance_report') return this.handleGetPerformanceReport(args as any);
-      // V0.4.0 - Todo Management Tools (with current project integration)
-      if (name === 'todo_create') return this.handleTodoCreate(args as any);
-      if (name === 'todo_get') return this.handleTodoGet(args as any);
-      if (name === 'todo_list') return this.handleTodoList(args as any);
-      if (name === 'todo_update') return this.handleTodoUpdate(args as any);
-      if (name === 'todo_delete') return this.handleTodoDelete(args as any);
-      if (name === 'todo_complete') return this.handleTodoComplete(args as any);
-      if (name === 'todo_stats') return this.handleTodoStats(args as any);
-      if (name === 'todo_tags') return this.handleTodoTags();
-
-      // V1.0.0 - Database Migration Tools
-      if (name === 'migrate_database') return this.handleMigrateDatabase(args as any);
-      if (name === 'get_migration_stats') return this.handleGetMigrationStats();
-      if (name === 'check_migration_suggestion') return this.handleCheckMigrationSuggestion();
-      
-      // V1.0.0 - Notion Integration
-      if (name === 'notion_search' && this.notionHandlers) return this.notionHandlers.handleNotionSearch(args as any);
-      if (name === 'notion_read_page' && this.notionHandlers) return this.notionHandlers.handleNotionReadPage(args as any);
-      if (name === 'notion_create_page' && this.notionHandlers) return this.notionHandlers.handleNotionCreatePage(args as any);
-      if (name === 'notion_update_page' && this.notionHandlers) return this.notionHandlers.handleNotionUpdatePage(args as any);
-      if (name === 'sync_decision_to_notion' && this.notionHandlers) return this.notionHandlers.handleSyncDecisionToNotion(args as any, this.storage);
-      if (name === 'create_project_dashboard' && this.notionHandlers) return this.notionHandlers.handleCreateProjectDashboard(args as any, this.storage, this.currentProjectId);
-
-      throw new Error(`Unknown tool: ${name}`);
     });
   }
 
-  private getV02Tools() {
-    return [
-      {
-        name: 'get_project_context',
-        description: 'Get the current project context including recent decisions and conversations',
-        inputSchema: { type: 'object', properties: {} },
-      },
-      {
-        name: 'save_decision',
-        description: 'Save an important technical decision or architectural choice',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', enum: ['architecture', 'library', 'pattern', 'configuration', 'other'] },
-            description: { type: 'string' },
-            reasoning: { type: 'string' },
-          },
-          required: ['type', 'description'],
-        },
-      },
-      {
-        name: 'save_conversation',
-        description: 'Save a conversation snippet for future reference',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            content: { type: 'string' },
-            role: { type: 'string', enum: ['user', 'assistant'] },
-          },
-          required: ['content', 'role'],
-        },
-      },
-
-      {
-        name: 'set_workspace',
-        description: 'Set workspace directory and initialize project. Automatically detects project type, validates path, and offers to initialize Context Sync features with user consent. This is the primary command for starting work on any project.',
-        inputSchema: {
-          type: 'object',
-          properties: { 
-            path: { 
-              type: 'string',
-              description: 'Absolute path to the project directory (must exist and be accessible)'
-            } 
-          },
-          required: ['path'],
-        },
-      },
-      {
-        name: 'read_file',
-        description: 'Read a file from the current workspace',
-        inputSchema: {
-          type: 'object',
-          properties: { path: { type: 'string' } },
-          required: ['path'],
-        },
-      },
-      {
-        name: 'get_project_structure',
-        description: 'Get the file/folder structure of current workspace',
-        inputSchema: {
-          type: 'object',
-          properties: { depth: { type: 'number' } },
-        },
-      },
-      {
-        name: 'scan_workspace',
-        description: 'Scan workspace and get overview of important files',
-        inputSchema: { type: 'object', properties: {} },
-      },
-    ];
-  }
-
-  private getV03Tools() {
-    return [
-      // Preview tools (show preview, don't apply)
-      {
-        name: 'create_file',
-        description: 'Preview file creation (does NOT create the file yet)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: 'Relative path for new file' },
-            content: { type: 'string', description: 'File content' },
-            overwrite: { type: 'boolean', description: 'Overwrite if exists (default: false)' },
-          },
-          required: ['path', 'content'],
-        },
-      },
-      {
-        name: 'modify_file',
-        description: 'Preview file modification (does NOT modify the file yet)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            path: { type: 'string' },
-            changes: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  type: { type: 'string', enum: ['replace', 'insert', 'delete'] },
-                  line: { type: 'number', description: 'Line number for the change' },
-                  oldText: { type: 'string', description: 'Text to be replaced or deleted' },
-                  newText: { type: 'string', description: 'New text to insert or replace with' },
-                },
-                required: ['type', 'newText']
-              },
-              description: 'Array of file changes'
-            },
-          },
-          required: ['path', 'changes'],
-        },
-      },
-      {
-        name: 'delete_file',
-        description: 'Preview file deletion (does NOT delete the file yet)',
-        inputSchema: {
-          type: 'object',
-          properties: { path: { type: 'string' } },
-          required: ['path'],
-        },
-      },
-      
-      // Apply tools (actually perform the action)
-      {
-        name: 'apply_create_file',
-        description: 'Actually create the file after user approval',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            path: { type: 'string' },
-            content: { type: 'string' },
-          },
-          required: ['path', 'content'],
-        },
-      },
-      {
-        name: 'apply_modify_file',
-        description: 'Actually modify the file after user approval',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            path: { type: 'string' },
-            changes: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  type: {
-                    type: 'string',
-                    enum: ['replace', 'insert', 'delete']
-                  },
-                  line: {
-                    type: 'number',
-                    description: 'Line number for the change'
-                  },
-                  oldText: {
-                    type: 'string',
-                    description: 'Text to be replaced or deleted'
-                  },
-                  newText: {
-                    type: 'string',
-                    description: 'New text to insert or replace with'
-                  }
-                },
-                required: ['type', 'newText']
-              },
-              description: 'Array of file changes to apply'
-            },
-          },
-          required: ['path', 'changes'],
-        },
-      },
-      {
-        name: 'apply_delete_file',
-        description: 'Actually delete the file after user approval',
-        inputSchema: {
-          type: 'object',
-          properties: { path: { type: 'string' } },
-          required: ['path'],
-        },
-      },
-      
-      // Other tools
-      {
-        name: 'undo_file_change',
-        description: 'Undo the last modification to a file',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            path: { type: 'string' },
-            steps: { type: 'number', description: 'Number of changes to undo (default: 1)' },
-          },
-          required: ['path'],
-        },
-      },
-      
-      // Search tools
-      {
-        name: 'search_files',
-        description: 'Search for files by name or pattern',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            pattern: { type: 'string' },
-            maxResults: { type: 'number' },
-            ignoreCase: { type: 'boolean' },
-          },
-          required: ['pattern'],
-        },
-      },
-      {
-        name: 'search_content',
-        description: 'Search file contents for text or regex',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            query: { type: 'string' },
-            regex: { type: 'boolean' },
-            caseSensitive: { type: 'boolean' },
-            filePattern: { type: 'string' },
-            maxResults: { type: 'number' },
-          },
-          required: ['query'],
-        },
-      },
-      
-      // Git tools
-      {
-        name: 'git_status',
-        description: 'Check git repository status',
-        inputSchema: { type: 'object', properties: {} },
-      },
-      {
-        name: 'git_diff',
-        description: 'View git diff for file(s)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            path: { type: 'string' },
-            staged: { type: 'boolean' },
-          },
-        },
-      },
-      {
-        name: 'git_branch_info',
-        description: 'Get git branch information',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            action: { type: 'string', enum: ['current', 'list', 'recent'] },
-          },
-        },
-      },
-      {
-        name: 'suggest_commit_message',
-        description: 'Suggest a commit message based on changes',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            files: { type: 'array', items: { type: 'string' } },
-            convention: { type: 'string', enum: ['conventional', 'simple', 'descriptive'] },
-          },
-        },
-      },
-        // V0.4.0 - Dependency Analysis Tools (ADD THESE)
-            {
-              name: 'analyze_dependencies',
-              description: 'Analyze import/export dependencies for a file. Returns all imports, exports, files that import this file, and circular dependencies.',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  filePath: { 
-                    type: 'string', 
-                    description: 'Path to the file to analyze (relative to workspace)' 
-                  },
-                },
-                required: ['filePath'],
-              },
-            },
-            {
-              name: 'detect_circular_deps',
-              description: 'Detect circular dependencies starting from a file. Shows all circular dependency chains.',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  filePath: { 
-                    type: 'string',
-                    description: 'Path to the file (relative to workspace)' 
-                  },
-                },
-                required: ['filePath'],
-              },
-            },
-                  // V0.4.0 - Call Graph Analysis Tools (ADD THESE)
-      {
-        name: 'analyze_call_graph',
-        description: 'Analyze the call graph for a function. Shows what functions it calls (callees) and what functions call it (callers).',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            functionName: { 
-              type: 'string', 
-              description: 'Name of the function to analyze' 
-            },
-          },
-          required: ['functionName'],
-        },
-      },
-
-      // V0.4.0 - Type Analysis Tools
-      {
-        name: 'find_type_definition',
-        description: 'Find where a type, interface, class, or enum is defined.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            typeName: { 
-              type: 'string', 
-              description: 'Name of the type to find' 
-            },
-          },
-          required: ['typeName'],
-        },
-      },
-      {
-        name: 'get_type_info',
-        description: 'Get complete information about a type including properties, methods, and usage.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            typeName: { 
-              type: 'string',
-              description: 'Name of the type' 
-            },
-          },
-          required: ['typeName'],
-        },
-      },
-      {
-        name: 'find_type_usages',
-        description: 'Find all places where a type is used in the codebase.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            typeName: { 
-              type: 'string',
-              description: 'Name of the type' 
-            },
-          },
-          required: ['typeName'],
-        },
-      },
-      {
-        name: 'switch_platform',
-        description: 'Switch between AI platforms (Claude ↔ Cursor) with full context handoff',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            fromPlatform: {
-              type: 'string',
-              enum: ['claude', 'cursor', 'copilot', 'other'],
-              description: 'Platform you are switching from',
-            },
-            toPlatform: {
-              type: 'string',
-              enum: ['claude', 'cursor', 'copilot', 'other'],
-              description: 'Platform you are switching to',
-            },
-          },
-          required: ['fromPlatform', 'toPlatform'],
-        },
-      },
-      {
-        name: 'get_started',
-        description: 'Get started with Context Sync - shows installation status, current state, and guided next steps',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'get_performance_report',
-        description: 'Get performance metrics and statistics for database operations and system performance',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            operation: {
-              type: 'string',
-              description: 'Specific operation to get stats for (optional)',
-            },
-            reset: {
-              type: 'boolean',
-              description: 'Reset stats after reporting (default: false)',
-            },
-          },
-        },
-      },
-      // V0.4.0 - Todo Management Tools (ADD THESE)
-      ...todoToolDefinitions,
-      
-      // V1.0.0 - Database Migration Tools
-      {
-        name: 'migrate_database',
-        description: 'Migrate and merge duplicate projects by normalized path. This tool helps clean up database duplicates caused by path variations (case differences, trailing slashes, package.json vs folder names). AI assistants can help users run this to clean up their Context Sync database.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            dryRun: { 
-              type: 'boolean', 
-              description: 'If true, show what would be migrated without making changes (default: false)' 
-            },
-          },
-        },
-      },
-      {
-        name: 'get_migration_stats',
-        description: 'Get statistics about duplicate projects without running migration. Shows how many duplicates exist and what would be merged.',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'check_migration_suggestion',
-        description: 'Check if the user should be prompted for database migration based on current version and duplicate detection. Provides smart migration recommendations.',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-    ];
-  }
+  // ========== CORE HANDLERS ==========
 
   /**
-   * V1.0.0 - Notion Integration Tools
+   * Initialize a project - DEEP ANALYSIS (10x context quality)
+   * Goes far beyond basic detection:
+   * - Exact dependency versions
+   * - Build system commands  
+   * - Test framework & coverage
+   * - Environment variables
+   * - Services & databases
+   * - Quality metrics & hotspots
    */
-  private getNotionTools() {
-    return [
-      {
-        name: 'notion_search',
-        description: 'Search for pages in your Notion workspace. Returns pages that match the search query with their titles, IDs, URLs, and last edited times.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: 'Search query to find pages in Notion',
-            },
-          },
-          required: ['query'],
-        },
-      },
-      {
-        name: 'notion_read_page',
-        description: 'Read the contents of a specific Notion page. Returns the page title, URL, and formatted content.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            pageId: {
-              type: 'string',
-              description: 'The ID of the Notion page to read',
-            },
-          },
-          required: ['pageId'],
-        },
-      },
-      {
-        name: 'notion_create_page',
-        description: 'Create a new page in Notion with the specified title and markdown content. Optionally specify a parent page, or use the configured default parent page.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            title: {
-              type: 'string',
-              description: 'Title of the new page',
-            },
-            content: {
-              type: 'string',
-              description: 'Markdown content for the page',
-            },
-            parentPageId: {
-              type: 'string',
-              description: 'Optional parent page ID. If not provided, uses default parent page from config.',
-            },
-          },
-          required: ['title', 'content'],
-        },
-      },
-      {
-        name: 'notion_update_page',
-        description: 'Update an existing Notion page by replacing its content. The new content will completely replace the existing page content.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            pageId: {
-              type: 'string',
-              description: 'The ID of the page to update',
-            },
-            content: {
-              type: 'string',
-              description: 'New markdown content to replace existing content',
-            },
-          },
-          required: ['pageId', 'content'],
-        },
-      },
-      {
-        name: 'sync_decision_to_notion',
-        description: 'Sync a saved architectural decision from Context Sync to Notion. Creates a formatted Architecture Decision Record (ADR) page in Notion.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            decisionId: {
-              type: 'string',
-              description: 'The ID of the decision to sync (from get_project_context)',
-            },
-          },
-          required: ['decisionId'],
-        },
-      },
-      {
-        name: 'create_project_dashboard',
-        description: 'Create a comprehensive project dashboard in Notion for the current project. Includes project overview, tech stack, architecture notes, and timestamps.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectId: {
-              type: 'string',
-              description: 'Optional project ID. If not provided, uses current active project.',
-            },
-          },
-        },
-      },
-    ];
-  }
-
-  // ========== V0.2.0 HANDLERS ==========
-
-  /**
-   * Prepend announcement to response text if provided
-   */
-  private prependAnnouncement(text: string, announcement?: string | null): string {
-    if (announcement) {
-      return announcement + '\n\n---\n\n' + text;
-    }
-    return text;
-  }
-
-  private async handleGetContext(announcement?: string | null) {
-    const project = this.getCurrentProject();
-    
-    if (!project) {
-      return {
-        content: [{
-          type: 'text',
-          text: 'No active project. Use set_workspace to create one.',
-        }],
-      };
-    }
-
-    const summary = this.storage.getContextSummary(project.id);
-    const contextText = this.formatContextSummary(summary);
-    
-    return {
-      content: [{
-        type: 'text',
-        text: this.prependAnnouncement(contextText, announcement),
-      }],
-    };
-  }
-
-  private handleSaveDecision(args: any) {
-    const project = this.getCurrentProject();
-    
-    if (!project) {
-      return {
-        content: [{ type: 'text', text: 'No active project. Use set_workspace first.' }],
-      };
-    }
-
-    const decision = this.storage.addDecision({
-      projectId: project.id,
-      type: args.type,
-      description: args.description,
-      reasoning: args.reasoning,
-    });
-
-    return {
-      content: [{ type: 'text', text: `Decision saved: ${decision.description}` }],
-    };
-  }
-
-  private handleSaveConversation(args: any) {
-    const project = this.getCurrentProject();
-    
-    if (!project) {
-      return {
-        content: [{ type: 'text', text: 'No active project. Use set_workspace first.' }],
-      };
-    }
-
-    this.storage.addConversation({
-      projectId: project.id,
-      tool: 'claude',
-      role: args.role,
-      content: args.content,
-    });
-
-    return {
-      content: [{ type: 'text', text: 'Conversation saved to project context.' }],
-    };
-  }
-
-
-
-  private async handleSetWorkspace(args: any) {
+  private async handleSetProject(args: { path: string; purpose?: string }) {
     try {
-      // 0. NORMALIZE PATH for consistent handling
-      const normalizedPath = PathNormalizer.normalize(args.path);
-      const displayPath = PathNormalizer.getDisplayPath(args.path);
+      const { path: projectPath, purpose } = args;
 
-      // 1. STRICT PATH VALIDATION - Fail fast on invalid paths
-      await this.validatePathStrict(normalizedPath);
-
-      // 2. CHECK IF PROJECT ALREADY EXISTS IN DATABASE
-      const existingProject = this.storage.findProjectByPath(normalizedPath);
-      if (existingProject) {
-        return await this.useExistingProject(normalizedPath, existingProject, displayPath);
+      // Validate path
+      await fs.access(projectPath);
+      const stats = await fs.stat(projectPath);
+      if (!stats.isDirectory()) {
+        throw new Error('Path must be a directory');
       }
 
-      // 3. DETECT PROJECT FROM FILESYSTEM - Thorough detection
-      const detectedMetadata = await this.detectProjectFromPathStrict(normalizedPath);
-      if (detectedMetadata) {
-        // Auto-initialize immediately (no interactive confirmation)
-        return await this.initializeProjectStrict(normalizedPath, detectedMetadata);
-      }
-
-      // 4. NO PROJECT DETECTED - Initialize a basic workspace project without prompting
-      return await this.initializeProjectStrict(normalizedPath);
-
-    } catch (error) {
-      return this.createErrorResponse(error, args.path);
-    }
-  }
-
-  // ========== STRICT INTERNAL FUNCTIONS WITH ROBUST VALIDATION ==========
-
-  /**
-   * Strict path validation - throws descriptive errors for any path issues
-   */
-  private async validatePathStrict(path: string): Promise<void> {
-    if (!path || typeof path !== 'string') {
-      throw new Error('Path is required and must be a string');
-    }
-
-    const trimmedPath = path.trim();
-    if (!trimmedPath) {
-      throw new Error('Path cannot be empty or just whitespace');
-    }
-
-    // Check if path exists
-    let stats;
-    try {
-      stats = await fs.promises.stat(trimmedPath);
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        throw new Error(`Directory does not exist: ${trimmedPath}`);
-      } else if (error.code === 'EACCES') {
-        throw new Error(`Permission denied accessing: ${trimmedPath}`);
-      } else if (error.code === 'ENOTDIR') {
-        throw new Error(`Path exists but is not a directory: ${trimmedPath}`);
-      } else {
-        throw new Error(`Cannot access path "${trimmedPath}": ${error.message}`);
-      }
-    }
-
-    // Verify it's actually a directory
-    if (!stats.isDirectory()) {
-      throw new Error(`Path exists but is not a directory: ${trimmedPath}`);
-    }
-
-    // Check read permissions by trying to list contents
-    try {
-      await fs.promises.readdir(trimmedPath);
-    } catch (error: any) {
-      throw new Error(`Cannot read directory contents: ${trimmedPath} (${error.message})`);
-    }
-  }
-
-  /**
-   * Strict project detection - only returns metadata for valid, detectable projects
-   */
-  private async detectProjectFromPathStrict(path: string): Promise<any | null> {
-    try {
-      // Use existing project detector but with additional validation
-      const metadata = await this.projectDetector.detectFromPath(path);
-      
-      if (!metadata) {
-        return null; // No project detected - this is fine
-      }
-
-      // Validate detected metadata is actually valid
-      if (!metadata.name || !metadata.type) {
-        console.warn(`Invalid project metadata detected at ${path}:`, metadata);
-        return null;
-      }
-
-      // Ensure tech stack is valid
-      if (!Array.isArray(metadata.techStack)) {
-        console.warn(`Invalid tech stack in project metadata at ${path}:`, metadata.techStack);
-        metadata.techStack = [];
-      }
-
-      return metadata;
-
-    } catch (error) {
-      console.error(`Error detecting project at ${path}:`, error);
-      return null; // Don't throw - just return null for undetectable projects
-    }
-  }
-
-  /**
-   * Use existing project with full workspace setup
-   */
-  private async useExistingProject(path: string, project: any, displayPath?: string) {
-    try {
-      // Set up workspace and analyzers
-      await this.initializeWorkspaceStrict(path);
-      
-      // Set as current project in session
-      this.currentProjectId = project.id;
-      
-      const structure = await this.workspaceDetector.getProjectStructure(2);
-      const isGit = this.gitIntegration?.isGitRepo() ? ' (Git repo ✓)' : '';
-      
-      return {
-        content: [{
-          type: 'text',
-          text: `✅ **Workspace Connected**: ${path}${isGit}\n\n📁 **Project**: ${project.name}\n⚙️  **Tech Stack**: ${project.techStack.join(', ') || 'None'}\n🏗️  **Architecture**: ${project.architecture || 'Not specified'}\n\n📂 **Structure Preview**:\n${structure}\n\n🎯 **Ready!** All Context Sync features are active for this project.\n\n**Available**:\n• Project-specific todos\n• Decision tracking\n• Git integration\n• Code analysis tools\n• 📝 **Notion Integration** - Save docs, pull specs (\`context-sync-setup\`)`
-        }]
-      };
-    } catch (error) {
-      throw new Error(`Failed to set up existing project: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Initialize workspace with all analyzers - strict validation
-   */
-  private async initializeWorkspaceStrict(path: string): Promise<void> {
-    try {
-      // Set workspace detector
-      this.workspaceDetector.setWorkspace(path);
-      
-      // Initialize analyzers with error handling
-      try {
-        this.gitIntegration = new GitIntegration(path);
-      } catch (error) {
-        console.warn(`Git integration failed for ${path}:`, error);
-        this.gitIntegration = null;
-      }
-
-      // Invalidate lazy-loaded analyzers - they'll be recreated on next access
-      this._dependencyAnalyzer = null;
-      this._callGraphAnalyzer = null;
-      this._typeAnalyzer = null;
-
-    } catch (error) {
-      throw new Error(`Failed to initialize workspace: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Initialize a new project with strict validation
-   */
-  private async initializeProjectStrict(path: string, metadata?: any, customName?: string): Promise<any> {
-    try {
-      // Validate inputs
-      if (!path) {
-        throw new Error('Path is required for project initialization');
-      }
-
-      // Re-validate path still exists (safety check)
-      await this.validatePathStrict(path);
-
-      // Create project name
-      const projectName = customName || metadata?.name || basename(path);
-      if (!projectName || projectName.trim().length === 0) {
-        throw new Error('Project name cannot be empty');
-      }
-
-      // Create project in database
-      const project = this.storage.createProject(projectName.trim(), path);
-      if (!project || !project.id) {
-        throw new Error('Failed to create project in database');
-      }
-      
-      // Update with metadata if available
-      if (metadata) {
-        try {
-          this.storage.updateProject(project.id, {
-            techStack: Array.isArray(metadata.techStack) ? metadata.techStack : [],
-            architecture: metadata.architecture || undefined,
-          });
-        } catch (error) {
-          console.warn('Failed to update project metadata:', error);
-          // Continue - project creation succeeded even if metadata update failed
-        }
-      }
-      
-      // Set as current project in session
-      this.currentProjectId = project.id;
-      
       // Initialize workspace
-      await this.initializeWorkspaceStrict(path);
-      
-      // Return success response
-      return await this.createSuccessResponse(path, project);
-      
-    } catch (error) {
-      throw new Error(`Project initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+      await this.workspaceDetector.setWorkspace(projectPath);
 
-  /**
-   * Create comprehensive success response
-   */
-  private async createSuccessResponse(path: string, project: any) {
-    try {
-      const structure = await this.workspaceDetector.getProjectStructure(2);
-      const isGit = this.gitIntegration?.isGitRepo() ? ' (Git repo ✓)' : '';
-      
-      // Check for migration prompt (lightweight)
-      let migrationTip = '';
+      let structurePreview = '';
       try {
-        const version = this.getVersion();
-        const migrationCheck = await this.storage.checkMigrationPrompt(version);
-        if (migrationCheck.shouldPrompt) {
-          migrationTip = `\n\n💡 **Performance Tip:** Your database has duplicate projects that can be cleaned up. Run \`get_migration_stats\` for details.`;
-        }
-      } catch {
-        // Ignore migration check errors in success response
-      }
-      
-      return {
-        content: [{
-          type: 'text',
-          text: `🎉 **Project Initialized Successfully!**\n\n✅ **Workspace**: ${path}${isGit}\n📁 **Project**: ${project.name}\n⚙️  **Tech Stack**: ${project.techStack?.join(', ') || 'None'}\n🏗️  **Architecture**: ${project.architecture || 'Generic'}\n\n📂 **Structure Preview**:\n${structure}\n\n🚀 **Context Sync Active!**\n\n**Available Commands**:\n• \`todo_create "task"\` - Add project todos\n• \`save_decision "choice"\` - Record decisions\n• \`git_status\` - Check repository status\n• \`search_content "term"\` - Find code\n• \`get_project_context\` - View project info\n• 📝 **Notion tools** - \`notion_create_page\`, \`notion_search\`, etc.\n\n**Pro Tip**: All todos and decisions are now linked to "${project.name}" automatically!\n\n💡 **Want Notion integration?** Run \`context-sync-setup\` to save docs and pull specs from Notion!${migrationTip}`
-        }]
-      };
-    } catch (error) {
-      // Fallback response if structure preview fails
-      return {
-        content: [{
-          type: 'text',
-          text: `🎉 **Project Initialized**: ${project.name}\n✅ **Workspace**: ${path}\n\n🚀 Context Sync is now active for this project!`
-        }]
-      };
-    }
-  }
-
-  /**
-   * Create comprehensive error response
-   */
-  private createErrorResponse(error: any, path?: string) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    
-    return {
-      content: [{
-        type: 'text',
-        text: `❌ **Workspace Setup Failed**\n\n**Error**: ${errorMessage}\n\n**Path**: ${path || 'Not provided'}\n\n**Common Solutions**:\n• Verify the directory path exists\n• Check you have read permissions\n• Ensure path points to a directory (not a file)\n• Try using an absolute path\n\n**Need Help?** Double-check the path and try again.`
-      }],
-      isError: true
-    };
-  }
-
-  private async handleReadFile(args: any) {
-    try {
-      const file = await this.workspaceDetector.readFile(args.path);
-      
-      if (!file) {
-        return {
-          content: [{
-            type: 'text',
-            text: `File not found: ${args.path}\n\nMake sure:\n1. Workspace is set (use set_workspace)\n2. Path is relative to workspace root\n3. File exists`,
-          }],
-        };
-      }
-
-      const sizeKB = file.size / 1024;
-      let sizeWarning = '';
-      if (sizeKB > 100) {
-        sizeWarning = `\n⚠️  Large file (${sizeKB.toFixed(1)}KB) - showing full content\n`;
-      }
-
-      return {
-        content: [{
-          type: 'text',
-          text: `📄 ${file.path} (${file.language})${sizeWarning}\n\`\`\`${file.language.toLowerCase()}\n${file.content}\n\`\`\``,
-        }],
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Error reading file: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        }],
-      };
-    }
-  }
-
-  private async handleGetProjectStructure(args: any) {
-    try {
-      const depth = args.depth || 3;
-      const structure = await this.workspaceDetector.getProjectStructure(depth);
-
-      if (!structure || structure === 'No workspace open') {
-        return {
-          content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-        };
-      }
-
-      return {
-        content: [{ type: 'text', text: `📂 Project Structure (depth: ${depth}):\n\n${structure}` }],
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Error getting structure: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        }],
-      };
-    }
-  }
-
-  private async handleScanWorkspace() {
-    try {
-      const snapshot = await this.workspaceDetector.createSnapshot();
-
-      if (!snapshot.rootPath) {
-        return {
-          content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-        };
-      }
-
-      let response = `📊 Workspace Scan Results\n\n`;
-      response += `📁 Root: ${snapshot.rootPath}\n\n`;
-      response += `${snapshot.summary}\n\n`;
-      response += `📂 Structure:\n${snapshot.structure}\n\n`;
-      response += `📋 Scanned ${snapshot.files.length} important files:\n`;
-      
-      snapshot.files.forEach(f => {
-        const icon = f.language.includes('TypeScript') ? '📘' : 
-                     f.language.includes('JavaScript') ? '📜' : 
-                     f.language === 'JSON' ? '📋' : '📄';
-        response += `${icon} ${f.path} (${f.language}, ${(f.size / 1024).toFixed(1)}KB)\n`;
-      });
-
-      response += `\nUse read_file to view any specific file!`;
-
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Error scanning workspace: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        }],
-      };
-    }
-  }
-
-  // ========== V0.3.0 HANDLERS - PREVIEW TOOLS ==========
-
-  private async handleCreateFile(args: any) {
-    const result = await this.fileWriter.createFile(
-      args.path,
-      args.content,
-      args.overwrite || false
-    );
-
-    if (!result.success) {
-      return {
-        content: [{ type: 'text', text: result.message }],
-      };
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: result.preview + '\n\n⚠️  This is a PREVIEW only. To actually create this file, user must approve and you must call apply_create_file with the same parameters.',
-      }],
-    };
-  }
-
-  private async handleModifyFile(args: any) {
-    const result = await this.fileWriter.modifyFile(args.path, args.changes);
-
-    if (!result.success) {
-      return {
-        content: [{ type: 'text', text: result.message }],
-      };
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: result.preview + '\n\n⚠️  This is a PREVIEW only. To actually modify this file, user must approve and you must call apply_modify_file with the same parameters.',
-      }],
-    };
-  }
-
-  private async handleDeleteFile(args: any) {
-    const result = await this.fileWriter.deleteFile(args.path);
-
-    if (!result.success) {
-      return {
-        content: [{ type: 'text', text: result.message }],
-      };
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: result.preview + '\n\n⚠️  This is a PREVIEW only. To actually delete this file, user must approve and you must call apply_delete_file with the same path.',
-      }],
-    };
-  }
-
-  // ========== V0.3.0 HANDLERS - APPLY TOOLS (NEW!) ==========
-
-  private async handleApplyCreateFile(args: any) {
-    const result = await this.fileWriter.applyCreateFile(args.path, args.content);
-    return {
-      content: [{ type: 'text', text: result.message }],
-    };
-  }
-
-  private async handleApplyModifyFile(args: any) {
-    const result = await this.fileWriter.applyModifyFile(args.path, args.changes);
-    return {
-      content: [{ type: 'text', text: result.message }],
-    };
-  }
-
-  private async handleApplyDeleteFile(args: any) {
-    const result = await this.fileWriter.applyDeleteFile(args.path);
-    return {
-      content: [{ type: 'text', text: result.message }],
-    };
-  }
-
-  // ========== V0.3.0 HANDLERS - OTHER TOOLS ==========
-
-  private async handleUndoFileChange(args: any) {
-    const result = await this.fileWriter.undoChange(
-      args.path,
-      args.steps || 1
-    );
-
-    return {
-      content: [{ type: 'text', text: result.message }],
-    };
-  }
-
-  private async handleSearchFiles(args: any) {
-    const results = await this.fileSearcher.searchFilesAsync(args.pattern, {
-      maxResults: args.maxResults,
-      ignoreCase: args.ignoreCase,
-    });
-
-    if (results.length === 0) {
-      return {
-        content: [{
-          type: 'text',
-          text: `No files found matching pattern: "${args.pattern}"`,
-        }],
-      };
-    }
-
-    let response = `🔍 Found ${results.length} files matching "${args.pattern}":\n\n`;
-    
-    results.forEach((file, i) => {
-      const size = (file.size / 1024).toFixed(1);
-      response += `${i + 1}. ${file.path} (${file.language}, ${size}KB)\n`;
-    });
-
-    response += `\nUse read_file to view any of these files.`;
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  }
-
-  private async handleSearchContent(args: any) {
-    const results = await this.fileSearcher.searchContentAsync(args.query, {
-      regex: args.regex,
-      caseSensitive: args.caseSensitive,
-      filePattern: args.filePattern,
-      maxResults: args.maxResults,
-    });
-
-    if (results.length === 0) {
-      return {
-        content: [{
-          type: 'text',
-          text: `No matches found for: "${args.query}"`,
-        }],
-      };
-    }
-
-    let response = `🔍 Found ${results.length} matches for "${args.query}":\n\n`;
-    
-    results.slice(0, 20).forEach((match, i) => {
-      response += `${i + 1}. ${match.path}:${match.line}\n`;
-      response += `   ${match.content}\n\n`;
-    });
-
-    if (results.length > 20) {
-      response += `... and ${results.length - 20} more matches`;
-    }
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  }
-
-  private handleFindSymbol(args: any) {
-    const results = this.fileSearcher.findSymbol(args.symbol, args.type);
-
-    if (results.length === 0) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Symbol "${args.symbol}" not found`,
-        }],
-      };
-    }
-
-    let response = `🔍 Found ${results.length} definition(s) of "${args.symbol}":\n\n`;
-    
-    results.forEach((match, i) => {
-      response += `${i + 1}. ${match.path}:${match.line}\n`;
-      response += `   ${match.content}\n\n`;
-    });
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  }
-
-  private handleGitStatus() {
-    if (!this.gitIntegration) {
-      return {
-        content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-      };
-    }
-
-    const status = this.gitIntegration.getStatus();
-
-    if (!status) {
-      return {
-        content: [{ type: 'text', text: 'Not a git repository' }],
-      };
-    }
-
-    let response = `🔄 Git Status\n\n`;
-    response += `📍 Branch: ${status.branch}`;
-    
-    if (status.ahead > 0) response += ` (ahead ${status.ahead})`;
-    if (status.behind > 0) response += ` (behind ${status.behind})`;
-    response += `\n\n`;
-
-    if (status.clean) {
-      response += `✅ Working tree clean`;
-    } else {
-      if (status.staged.length > 0) {
-        response += `📝 Staged (${status.staged.length}):\n`;
-        status.staged.slice(0, 10).forEach(f => response += `  • ${f}\n`);
-        if (status.staged.length > 10) {
-          response += `  ... and ${status.staged.length - 10} more\n`;
-        }
-        response += `\n`;
-      }
-
-      if (status.modified.length > 0) {
-        response += `✏️  Modified (${status.modified.length}):\n`;
-        status.modified.slice(0, 10).forEach(f => response += `  • ${f}\n`);
-        if (status.modified.length > 10) {
-          response += `  ... and ${status.modified.length - 10} more\n`;
-        }
-        response += `\n`;
-      }
-
-      if (status.untracked.length > 0) {
-        response += `❓ Untracked (${status.untracked.length}):\n`;
-        status.untracked.slice(0, 10).forEach(f => response += `  • ${f}\n`);
-        if (status.untracked.length > 10) {
-          response += `  ... and ${status.untracked.length - 10} more\n`;
-        }
-      }
-    }
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  }
-
-  private handleGitDiff(args: any) {
-    if (!this.gitIntegration) {
-      return {
-        content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-      };
-    }
-
-    const diff = this.gitIntegration.getDiff(args.path, args.staged);
-
-    if (!diff) {
-      return {
-        content: [{ type: 'text', text: 'Not a git repository or no changes' }],
-      };
-    }
-
-    if (diff.trim().length === 0) {
-      return {
-        content: [{ type: 'text', text: 'No changes to show' }],
-      };
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: `📊 Git Diff${args.staged ? ' (staged)' : ''}:\n\n\`\`\`diff\n${diff}\n\`\`\``,
-      }],
-    };
-  }
-
-  private handleGitBranchInfo(args: any) {
-    if (!this.gitIntegration) {
-      return {
-        content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-      };
-    }
-
-    const info = this.gitIntegration.getBranchInfo(args.action || 'current');
-
-    if (!info) {
-      return {
-        content: [{ type: 'text', text: 'Not a git repository' }],
-      };
-    }
-
-    if (typeof info === 'string') {
-      return {
-        content: [{ type: 'text', text: `📍 Current branch: ${info}` }],
-      };
-    }
-
-    let response = `📍 Git Branches\n\n`;
-    response += `Current: ${info.current}\n\n`;
-
-    if (info.all.length > 0) {
-      response += `All branches (${info.all.length}):\n`;
-      info.all.slice(0, 20).forEach(b => {
-        const marker = b === info.current ? '→ ' : '  ';
-        response += `${marker}${b}\n`;
-      });
-    }
-
-    if (info.recent.length > 0) {
-      response += `\nRecent branches:\n`;
-      info.recent.forEach(b => {
-        const marker = b.name === info.current ? '→ ' : '  ';
-        response += `${marker}${b.name} (${b.lastCommit})\n`;
-      });
-    }
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  }
-
-  private handleSuggestCommitMessage(args: any) {
-    if (!this.gitIntegration) {
-      return {
-        content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-      };
-    }
-
-    const message = this.gitIntegration.suggestCommitMessage(
-      args.files || [],
-      args.convention || 'conventional'
-    );
-
-    if (!message) {
-      return {
-        content: [{ type: 'text', text: 'Not a git repository or no changes to commit' }],
-      };
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: `💬 Suggested Commit Message:\n\n\`\`\`\n${message}\n\`\`\``,
-      }],
-    };
-  }
-
-  private formatContextSummary(summary: any): string {
-    const { project, recentDecisions, keyPoints } = summary;
-
-    let text = `# Project: ${project.name}\n\n`;
-
-    if (project.architecture) {
-      text += `**Architecture:** ${project.architecture}\n\n`;
-    }
-
-    if (project.techStack.length > 0) {
-      text += `**Tech Stack:** ${project.techStack.join(', ')}\n\n`;
-    }
-
-    if (recentDecisions.length > 0) {
-      text += `## Recent Decisions\n\n`;
-      recentDecisions.forEach((d: any) => {
-        text += `- **${d.type}**: ${d.description}\n`;
-        if (d.reasoning) {
-          text += `  *Reasoning: ${d.reasoning}*\n`;
-        }
-      });
-      text += '\n';
-    }
-
-    if (keyPoints.length > 0) {
-      text += `## Key Context Points\n\n`;
-      keyPoints.slice(0, 10).forEach((point: string) => {
-        text += `- ${point}\n`;
-      });
-    }
-
-    return text;
-  }
-
- // ========== V0.4.0 HANDLERS - DEPENDENCY ANALYSIS ==========
- private handleAnalyzeDependencies(args: any) {
-  if (!this.dependencyAnalyzer) {
-    return {
-      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-    };
-  }
-
-  try {
-    const graph = this.dependencyAnalyzer.analyzeDependencies(args.filePath);
-    
-    let response = `📊 Dependency Analysis: ${graph.filePath}\n\n`;
-    
-    // Imports
-    if (graph.imports.length > 0) {
-      response += `📥 Imports (${graph.imports.length}):\n`;
-      graph.imports.forEach(imp => {
-        const type = imp.isExternal ? '📦 [external]' : '📄 [local]';
-        const names = imp.importedNames.length > 0 ? `{ ${imp.importedNames.join(', ')} }` : 
-                      imp.defaultImport ? imp.defaultImport :
-                      imp.namespaceImport ? `* as ${imp.namespaceImport}` : '';
-        response += `  ${type} ${imp.source}${names ? ` - ${names}` : ''} (line ${imp.line})\n`;
-      });
-      response += '\n';
-    }
-    
-    // Exports
-    if (graph.exports.length > 0) {
-      response += `📤 Exports (${graph.exports.length}):\n`;
-      graph.exports.forEach(exp => {
-        if (exp.hasDefaultExport) {
-          response += `  • default export (line ${exp.line})\n`;
-        }
-        if (exp.exportedNames.length > 0) {
-          response += `  • ${exp.exportedNames.join(', ')} (line ${exp.line})\n`;
-        }
-      });
-      response += '\n';
-    }
-    
-    // Importers
-    if (graph.importers.length > 0) {
-      response += `👥 Imported by (${graph.importers.length} files):\n`;
-      graph.importers.slice(0, 10).forEach(file => {
-        const relativePath = file.replace(this.dependencyAnalyzer!['workspacePath'], '').replace(/^[\\\/]/, '');
-        response += `  • ${relativePath}\n`;
-      });
-      if (graph.importers.length > 10) {
-        response += `  ... and ${graph.importers.length - 10} more files\n`;
-      }
-      response += '\n';
-    }
-    
-    // Circular dependencies
-    if (graph.circularDeps.length > 0) {
-      response += `⚠️  Circular Dependencies (${graph.circularDeps.length}):\n`;
-      graph.circularDeps.forEach(cycle => {
-        response += `  • ${cycle.description}\n`;
-      });
-    } else {
-      response += `✅ No circular dependencies detected\n`;
-    }
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error analyzing dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }],
-    };
-  }
-}
-
-private handleGetDependencyTree(args: any) {
-  if (!this.dependencyAnalyzer) {
-    return {
-      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-    };
-  }
-
-  try {
-    const depth = Math.min(args.depth || 3, 10);
-    const tree = this.dependencyAnalyzer.getDependencyTree(args.filePath, depth);
-    
-    const formatTree = (node: any, indent: string = '', isLast: boolean = true): string => {
-      const prefix = isLast ? '└── ' : '├── ';
-      const icon = node.isExternal ? '📦' : node.isCyclic ? '🔄' : '📄';
-      let result = `${indent}${prefix}${icon} ${node.file}${node.isCyclic ? ' (circular)' : ''}\n`;
-      
-      if (node.imports && node.imports.length > 0) {
-        const newIndent = indent + (isLast ? '    ' : '│   ');
-        node.imports.forEach((child: any, i: number) => {
-          result += formatTree(child, newIndent, i === node.imports.length - 1);
+        const structureEngine = new StructureEngine(projectPath);
+        const structure = await structureEngine.getStructure(2, {
+          includeMetadata: false,
+          analyzeComplexity: false,
+          detectHotspots: false
         });
-      }
-      
-      return result;
-    };
-    
-    let response = `🌲 Dependency Tree (depth: ${depth})\n\n`;
-    response += formatTree(tree);
-    
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error getting dependency tree: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }],
-    };
-  }
-}
-
-private handleFindImporters(args: any) {
-  if (!this.dependencyAnalyzer) {
-    return {
-      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-    };
-  }
-
-  try {
-    const importers = this.dependencyAnalyzer.findImporters(args.filePath);
-    
-    if (importers.length === 0) {
-      return {
-        content: [{
-          type: 'text',
-          text: `No files import ${args.filePath}\n\nThis file is either:\n- Not imported anywhere (unused)\n- An entry point\n- Only imported by external packages`,
-        }],
-      };
-    }
-    
-    let response = `👥 Files that import ${args.filePath} (${importers.length}):\n\n`;
-    
-    importers.forEach((file, i) => {
-      const relativePath = file.replace(this.dependencyAnalyzer!['workspacePath'], '').replace(/^[\\\/]/, '');
-      response += `${i + 1}. ${relativePath}\n`;
-    });
-    
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error finding importers: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }],
-    };
-  }
-}
-
-private handleDetectCircularDeps(args: any) {
-  if (!this.dependencyAnalyzer) {
-    return {
-      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-    };
-  }
-
-  try {
-    const cycles = this.dependencyAnalyzer.detectCircularDependencies(args.filePath);
-    
-    if (cycles.length === 0) {
-      return {
-        content: [{
-          type: 'text',
-          text: `✅ No circular dependencies detected for ${args.filePath}`,
-        }],
-      };
-    }
-    
-    let response = `⚠️  Circular Dependencies Detected (${cycles.length}):\n\n`;
-    
-    cycles.forEach((cycle, i) => {
-      response += `${i + 1}. ${cycle.description}\n`;
-      response += `   Path: ${cycle.cycle.map(f => {
-        return f.replace(this.dependencyAnalyzer!['workspacePath'], '').replace(/^[\\\/]/, '');
-      }).join(' → ')}\n\n`;
-    });
-    
-    response += `\n💡 Tip: Circular dependencies can cause:\n`;
-    response += `- Module initialization issues\n`;
-    response += `- Bundler problems\n`;
-    response += `- Harder to understand code\n`;
-    response += `\nConsider refactoring by extracting shared code to a separate module.`;
-    
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error detecting circular dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }],
-    };
-  }
-} 
-
-// ========== V0.4.0 HANDLERS - CALL GRAPH ANALYSIS ==========
-
-private handleAnalyzeCallGraph(args: any) {
-  if (!this.callGraphAnalyzer) {
-    return {
-      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-    };
-  }
-
-  try {
-    const graph = this.callGraphAnalyzer.analyzeCallGraph(args.functionName);
-    
-    if (!graph) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Function "${args.functionName}" not found in workspace.`,
-        }],
-      };
-    }
-
-    let response = `📊 Call Graph Analysis: ${graph.function.name}\n\n`;
-    
-    // Function info
-    response += `📍 Location: ${this.getRelativePath(graph.function.filePath)}:${graph.function.line}\n`;
-    response += `🔧 Type: ${graph.function.type}`;
-    if (graph.function.className) {
-      response += ` (in class ${graph.function.className})`;
-    }
-    response += `\n`;
-    response += `📊 Call depth: ${graph.callDepth}\n`;
-    if (graph.isRecursive) {
-      response += `🔄 Recursive: Yes\n`;
-    }
-    response += `\n`;
-
-    // Callers (who calls this function)
-    if (graph.callers.length > 0) {
-      response += `👥 Called by (${graph.callers.length} functions):\n`;
-      graph.callers.slice(0, 10).forEach(caller => {
-        const file = this.getRelativePath(caller.filePath);
-        const asyncMark = caller.isAsync ? ' (async)' : '';
-        response += `  • ${caller.caller}${asyncMark} - ${file}:${caller.line}\n`;
-      });
-      if (graph.callers.length > 10) {
-        response += `  ... and ${graph.callers.length - 10} more\n`;
-      }
-      response += `\n`;
-    } else {
-      response += `👥 Not called by any function (entry point or unused)\n\n`;
-    }
-
-    // Callees (what this function calls)
-    if (graph.callees.length > 0) {
-      response += `📞 Calls (${graph.callees.length} functions):\n`;
-      graph.callees.slice(0, 10).forEach(callee => {
-        const file = this.getRelativePath(callee.filePath);
-        const asyncMark = callee.isAsync ? ' (await)' : '';
-        response += `  • ${callee.callee}${asyncMark} - ${file}:${callee.line}\n`;
-      });
-      if (graph.callees.length > 10) {
-        response += `  ... and ${graph.callees.length - 10} more\n`;
-      }
-    } else {
-      response += `📞 Doesn't call any functions (leaf function)\n`;
-    }
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error analyzing call graph: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }],
-    };
-  }
-}
-
-private handleFindCallers(args: any) {
-  if (!this.callGraphAnalyzer) {
-    return {
-      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-    };
-  }
-
-  try {
-    const callers = this.callGraphAnalyzer.findCallers(args.functionName);
-    
-    if (callers.length === 0) {
-      return {
-        content: [{
-          type: 'text',
-          text: `No functions call "${args.functionName}".\n\nThis function might be:\n- An entry point\n- Unused code\n- Only called externally`,
-        }],
-      };
-    }
-
-    let response = `👥 Functions that call "${args.functionName}" (${callers.length}):\n\n`;
-    
-    callers.forEach((caller, i) => {
-      const file = this.getRelativePath(caller.filePath);
-      const asyncMark = caller.isAsync ? '⏳' : '  ';
-      response += `${i + 1}. ${asyncMark} ${caller.caller}\n`;
-      response += `   📍 ${file}:${caller.line}\n`;
-      response += `   💬 ${caller.callExpression}\n\n`;
-    });
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error finding callers: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }],
-    };
-  }
-}
-
-private handleTraceExecutionPath(args: any) {
-  if (!this.callGraphAnalyzer) {
-    return {
-      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-    };
-  }
-
-  try {
-    const paths = this.callGraphAnalyzer.traceExecutionPath(
-      args.startFunction,
-      args.endFunction,
-      args.maxDepth || 10
-    );
-
-    if (paths.length === 0) {
-      return {
-        content: [{
-          type: 'text',
-          text: `No execution path found from "${args.startFunction}" to "${args.endFunction}".\n\nPossible reasons:\n- Functions are not connected\n- Path exceeds max depth\n- One or both functions don't exist`,
-        }],
-      };
-    }
-
-    let response = `🛤️  Execution Paths: ${args.startFunction} → ${args.endFunction}\n\n`;
-    response += `Found ${paths.length} possible path(s):\n\n`;
-
-    paths.forEach((path, i) => {
-      const asyncMark = path.isAsync ? ' ⏳ (async)' : '';
-      response += `Path ${i + 1} (depth: ${path.depth})${asyncMark}:\n`;
-      response += `  ${path.description}\n\n`;
-    });
-
-    if (paths.length > 1) {
-      response += `💡 Multiple paths exist. Consider:\n`;
-      response += `- Which path is most commonly used?\n`;
-      response += `- Are all paths intentional?\n`;
-      response += `- Could the code be simplified?\n`;
-    }
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error tracing execution path: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }],
-    };
-  }
-}
-
-private handleGetCallTree(args: any) {
-  if (!this.callGraphAnalyzer) {
-    return {
-      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-    };
-  }
-
-  try {
-    const depth = Math.min(args.depth || 3, 5);
-    const tree = this.callGraphAnalyzer.getCallTree(args.functionName, depth);
-
-    if (!tree) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Function "${args.functionName}" not found in workspace.`,
-        }],
-      };
-    }
-
-    const formatTree = (node: any, indent: string = '', isLast: boolean = true): string => {
-      const prefix = isLast ? '└── ' : '├── ';
-      const asyncMark = node.isAsync ? '⏳ ' : '';
-      const recursiveMark = node.isRecursive ? '🔄 ' : '';
-      let result = `${indent}${prefix}${asyncMark}${recursiveMark}${node.function} (${node.file}:${node.line})\n`;
-      
-      if (node.calls && node.calls.length > 0 && !node.isRecursive) {
-        const newIndent = indent + (isLast ? '    ' : '│   ');
-        node.calls.forEach((child: any, i: number) => {
-          result += formatTree(child, newIndent, i === node.calls.length - 1);
-        });
-      }
-      
-      return result;
-    };
-
-    let response = `🌲 Call Tree (depth: ${depth})\n\n`;
-    response += formatTree(tree);
-    response += `\n`;
-    response += `Legend:\n`;
-    response += `⏳ = async function\n`;
-    response += `🔄 = recursive call\n`;
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error getting call tree: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }],
-    };
-  }
-}
-
-// ========== V0.4.0 HANDLERS - TYPE ANALYSIS ==========
-
-private async handleFindTypeDefinition(args: any) {
-  if (!this.typeAnalyzer) {
-    return {
-      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-    };
-  }
-
-  try {
-    const definition = await this.typeAnalyzer.findTypeDefinition(args.typeName);
-    
-    if (!definition) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Type "${args.typeName}" not found in workspace.\n\nMake sure:\n- The type is defined in a .ts or .tsx file\n- The type name is spelled correctly\n- The file is in the workspace`,
-        }],
-      };
-    }
-
-    const file = this.getRelativePath(definition.filePath);
-    let response = `📘 Type Definition: ${definition.name}\n\n`;
-    response += `🏷️  Kind: ${definition.kind}\n`;
-    response += `📍 Location: ${file}:${definition.line}\n`;
-    response += `📤 Exported: ${definition.isExported ? 'Yes' : 'No'}\n\n`;
-    response += `Raw definition:\n\`\`\`typescript\n${definition.raw}\n\`\`\``;
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error finding type definition: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }],
-    };
-  }
-}
-
-private async handleGetTypeInfo(args: any) {
-  if (!this.typeAnalyzer) {
-    return {
-      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-    };
-  }
-
-  try {
-    const info = await this.typeAnalyzer.getTypeInfo(args.typeName);
-    
-    if (!info) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Type "${args.typeName}" not found in workspace.`,
-        }],
-      };
-    }
-
-    const file = this.getRelativePath(info.definition.filePath);
-    let response = `📘 Complete Type Information: ${info.definition.name}\n\n`;
-    response += `📍 ${file}:${info.definition.line}\n`;
-    response += `🏷️  ${info.definition.kind}\n\n`;
-
-    // Type-specific details
-    const details = info.details;
-
-    if (details.kind === 'interface') {
-      if (details.extends && details.extends.length > 0) {
-        response += `🔗 Extends: ${details.extends.join(', ')}\n\n`;
+        structurePreview = ` **Project Structure (depth 2)**\n\n\`\`\`\n${structure.tree}\`\`\`\n\n`;
+      } catch (error: any) {
+        structurePreview = '';
       }
 
-      if (details.properties.length > 0) {
-        response += `📦 Properties (${details.properties.length}):\n`;
-        details.properties.forEach(prop => {
-          const optional = prop.optional ? '?' : '';
-          const readonly = prop.readonly ? 'readonly ' : '';
-          response += `  • ${readonly}${prop.name}${optional}: ${prop.type}\n`;
-        });
-        response += `\n`;
-      }
+      // Check if project already exists in database
+      // NORMALIZE paths to lowercase for case-insensitive comparison (Windows)
+      const normalizedPath = projectPath.toLowerCase();
+      const existingProjects = this.storage.getAllProjects();
+      const existing = existingProjects.find(p => p.path?.toLowerCase() === normalizedPath);
 
-      if (details.methods.length > 0) {
-        response += `⚙️  Methods (${details.methods.length}):\n`;
-        details.methods.forEach(method => {
-          const params = method.params.map(p => `${p.name}: ${p.type || 'any'}`).join(', ');
-          response += `  • ${method.name}(${params}): ${method.returnType || 'void'}\n`;
-        });
-        response += `\n`;
-      }
-    } else if (details.kind === 'type') {
-      response += `📝 Definition:\n  ${details.definition}\n\n`;
-    } else if (details.kind === 'class') {
-      if (details.extends) {
-        response += `🔗 Extends: ${details.extends}\n`;
-      }
-      if (details.implements && details.implements.length > 0) {
-        response += `🔗 Implements: ${details.implements.join(', ')}\n`;
-      }
-      response += `\n`;
-
-      if (details.constructor) {
-        const params = details.constructor.params.map(p => `${p.name}: ${p.type || 'any'}`).join(', ');
-        response += `🏗️  Constructor(${params})\n\n`;
-      }
-
-      if (details.properties.length > 0) {
-        response += `📦 Properties (${details.properties.length}):\n`;
-        details.properties.forEach(prop => {
-          const optional = prop.optional ? '?' : '';
-          const readonly = prop.readonly ? 'readonly ' : '';
-          response += `  • ${readonly}${prop.name}${optional}: ${prop.type}\n`;
-        });
-        response += `\n`;
-      }
-
-      if (details.methods.length > 0) {
-        response += `⚙️  Methods (${details.methods.length}):\n`;
-        details.methods.forEach(method => {
-          const vis = method.visibility || 'public';
-          const stat = method.isStatic ? 'static ' : '';
-          const async = method.isAsync ? 'async ' : '';
-          response += `  • ${vis} ${stat}${async}${method.name}()\n`;
-        });
-        response += `\n`;
-      }
-    } else if (details.kind === 'enum') {
-      response += `📋 Members (${details.members.length}):\n`;
-      details.members.forEach(member => {
-        const value = member.value !== undefined ? ` = ${member.value}` : '';
-        response += `  • ${member.name}${value}\n`;
-      });
-      response += `\n`;
-    }
-
-    // Related types
-    if (info.relatedTypes.length > 0) {
-      response += `🔗 Related Types: ${info.relatedTypes.join(', ')}\n\n`;
-    }
-
-    // Usage count
-    response += `📊 Used in ${info.usages.length} location(s)\n`;
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error getting type info: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }],
-    };
-  }
-}
-
-private async handleFindTypeUsages(args: any) {
-  if (!this.typeAnalyzer) {
-    return {
-      content: [{ type: 'text', text: 'No workspace set. Use set_workspace first.' }],
-    };
-  }
-
-  try {
-    const usages = await this.typeAnalyzer.findTypeUsages(args.typeName);
-    
-    if (usages.length === 0) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Type "${args.typeName}" is not used anywhere.\n\nThis type might be:\n- Newly defined\n- Exported but not used\n- Dead code (consider removing)`,
-        }],
-      };
-    }
-
-    let response = `📊 Usage of type "${args.typeName}" (${usages.length} locations):\n\n`;
-
-    // Group by file
-    const byFile = new Map<string, typeof usages>();
-    usages.forEach(usage => {
-      const file = this.getRelativePath(usage.filePath);
-      if (!byFile.has(file)) {
-        byFile.set(file, []);
-      }
-      byFile.get(file)!.push(usage);
-    });
-
-    byFile.forEach((fileUsages, file) => {
-      response += `📄 ${file} (${fileUsages.length} usages):\n`;
-      fileUsages.slice(0, 5).forEach(usage => {
-        const icon = usage.usageType === 'variable' ? '📦' :
-                     usage.usageType === 'parameter' ? '⚙️' :
-                     usage.usageType === 'return' ? '↩️' :
-                     usage.usageType === 'generic' ? '<>' :
-                     usage.usageType === 'implements' ? '🔗' :
-                     usage.usageType === 'extends' ? '🔗' : '•';
-        response += `  ${icon} Line ${usage.line}: ${usage.context}\n`;
-      });
-      if (fileUsages.length > 5) {
-        response += `  ... and ${fileUsages.length - 5} more\n`;
-      }
-      response += `\n`;
-    });
-
-    return {
-      content: [{ type: 'text', text: response }],
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error finding type usages: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      }],
-    };
-  }
-}
-
-private getRelativePath(filePath: string): string {
-  if (!this.dependencyAnalyzer) return filePath;
-  return filePath.replace(this.dependencyAnalyzer['workspacePath'], '').replace(/^[\\\/]/, '');
-}
-
-    // ========== V0.5.0 HANDLERS - PLATFORM SYNC ==========
-
-    private handleSwitchPlatform(args: { fromPlatform: AIPlatform; toPlatform: AIPlatform }) {
-      const handoff = this.platformSync.createHandoff(args.fromPlatform, args.toPlatform);
-
-      if (!handoff) {
-        return {
-          content: [{
-            type: 'text',
-            text: 'No active project. Initialize a project first to enable platform handoff.',
-          }],
-        };
-      }
-
-      this.platformSync.setPlatform(args.toPlatform);
-
-      return {
-        content: [{
-          type: 'text',
-          text: handoff.summary,
-        }],
-      };
-    }
-
-   private handleGetPlatformStatus() {
-      const status = PlatformSync.getPlatformStatus();
-      const current = this.platformSync.getPlatform();
-
-      let response = `� **Context Sync Platform Status**\n\n`;
-      response += `**Current Platform:** ${current}\n\n`;
-      
-      // Core platforms (fully supported)
-      response += `## 🎯 **Core Platforms**\n`;
-      response += `${status.claude ? '✅' : '❌'} **Claude Desktop** - Advanced reasoning and analysis\n`;
-      response += `${status.cursor ? '✅' : '❌'} **Cursor IDE** - AI-powered coding environment\n`;
-      response += `${status.copilot ? '✅' : '❌'} **GitHub Copilot** - VS Code integration\n\n`;
-      
-      // Extended platforms  
-      response += `## 🔧 **Extended Platforms**\n`;
-      response += `${status.continue ? '✅' : '❌'} **Continue.dev** - Open source AI coding assistant\n`;
-      response += `${status.zed ? '✅' : '❌'} **Zed Editor** - Fast collaborative editor\n`;
-      response += `${status.windsurf ? '✅' : '❌'} **Windsurf** - Codeium's AI IDE\n`;
-      response += `${status.tabnine ? '✅' : '❌'} **TabNine** - Enterprise AI completion\n\n`;
-
-
-      // Count active platforms
-      const activePlatforms = Object.values(status).filter(Boolean).length;
-      response += `**Active Platforms:** ${activePlatforms}/13\n\n`;
-      
-      if (activePlatforms === 0) {
-        response += `⚠️  **No platforms configured yet**\n`;
-        response += `Get started with: "help me get started with context-sync"\n`;
-      } else if (activePlatforms < 3) {
-        response += `💡 **Want to add more platforms?**\n`;
-        response += `Use: "switch platform to [platform-name]" for setup instructions\n`;
-      }
-
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-    }
-
-    private handleGetPlatformContext(args: { platform?: AIPlatform }) {
-      const platform = args.platform || this.platformSync.getPlatform();
-      const context = this.platformSync.getPlatformContext(platform);
-
-      return {
-        content: [{ type: 'text', text: context }],
-      };
-    }
-
-    private handleSetupCursor() {
-      const paths = PlatformSync.getConfigPaths();
-      const cursorPath = paths.cursor;
-      const instructions = PlatformSync.getInstallInstructions('cursor');
-
-      let response = `🚀 Cursor Setup Instructions\n\n`;
-      response += instructions;
-      response += `\n\n📄 Configuration File: ${cursorPath}\n\n`;
-      response += `⚠️  Note: You'll need to manually edit the configuration file and restart Cursor.`;
-
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-    }
-
-  private async handleGetStarted() {
-    // Check installation status - if we're here, Context Sync is working
-    const version = this.getVersion();
-    
-    // Get current state using session-based approach (NEW)
-    const currentProject = this.getCurrentProject();
-    const workspace = this.workspaceDetector.getCurrentWorkspace();
-    const detectedPlatform = PlatformSync.detectPlatform(); // Real-time detection
-    const platformStatus = PlatformSync.getPlatformStatus();
-    
-    // Build response
-    let response = `🎉 **Context Sync v${version} is working!**\n\n`;
-    
-    // Show integrated AI platforms with counts
-    const activePlatforms = Object.values(platformStatus).filter(Boolean).length;
-    response += `🌍 **Universal AI Platform Support (${activePlatforms}/13 active):**\n\n`;
-    
-    response += `**🎯 Core Platforms:**\n`;
-    response += `${platformStatus.claude ? '✅' : '⚪'} Claude Desktop • ${platformStatus.cursor ? '✅' : '⚪'} Cursor IDE • ${platformStatus.copilot ? '✅' : '⚪'} VS Code + Copilot\n\n`;
-    
-    response += `**🔧 Extended Support:**\n`;
-    response += `${platformStatus.continue ? '✅' : '⚪'} Continue.dev • ${platformStatus.zed ? '✅' : '⚪'} Zed Editor • ${platformStatus.windsurf ? '✅' : '⚪'} Windsurf\n`;
-    response += `${platformStatus.tabnine ? '✅' : '⚪'} TabNine\n\n`;
-    
-    if (activePlatforms > 1) {
-      response += `🎉 **Multi-platform setup detected!** Your context syncs across ${activePlatforms} platforms.\n\n`;
-    } else if (activePlatforms === 1) {
-      response += `💡 **Single platform detected.** Add more with "get platform status"\n\n`;
-    }
-    
-    // Current status - simplified and useful
-    response += `📊 **Current Status:**\n`;
-    if (currentProject) {
-      response += `• Active Project: ${currentProject.name}\n`;
-    }
-    if (workspace) {
-      response += `• Workspace: Set\n`;
-    }
-    response += `\n`;
-    
-    // Next steps based on current state
-    response += `🚀 **Quick Start Options:**\n\n`;
-    
-    if (!currentProject) {
-      response += `1️⃣ **Set up your workspace**\n`;
-      response += `   → "Set workspace to /path/to/your/project"\n\n`;
-    } else {
-      response += `1️⃣ **Explore your project**\n`;
-      response += `   → "Scan workspace" or "Get project structure"\n\n`;
-    }
-    
-    response += `2️⃣ **Try key features**\n`;
-    response += `   → "Show me what Context Sync can do"\n\n`;
-    
-    // Universal platform guidance
-    response += `💡 **Getting Started:**\n\n`;
-    
-    if (!workspace) {
-      response += `🎯 **First, set your workspace:**\n`;
-      response += `• Try: "Set workspace to /path/to/your/project"\n`;
-      response += `• This enables all Context Sync features\n\n`;
-    } else {
-      response += `🎯 **Your workspace is ready! Try these:**\n`;
-      response += `• "Scan workspace" - Get project overview\n`;
-      response += `• "Search content for TODO" - Find todos in code\n`;
-      response += `• "Create todo: Fix authentication bug" - Add todos\n`;
-      response += `• "Get project structure" - See file organization\n\n`;
-    }
-    
-    // Show what each platform offers
-    response += `**All Platforms Support:**\n`;
-    response += `• 📁 Project workspace management\n`;
-    response += `• 🔍 Code search and analysis\n`;
-    response += `• 📋 Todo management with auto-linking\n`;
-    response += `• 🔄 Cross-platform context sync\n`;
-    response += `• 📝 **Notion Integration** - Save docs, pull specs, export ADRs\n`;
-    response += `• ⚡ Performance monitoring\n`;
-    response += `• 🧠 Intelligent file skimming for large codebases\n\n`;
-    
-    response += `🔧 **Advanced Commands:**\n`;
-    response += `• "Setup cursor" - Get Cursor IDE setup instructions\n`;
-    response += `• "Check platform status" - Verify platform configurations\n`;
-    response += `• "Get performance report" - View system metrics\n`;
-    response += `• "Show features" - See all available tools\n\n`;
-    
-    response += `📝 **Notion Integration** (Optional):\n`;
-    response += `• Generate and save documentation to Notion\n`;
-    response += `• Pull project specs from Notion for implementation\n`;
-    response += `• Export architecture decisions as ADRs\n`;
-    response += `• Create project dashboards automatically\n`;
-    response += `• Run \`context-sync-setup\` to enable (2 min setup)\n\n`;
-    
-    response += `**Ready to get started?** Choose an option above! 🚀`;
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: response
-        }
-      ]
-    };
-  }
-
-  private async handleDebugSession() {
-    const version = this.getVersion();
-    const platform = this.platformSync.getPlatform();
-    
-    // Session-based current project (NEW)
-    const sessionProject = this.getCurrentProject();
-    
-    // Database-based current project (OLD - should be deprecated)
-    const dbProject = this.storage.getCurrentProject();
-    
-    // Workspace information
-    const workspace = this.workspaceDetector.getCurrentWorkspace();
-    
-    // All projects in database
-    const allProjects = this.storage.getAllProjects();
-    
-    // Build response
-    let response = `🔍 **Context Sync Session Debug v${version}**\n\n`;
-    
-    // Session information
-    response += `📱 **Session State:**\n`;
-    response += `• Platform: ${platform}\n`;
-    response += `• Session Project ID: ${this.currentProjectId || 'null'}\n`;
-    response += `• Session Project: ${sessionProject ? sessionProject.name : 'None'}\n\n`;
-    
-    // Database state
-    response += `💾 **Database State:**\n`;
-    response += `• DB Current Project: ${dbProject ? dbProject.name : 'None'}\n`;
-    response += `• Total Projects: ${allProjects.length}\n`;
-    response += `• Workspace Set: ${workspace ? 'Yes' : 'No'}\n`;
-    if (workspace) {
-      response += `• Workspace Path: ${workspace}\n`;
-    }
-    response += `\n`;
-    
-    // Project list
-    if (allProjects.length > 0) {
-      response += `📂 **All Projects:**\n`;
-      allProjects.forEach((project: any, index: number) => {
-        const isSession = sessionProject && sessionProject.id === project.id;
-        const isDB = dbProject && dbProject.id === project.id;
-        const markers = [];
-        if (isSession) markers.push('SESSION');
-        if (isDB) markers.push('DB');
-        const markerText = markers.length > 0 ? ` [${markers.join(', ')}]` : '';
+      if (existing) {
+        // PROJECT EXISTS - Just set as current workspace, no re-analysis
+        this.currentProjectId = existing.id;
         
-        response += `${index + 1}. ${project.name}${markerText}\n`;
-        response += `   Path: ${project.path}\n`;
-        response += `   ID: ${project.id}\n`;
-      });
-      response += `\n`;
-    }
-    
-    // Architecture validation
-    response += `⚙️ **Architecture Validation:**\n`;
-    response += `• Session-based: ${sessionProject ? '✅' : '❌'}\n`;
-    response += `• DB deprecated: ${!dbProject || sessionProject ? '✅' : '⚠️'}\n`;
-    response += `• Consistency: ${(!sessionProject && !dbProject) || (sessionProject && sessionProject.id === dbProject?.id) ? '✅' : '⚠️ Mismatch'}\n\n`;
-    
-    // Multi-project testing instructions
-    response += `🧪 **Multi-Project Testing:**\n`;
-    response += `1. Test different MCP clients with different projects\n`;
-    response += `2. Verify each maintains separate session state\n`;
-    response += `3. Check todo auto-linking per session\n\n`;
-    
-    // Notion integration status
-    response += `� **Notion Integration:**\n`;
-    const notionConfigPath = join(os.homedir(), '.context-sync', 'config.json');
-    let notionConfigured = false;
-    try {
-      if (fs.existsSync(notionConfigPath)) {
-        const config = JSON.parse(fs.readFileSync(notionConfigPath, 'utf-8'));
-        notionConfigured = !!(config.notion?.token);
-      }
-    } catch {
-      // Ignore config read errors
-    }
-    response += `• Status: ${notionConfigured ? '✅ Configured' : '⚪ Not configured'}\n`;
-    if (!notionConfigured) {
-      response += `• Setup: Run \`context-sync-setup\` to enable Notion features\n`;
-    }
-    response += `• Tools: notion_create_page, notion_search, notion_read_page, etc.\n\n`;
-    
-    response += `�💡 **Usage:** Use this tool to debug session isolation and project state consistency.\n`;
-    response += `💡 **Notion Issues?** Re-run \`context-sync-setup\` to reconfigure or test connection.`;
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: response
-        }
-      ]
-    };
-  }
-
-  private async handleGetPerformanceReport(args: { operation?: string; reset?: boolean }) {
-    const { operation, reset = false } = args;
-    
-    let response = `📊 **Context Sync Performance Report**\n\n`;
-    
-    if (operation) {
-      // Get stats for specific operation
-      const stats = PerformanceMonitor.getStats(operation);
-      if (stats.count > 0) {
-        response += `🔍 **Operation: ${operation}**\n`;
-        response += `• Calls: ${stats.count}\n`;
-        response += `• Total Time: ${stats.totalDuration.toFixed(2)}ms\n`;
-        response += `• Average Time: ${stats.averageDuration.toFixed(2)}ms\n`;
-        response += `• Min Time: ${stats.minDuration.toFixed(2)}ms\n`;
-        response += `• Max Time: ${stats.maxDuration.toFixed(2)}ms\n\n`;
-      } else {
-        response += `❌ No data found for operation: ${operation}\n\n`;
-      }
-    } else {
-      // Get all operation stats
-      const allStats = PerformanceMonitor.getAllOperationStats();
-      if (Object.keys(allStats).length === 0) {
-        response += `ℹ️ No performance data collected yet.\n`;
-        response += `Performance monitoring tracks database operations like:\n`;
-        response += `• findProjectByPath\n`;
-        response += `• createProject\n`;
-        response += `• getAllProjects\n\n`;
-      } else {
-        response += `📈 **All Operations:**\n\n`;
-        Object.entries(allStats).forEach(([opName, stats]) => {
-          response += `**${opName}:**\n`;
-          response += `• Calls: ${stats.count}\n`;
-          response += `• Avg Time: ${stats.averageDuration.toFixed(2)}ms\n`;
-          response += `• Total Time: ${stats.totalDuration.toFixed(2)}ms\n`;
-          response += `• Range: ${stats.minDuration.toFixed(2)}ms - ${stats.maxDuration.toFixed(2)}ms\n\n`;
-        });
-      }
-      
-      // Use the formatted report from PerformanceMonitor
-      const detailedReport = PerformanceMonitor.getReport();
-      response += `📋 **Detailed Report:**\n${detailedReport}\n\n`;
-    }
-    
-    if (reset) {
-      PerformanceMonitor.clearMetrics();
-      response += `🔄 **Performance data has been reset.**\n\n`;
-    }
-    
-    response += `💡 **Usage:** Monitor database operation performance to identify optimization opportunities.`;
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: response
-        }
-      ]
-    };
-  }
-
-  private handleDiscoverAIPlatforms(args: { category?: 'all' | 'core' | 'extended' | 'api'; includeSetupInstructions?: boolean }) {
-    const { category = 'all', includeSetupInstructions = false } = args;
-    
-    // Filter platforms by category
-    const platforms = Object.entries(PLATFORM_REGISTRY)
-      .filter(([_, metadata]) => {
-        if (category === 'all') return true;
-        return metadata.category === category;
-      })
-      .sort(([_, a], [__, b]) => {
-        // Sort by category priority: core > extended > api
-        const priority = { core: 0, extended: 1, api: 2 };
-        return priority[a.category] - priority[b.category];
-      });
-
-    let response = `🌍 **AI Platform Discovery** (${platforms.length} platforms)\n\n`;
-    
-    // Add category-specific intro
-    if (category === 'core') {
-      response += `🎯 **Core Platforms** - Fully integrated with rich MCP support:\n\n`;
-    } else if (category === 'extended') {
-      response += `🔧 **Extended Platforms** - Advanced integrations with growing support:\n\n`;
-    } else if (category === 'api') {
-      response += `🌐 **API Integrations** - Direct API connections for programmatic access:\n\n`;
-    } else {
-      response += `**All 14 supported AI platforms categorized by integration level:**\n\n`;
-    }
-
-    // Group by category for display
-    const categorized = platforms.reduce((acc, [platformId, metadata]) => {
-      if (!acc[metadata.category]) acc[metadata.category] = [];
-      acc[metadata.category].push([platformId, metadata]);
-      return acc;
-    }, {} as Record<string, Array<[string, PlatformMetadata]>>);
-
-    // Display each category
-    const categoryTitles = {
-      core: '🎯 **Core Platforms**',
-      extended: '🔧 **Extended Platforms**', 
-      api: '🌐 **API Integrations**'
-    };
-
-    const categoryDescriptions = {
-      core: 'Full MCP integration with rich context sharing',
-      extended: 'Advanced integrations with growing feature support',
-      api: 'Direct API access for programmatic AI interactions'
-    };
-
-    for (const [cat, title] of Object.entries(categoryTitles)) {
-      if (categorized[cat] && (category === 'all' || category === cat)) {
-        response += `${title} - ${categoryDescriptions[cat as keyof typeof categoryDescriptions]}\n`;
+        // Generate lightweight response
+        const db = this.storage.getDb();
+        const deps = db.prepare('SELECT COUNT(*) as count FROM project_dependencies WHERE project_id = ? AND critical = 1').get(existing.id) as any;
+        const envVars = db.prepare('SELECT COUNT(*) as count FROM project_env_vars WHERE project_id = ? AND required = 1').get(existing.id) as any;
+        const services = db.prepare('SELECT COUNT(*) as count FROM project_services WHERE project_id = ?').get(existing.id) as any;
+        const databases = db.prepare('SELECT COUNT(*) as count FROM project_databases WHERE project_id = ?').get(existing.id) as any;
+        const metrics = db.prepare('SELECT * FROM project_metrics WHERE project_id = ?').get(existing.id) as any;
         
-        for (const [platformId, metadata] of categorized[cat]) {
-          const status = PlatformSync.getPlatformStatus();
-          const isActive = status[platformId as keyof typeof status];
-          const statusIcon = isActive ? '✅' : '⚪';
-          
-          response += `${statusIcon} **${metadata.name}**\n`;
-          response += `   ${metadata.description}\n`;
-          response += `   Complexity: ${metadata.setupComplexity} • MCP: ${metadata.mcpSupport} • Status: ${metadata.status}\n`;
-          
-          if (metadata.features.length > 0) {
-            response += `   Features: ${metadata.features.join(', ')}\n`;
-          }
-          
-          if (includeSetupInstructions) {
-            response += `   Website: ${metadata.website}\n`;
-          }
-          
-          response += `\n`;
-        }
-        response += `\n`;
-      }
-    }
-
-    // Add platform statistics
-    const currentStatus = PlatformSync.getPlatformStatus();
-    const activeCount = Object.values(currentStatus).filter(Boolean).length;
-    const totalCount = Object.keys(PLATFORM_REGISTRY).length;
-    
-    response += `📊 **Platform Status:**\n`;
-    response += `• Active Platforms: ${activeCount}/${totalCount}\n`;
-    response += `• Current Platform: ${this.platformSync.getPlatform()}\n\n`;
-
-    // Add quick actions
-    response += `🚀 **Quick Actions:**\n`;
-    response += `• \`get platform status\` - See detailed platform configuration\n`;
-    response += `• \`switch platform to [name]\` - Switch to a different platform\n`;
-    response += `• \`discover ai platforms core\` - View only core platforms\n`;
-    response += `• \`discover ai platforms extended\` - View extended platforms\n`;
-    response += `• \`discover ai platforms api\` - View API integrations\n\n`;
-
-    // Add setup instructions if requested
-    if (includeSetupInstructions) {
-      response += `📋 **Setup Instructions:**\n`;
-      response += `Each platform has specific setup requirements. Use the platform-specific setup commands or visit the Context Sync documentation for detailed configuration guides.\n\n`;
-    }
-
-    response += `**Universal Memory Infrastructure** - Context Sync provides consistent memory and context sharing across all supported platforms, making it truly platform-agnostic AI infrastructure.`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: response,
-      }],
-    };
-  }
-
-  private handleGetPlatformRecommendations(args: { useCase?: string; priority?: string }) {
-    const { useCase = 'coding', priority = 'ease_of_use' } = args;
-    
-    let response = `🎯 **AI Platform Recommendations**\n\n`;
-    response += `**Your Profile:** ${useCase} focused, prioritizing ${priority.replace('_', ' ')}\n\n`;
-
-    // Get current status for personalization
-    const currentStatus = PlatformSync.getPlatformStatus();
-    const currentPlatform = this.platformSync.getPlatform();
-    const activeCount = Object.values(currentStatus).filter(Boolean).length;
-
-    // Define recommendation logic based on use case and priority
-    const recommendations: Array<{
-      platform: string;
-      metadata: PlatformMetadata;
-      score: number;
-      reasons: string[];
-    }> = [];
-
-    // Score each platform based on criteria
-    Object.entries(PLATFORM_REGISTRY).forEach(([platformId, metadata]) => {
-      let score = 0;
-      const reasons: string[] = [];
-
-      // Use case scoring
-      switch (useCase) {
-        case 'coding':
-          if (['cursor', 'copilot', 'continue'].includes(platformId)) {
-            score += 3;
-            reasons.push('Excellent for coding workflows');
-          }
-          if (metadata.features.includes('Real-time coding') || 
-              metadata.features.includes('Code completion') ||
-              metadata.features.includes('AI editing')) {
-            score += 2;
-            reasons.push('Strong coding features');
-          }
-          break;
+        let response = structurePreview;
+        response += ` **Workspace Set: ${existing.name}**\n\n`;
+        response += ` **Path:** ${projectPath}\n`;
+        response += ` **Tech Stack:** ${Array.isArray(existing.techStack) ? existing.techStack.join(', ') : existing.techStack}\n\n`;
         
-        case 'research':
-          if (['claude', 'gemini', 'openai'].includes(platformId)) {
-            score += 3;
-            reasons.push('Excellent for research and analysis');
-          }
-          if (metadata.features.includes('Advanced reasoning') ||
-              metadata.features.includes('Large context')) {
-            score += 2;
-            reasons.push('Strong analytical capabilities');
-          }
-          break;
+        if (deps?.count > 0) response += ` ${deps.count} dependencies tracked\n`;
+        if (envVars?.count > 0) response += ` ${envVars.count} required env vars\n`;
+        if (services?.count > 0) response += ` ${services.count} service(s)\n`;
+        if (databases?.count > 0) response += ` ${databases.count} database(s)\n`;
+        if (metrics) response += ` ${metrics.lines_of_code.toLocaleString()} LOC, ${metrics.file_count} files\n`;
         
-        case 'local':
-          if (['ollama'].includes(platformId)) {
-            score += 4;
-            reasons.push('Runs entirely on your machine');
-          }
-          if (metadata.features.includes('Privacy focused') ||
-              metadata.features.includes('Local models')) {
-            score += 3;
-            reasons.push('Privacy-first approach');
-          }
-          break;
-        
-        case 'enterprise':
-          if (['copilot', 'tabnine', 'codewisperer'].includes(platformId)) {
-            score += 3;
-            reasons.push('Enterprise-grade features');
-          }
-          if (metadata.features.includes('Enterprise') ||
-              metadata.features.includes('Security')) {
-            score += 2;
-            reasons.push('Enterprise support available');
-          }
-          break;
-        
-        case 'beginner':
-          if (metadata.setupComplexity === 'easy') {
-            score += 3;
-            reasons.push('Easy to set up');
-          }
-          if (['claude', 'cursor'].includes(platformId)) {
-            score += 2;
-            reasons.push('Beginner-friendly interface');
-          }
-          break;
-      }
-
-      // Priority scoring
-      switch (priority) {
-        case 'ease_of_use':
-          if (metadata.setupComplexity === 'easy') {
-            score += 2;
-            reasons.push('Simple setup process');
-          }
-          if (metadata.mcpSupport === 'native') {
-            score += 2;
-            reasons.push('Native MCP integration');
-          }
-          break;
-        
-        case 'privacy':
-          if (['ollama', 'continue'].includes(platformId)) {
-            score += 3;
-            reasons.push('Privacy-focused design');
-          }
-          if (metadata.features.includes('Local') || 
-              metadata.features.includes('Self-hosted')) {
-            score += 2;
-            reasons.push('Local processing available');
-          }
-          break;
-        
-        case 'features':
-          if (metadata.features.length >= 4) {
-            score += 2;
-            reasons.push('Rich feature set');
-          }
-          if (metadata.category === 'core') {
-            score += 2;
-            reasons.push('Full Context Sync integration');
-          }
-          break;
-        
-        case 'cost':
-          if (['continue', 'codeium', 'ollama'].includes(platformId)) {
-            score += 3;
-            reasons.push('Free or open source');
-          }
-          if (metadata.features.includes('Free tier')) {
-            score += 2;
-            reasons.push('Free tier available');
-          }
-          break;
-        
-        case 'performance':
-          if (['cursor', 'zed'].includes(platformId)) {
-            score += 2;
-            reasons.push('Optimized for speed');
-          }
-          if (metadata.features.includes('Fast')) {
-            score += 1;
-            reasons.push('Fast performance');
-          }
-          break;
-      }
-
-      // Category bonus
-      if (metadata.category === 'core') score += 1;
-      
-      // Current platform bonus/penalty
-      if (platformId === currentPlatform) {
-        score += 1;
-        reasons.push('Currently active');
-      }
-
-      recommendations.push({
-        platform: platformId,
-        metadata,
-        score,
-        reasons: reasons.slice(0, 3) // Limit to top 3 reasons
-      });
-    });
-
-    // Sort by score and get top 5
-    const topRecommendations = recommendations
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-
-    response += `🏆 **Top Recommendations for You:**\n\n`;
-
-    topRecommendations.forEach((rec, index) => {
-      const isActive = currentStatus[rec.platform as keyof typeof currentStatus];
-      const statusIcon = isActive ? '✅' : '⭐';
-      const position = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
-      
-      response += `${position} ${statusIcon} **${rec.metadata.name}** (Score: ${rec.score})\n`;
-      response += `   ${rec.metadata.description}\n`;
-      response += `   Why recommended: ${rec.reasons.join(', ')}\n`;
-      response += `   Setup: ${rec.metadata.setupComplexity} • Category: ${rec.metadata.category}\n\n`;
-    });
-
-    // Add setup suggestions
-    response += `🚀 **Next Steps:**\n\n`;
-    
-    if (activeCount === 0) {
-      response += `1️⃣ **Get Started:** Try "${topRecommendations[0].metadata.name}" - ${topRecommendations[0].reasons[0]}\n`;
-      response += `2️⃣ **Easy Alternative:** Consider "${topRecommendations[1].metadata.name}" as backup\n`;
-    } else if (activeCount < 3) {
-      const notActive = topRecommendations.filter(r => 
-        !currentStatus[r.platform as keyof typeof currentStatus]
-      );
-      if (notActive.length > 0) {
-        response += `1️⃣ **Expand Your Setup:** Add "${notActive[0].metadata.name}"\n`;
-        response += `2️⃣ **Current Platform:** Keep using "${currentPlatform}" for familiar workflows\n`;
-      }
-    } else {
-      response += `✅ **You're all set!** With ${activeCount} platforms active, you have great coverage.\n`;
-      response += `💡 **Pro Tip:** Use "switch platform" to move contexts between platforms seamlessly.\n`;
-    }
-
-    response += `\n🔧 **Quick Actions:**\n`;
-    response += `• \`discover ai platforms ${topRecommendations[0].metadata.category}\` - See similar platforms\n`;
-    response += `• \`switch platform to ${topRecommendations[0].platform}\` - Try top recommendation\n`;
-    response += `• \`get platform status\` - Check current setup\n\n`;
-
-    // Add use case specific tips
-    switch (useCase) {
-      case 'coding':
-        response += `💻 **Coding Pro Tips:**\n`;
-        response += `• Use Cursor for real-time AI assistance while coding\n`;
-        response += `• Claude excels at explaining complex code and architecture\n`;
-        response += `• Continue.dev offers the most customization for power users\n`;
-        break;
-      
-      case 'local':
-        response += `🔒 **Privacy-First Setup:**\n`;
-        response += `• Ollama keeps everything on your machine\n`;
-        response += `• Continue.dev supports local models and custom endpoints\n`;
-        response += `• Consider hardware requirements for local model performance\n`;
-        break;
-      
-      case 'enterprise':
-        response += `🏢 **Enterprise Considerations:**\n`;
-        response += `• GitHub Copilot offers the strongest enterprise policies\n`;
-        response += `• TabNine provides on-premise deployment options\n`;
-        response += `• All core platforms support team collaboration features\n`;
-        break;
-    }
-
-    response += `\n**Context Sync makes it easy to try multiple platforms** - your memory and context seamlessly transfers between all supported AI tools!`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: response,
-      }],
-    };
-  }
-
-  // ========== TODO HANDLERS WITH CURRENT PROJECT INTEGRATION ==========
-
-  private async handleTodoCreate(args: any) {
-    // Auto-link to current project if no projectId provided
-    if (!args.projectId) {
-      const currentProject = this.getCurrentProject();
-      if (currentProject) {
-        args.projectId = currentProject.id;
-      }
-    }
-
-    const todo = this.todoManager.createTodo(args);
-    const projectInfo = args.projectId ? ` (linked to current project)` : '';
-    
-    return {
-      content: [{
-        type: 'text',
-        text: `✅ Todo created: "${todo.title}"${projectInfo}\n\nID: ${todo.id}\nPriority: ${todo.priority}\nStatus: ${todo.status}${todo.dueDate ? `\nDue: ${todo.dueDate}` : ''}${todo.tags.length > 0 ? `\nTags: ${todo.tags.join(', ')}` : ''}`,
-      }],
-    };
-  }
-
-  private async handleTodoGet(args: { id: string }) {
-    const todo = this.todoManager.getTodo(args.id);
-    
-    if (!todo) {
-      return {
-        content: [{
-          type: 'text',
-          text: `❌ Todo not found: ${args.id}`,
-        }],
-        isError: true,
-      };
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: `📋 **${todo.title}**\n\nStatus: ${todo.status}\nPriority: ${todo.priority}\n${todo.description ? `Description: ${todo.description}\n` : ''}${todo.dueDate ? `Due: ${todo.dueDate}\n` : ''}${todo.tags.length > 0 ? `Tags: ${todo.tags.join(', ')}\n` : ''}Created: ${todo.createdAt}\nUpdated: ${todo.updatedAt}${todo.completedAt ? `\nCompleted: ${todo.completedAt}` : ''}`,
-      }],
-    };
-  }
-
-  private async handleTodoList(args?: any) {
-    // If no projectId specified and there's a current project, filter by current project
-    if (!args?.projectId) {
-      const currentProject = this.getCurrentProject();
-      if (currentProject) {
-        args = { ...args, projectId: currentProject.id };
-      }
-    }
-
-    const todos = this.todoManager.listTodos(args);
-    
-    if (todos.length === 0) {
-      const currentProject = this.getCurrentProject();
-      const projectContext = currentProject ? ` for project "${currentProject.name}"` : '';
-      return {
-        content: [{
-          type: 'text',
-          text: `📝 No todos found${projectContext}`,
-        }],
-      };
-    }
-
-    const grouped = {
-      urgent: todos.filter(t => t.priority === 'urgent' && t.status !== 'completed'),
-      high: todos.filter(t => t.priority === 'high' && t.status !== 'completed'),
-      medium: todos.filter(t => t.priority === 'medium' && t.status !== 'completed'),
-      low: todos.filter(t => t.priority === 'low' && t.status !== 'completed'),
-      completed: todos.filter(t => t.status === 'completed')
-    };
-
-    const currentProject = this.getCurrentProject();
-    const projectContext = currentProject ? ` for project "${currentProject.name}"` : '';
-    let output = `📋 Found ${todos.length} todo(s)${projectContext}\n\n`;
-
-    const formatTodo = (todo: any) => {
-      const statusEmoji: { [key: string]: string } = {
-        pending: '⏳',
-        in_progress: '🔄',
-        completed: '✅',
-        cancelled: '❌'
-      };
-      return `${statusEmoji[todo.status] || '📋'} ${todo.title}${todo.dueDate ? ` (Due: ${todo.dueDate})` : ''}\n   ID: ${todo.id}`;
-    };
-
-    if (grouped.urgent.length > 0) {
-      output += `🔴 **URGENT** (${grouped.urgent.length})\n`;
-      grouped.urgent.forEach((todo: any) => output += formatTodo(todo) + '\n');
-      output += '\n';
-    }
-
-    if (grouped.high.length > 0) {
-      output += `🟠 **HIGH** (${grouped.high.length})\n`;
-      grouped.high.forEach((todo: any) => output += formatTodo(todo) + '\n');
-      output += '\n';
-    }
-
-    if (grouped.medium.length > 0) {
-      output += `🟡 **MEDIUM** (${grouped.medium.length})\n`;
-      grouped.medium.forEach((todo: any) => output += formatTodo(todo) + '\n');
-      output += '\n';
-    }
-
-    if (grouped.low.length > 0) {
-      output += `🟢 **LOW** (${grouped.low.length})\n`;
-      grouped.low.forEach((todo: any) => output += formatTodo(todo) + '\n');
-      output += '\n';
-    }
-
-    if (grouped.completed.length > 0 && !args?.status) {
-      output += `✅ **COMPLETED** (${grouped.completed.length})\n`;
-      grouped.completed.slice(0, 5).forEach((todo: any) => output += formatTodo(todo) + '\n');
-      if (grouped.completed.length > 5) {
-        output += `   ... and ${grouped.completed.length - 5} more\n`;
-      }
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: output,
-      }],
-    };
-  }
-
-  private async handleTodoUpdate(args: any) {
-    const todo = this.todoManager.updateTodo(args);
-    
-    if (!todo) {
-      return {
-        content: [{
-          type: 'text',
-          text: `❌ Todo not found: ${args.id}`,
-        }],
-        isError: true,
-      };
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: `✅ Todo updated: "${todo.title}"\n\nStatus: ${todo.status}\nPriority: ${todo.priority}\nUpdated: ${todo.updatedAt}`,
-      }],
-    };
-  }
-
-  private async handleTodoDelete(args: { id: string }) {
-    const success = this.todoManager.deleteTodo(args.id);
-    
-    if (!success) {
-      return {
-        content: [{
-          type: 'text',
-          text: `❌ Todo not found: ${args.id}`,
-        }],
-        isError: true,
-      };
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: `✅ Todo deleted: ${args.id}`,
-      }],
-    };
-  }
-
-  private async handleTodoComplete(args: { id: string }) {
-    const todo = this.todoManager.completeTodo(args.id);
-    
-    if (!todo) {
-      return {
-        content: [{
-          type: 'text',
-          text: `❌ Todo not found: ${args.id}`,
-        }],
-        isError: true,
-      };
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: `✅ Todo completed: "${todo.title}"\n\nCompleted at: ${todo.completedAt}`,
-      }],
-    };
-  }
-
-  private async handleTodoStats(args?: { projectId?: string }) {
-    // Use current project if no projectId specified
-    let projectId = args?.projectId;
-    if (!projectId) {
-      const currentProject = this.getCurrentProject();
-      if (currentProject) {
-        projectId = currentProject.id;
-      }
-    }
-
-    const stats = this.todoManager.getStats(projectId);
-    const currentProject = this.getCurrentProject();
-    const projectContext = projectId && currentProject ? ` for project "${currentProject.name}"` : '';
-    
-    let output = `📊 Todo Statistics${projectContext}\n\n`;
-    output += `**Total:** ${stats.total} todos\n\n`;
-    
-    output += `**By Status:**\n`;
-    output += `⏳ Pending: ${stats.byStatus.pending}\n`;
-    output += `🔄 In Progress: ${stats.byStatus.in_progress}\n`;
-    output += `✅ Completed: ${stats.byStatus.completed}\n`;
-    output += `❌ Cancelled: ${stats.byStatus.cancelled}\n\n`;
-    
-    output += `**By Priority:**\n`;
-    output += `🔴 Urgent: ${stats.byPriority.urgent}\n`;
-    output += `🟠 High: ${stats.byPriority.high}\n`;
-    output += `🟡 Medium: ${stats.byPriority.medium}\n`;
-    output += `🟢 Low: ${stats.byPriority.low}\n\n`;
-    
-    if (stats.overdue > 0) {
-      output += `⚠️  **${stats.overdue} overdue** todo(s)\n`;
-    }
-    
-    if (stats.dueSoon > 0) {
-      output += `⏰ **${stats.dueSoon} due soon** (within 24 hours)\n`;
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: output,
-      }],
-    };
-  }
-
-  private async handleTodoTags() {
-    const tags = this.todoManager.getAllTags();
-    
-    if (tags.length === 0) {
-      return {
-        content: [{
-          type: 'text',
-          text: '🏷️  No tags found',
-        }],
-      };
-    }
-
-    return {
-      content: [{
-        type: 'text',
-        text: `🏷️  Available tags (${tags.length}):\n\n${tags.join(', ')}`,
-      }],
-    };
-  }
-
-  // ========== V1.0.0 HANDLERS - DATABASE MIGRATION ==========
-  
-  private async handleCheckMigrationSuggestion() {
-    try {
-      const version = this.getVersion();
-      const migrationCheck = await this.storage.checkMigrationPrompt(version);
-      
-      if (!migrationCheck.shouldPrompt) {
-        return {
-          content: [{
-            type: 'text',
-            text: `✅ **No Migration Needed**\n\nYour Context Sync database is already optimized!\n\n📈 **Status:**\n• No duplicate projects detected\n• Database is clean and performant\n• All systems running optimally\n\n🚀 You're all set to use Context Sync at peak performance!`,
-          }],
-        };
-      }
-      
-      return {
-        content: [{
-          type: 'text',
-          text: migrationCheck.message,
-        }],
-      };
-      
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: `⚠️ **Migration Check Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nYou can still try running migration tools manually:\n• \`get_migration_stats\` - Check for duplicates\n• \`migrate_database dryRun:true\` - Preview migration`,
-        }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleAnalyzeConversationContext(args: { conversationText: string; autoSave?: boolean }) {
-    try {
-      const { conversationText, autoSave = false } = args;
-      const analysis = ContextAnalyzer.analyzeConversation(conversationText);
-      
-      let response = `🧠 **Conversation Context Analysis**\n\n`;
-      response += `${analysis.summary}\n\n`;
-      
-      if (analysis.decisions.length === 0 && analysis.todos.length === 0 && analysis.insights.length === 0) {
-        response += `✅ **No significant context detected** in this conversation.\n\n`;
-        response += `The conversation appears to be general discussion without specific:\n`;
-        response += `• Technical decisions\n`;
-        response += `• Action items or todos\n`;
-        response += `• Key insights or breakthroughs\n\n`;
-        response += `💡 **Tip**: Context Sync automatically detects technical discussions, architecture decisions, and action items.`;
+        response += `\n **Project context loaded. Use \`recall\` to see what you were working on.**`;
         
         return {
           content: [{ type: 'text', text: response }],
         };
       }
 
-      // Show analysis results
-      if (analysis.decisions.length > 0) {
-        response += `📋 **Technical Decisions Detected (${analysis.decisions.length}):**\n`;
-        analysis.decisions.forEach((decision, i) => {
-          const priorityIcon = decision.priority === 'high' ? '🔴' : decision.priority === 'medium' ? '🟡' : '🟢';
-          response += `${i + 1}. ${priorityIcon} ${decision.content}\n`;
-          response += `   *${decision.reasoning}*\n\n`;
-        });
+      // NEW PROJECT - Run optimized deep analysis (3-layer architecture)
+      console.error(' Running optimized project detection (first time)...');
+      const analysis = await ProjectProfiler.analyze(projectPath);
+
+      // Create new project
+      const project = this.storage.createProject(
+        path.basename(projectPath),
+        projectPath
+      );
+      
+      this.storage.updateProject(project.id, {
+        architecture: analysis.architecture,
+        techStack: analysis.techStack,
+        updatedAt: new Date()
+      });
+
+      // Store enhanced identity data
+      const db = this.storage.getDb();
+      const timestamp = Date.now();
+
+      // Dependencies
+      for (const dep of analysis.dependencies) {
+        db.prepare(`
+          INSERT INTO project_dependencies (id, project_id, name, version, critical, dev)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(randomUUID(), project.id, dep.name, dep.version, dep.critical ? 1 : 0, dep.dev ? 1 : 0);
       }
 
-      if (analysis.todos.length > 0) {
-        response += `✅ **Action Items Detected (${analysis.todos.length}):**\n`;
-        analysis.todos.forEach((todo, i) => {
-          const priorityIcon = todo.priority === 'high' ? '🔴' : todo.priority === 'medium' ? '🟡' : '🟢';
-          response += `${i + 1}. ${priorityIcon} ${todo.content}\n`;
-          response += `   *${todo.reasoning}*\n\n`;
-        });
+      // Build system
+      db.prepare(`
+        INSERT OR REPLACE INTO project_build_system (project_id, type, commands, config_file)
+        VALUES (?, ?, ?, ?)
+      `).run(project.id, analysis.buildSystem.type, JSON.stringify(analysis.buildSystem.commands), analysis.buildSystem.configFile);
+
+      // Test framework
+      if (analysis.testFramework) {
+        db.prepare(`
+          INSERT OR REPLACE INTO project_test_framework (project_id, name, pattern, config_file, coverage)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(
+          project.id,
+          analysis.testFramework.name,
+          analysis.testFramework.pattern,
+          analysis.testFramework.configFile || null,
+          analysis.testFramework.coverage
+        );
       }
 
-      if (analysis.insights.length > 0) {
-        response += `💡 **Key Insights Detected (${analysis.insights.length}):**\n`;
-        analysis.insights.forEach((insight, i) => {
-          const priorityIcon = insight.priority === 'high' ? '🔴' : insight.priority === 'medium' ? '🟡' : '🟢';
-          response += `${i + 1}. ${priorityIcon} ${insight.content}\n`;
-          response += `   *${insight.reasoning}*\n\n`;
-        });
+      // Environment variables
+      for (const varName of analysis.envVars.required) {
+        db.prepare(`
+          INSERT INTO project_env_vars (id, project_id, var_name, required, example_value)
+          VALUES (?, ?, ?, 1, ?)
+        `).run(randomUUID(), project.id, varName, analysis.envVars.example[varName] || null);
       }
-
-      if (autoSave) {
-        response += `🤖 **Auto-saving detected context...**\n\n`;
-        let savedCount = 0;
-
-        // Auto-save decisions
-        for (const decision of analysis.decisions.filter(d => d.priority !== 'low')) {
-          try {
-            const decisionData = ContextAnalyzer.extractDecision(decision.content);
-            if (decisionData) {
-              await this.handleSaveDecision({
-                type: decisionData.type,
-                description: decisionData.description,
-                reasoning: decisionData.reasoning
-              });
-              savedCount++;
-            }
-          } catch (error) {
-            console.warn('Failed to auto-save decision:', error);
-          }
+      for (const varName of analysis.envVars.optional) {
+        if (!analysis.envVars.required.includes(varName)) {
+          db.prepare(`
+            INSERT INTO project_env_vars (id, project_id, var_name, required, example_value)
+            VALUES (?, ?, ?, 0, ?)
+          `).run(randomUUID(), project.id, varName, analysis.envVars.example[varName] || null);
         }
-
-        // Auto-save todos
-        for (const todo of analysis.todos.filter(t => t.priority !== 'low')) {
-          try {
-            const todoData = ContextAnalyzer.extractTodo(todo.content);
-            if (todoData) {
-              await this.handleTodoCreate({
-                title: todoData.title,
-                description: todoData.description,
-                priority: todoData.priority
-              });
-              savedCount++;
-            }
-          } catch (error) {
-            console.warn('Failed to auto-save todo:', error);
-          }
-        }
-
-        // Auto-save insights
-        for (const insight of analysis.insights.filter(i => i.priority === 'high')) {
-          try {
-            await this.handleSaveConversation({
-              content: insight.content,
-              role: 'assistant'
-            });
-            savedCount++;
-          } catch (error) {
-            console.warn('Failed to auto-save insight:', error);
-          }
-        }
-
-        response += `✅ **Auto-saved ${savedCount} context items**\n\n`;
-      } else {
-        response += `🚀 **Recommended Actions:**\n`;
-        response += `• Use \`save_decision\` for technical decisions\n`;
-        response += `• Use \`todo_create\` for action items\n`;
-        response += `• Use \`save_conversation\` for key insights\n`;
-        response += `• Or re-run with \`autoSave: true\` to save automatically\n\n`;
       }
 
-      response += `💡 **Pro Tip**: Enable auto-context saving in your AI assistant prompt for seamless context preservation!`;
+      // Services
+      for (const service of analysis.services) {
+        db.prepare(`
+          INSERT INTO project_services (id, project_id, name, port, protocol, health_check)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(randomUUID(), project.id, service.name, service.port, service.protocol, service.healthCheck || null);
+      }
+
+      // Databases
+      for (const database of analysis.databases) {
+        db.prepare(`
+          INSERT INTO project_databases (id, project_id, type, connection_var, migrations, migrations_path)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          randomUUID(),
+          project.id,
+          database.type,
+          database.connectionVar || null,
+          database.migrations ? 1 : 0,
+          database.migrationsPath || null
+        );
+      }
+
+      // Metrics
+      db.prepare(`
+        INSERT OR REPLACE INTO project_metrics (project_id, lines_of_code, file_count, last_commit, contributors, hotspots, complexity, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        project.id,
+        analysis.metrics.linesOfCode,
+        analysis.metrics.fileCount,
+        '', // lastCommit - empty string instead of null
+        0, // contributors - 0 instead of null
+        '[]', // hotspots - empty array
+        analysis.metrics.complexity,
+        timestamp
+      );
+
+      // Set as current session project
+      this.currentProjectId = project.id;
+
+      // Generate comprehensive response
+      let response = structurePreview;
+      response += ` **Project Initialized: ${project.name}**\n\n`;
+      response += ` **Scan time:** ${analysis.scanTimeMs}ms\n\n`;
+      
+      response += `  **Architecture:** ${analysis.architecture}\n`;
+      response += ` **Tech Stack:** ${analysis.techStack.join(', ')}\n\n`;
+      
+      // Dependencies summary
+      const criticalDeps = analysis.dependencies.filter(d => d.critical && !d.dev);
+      if (criticalDeps.length > 0) {
+        response += ` **Core Dependencies** (${criticalDeps.length}):\n`;
+        criticalDeps.slice(0, 5).forEach(d => {
+          response += `    ${d.name}@${d.version}\n`;
+        });
+        if (criticalDeps.length > 5) {
+          response += `   ... and ${criticalDeps.length - 5} more\n`;
+        }
+        response += `\n`;
+      }
+      
+      // Build system
+      if (analysis.buildSystem.type !== 'unknown') {
+        response += ` **Build System:** ${analysis.buildSystem.type}\n`;
+        if (analysis.buildSystem.commands.build) {
+          response += `   Build: \`${analysis.buildSystem.commands.build}\`\n`;
+        }
+        if (analysis.buildSystem.commands.test) {
+          response += `   Test: \`${analysis.buildSystem.commands.test}\`\n`;
+        }
+        response += `\n`;
+      }
+      
+      // Test framework
+      if (analysis.testFramework) {
+        response += ` **Testing:** ${analysis.testFramework.name}`;
+        if (analysis.testFramework.coverage !== null) {
+          response += ` (${analysis.testFramework.coverage}% coverage)`;
+        }
+        response += `\n\n`;
+      }
+      
+      // Environment variables
+      if (analysis.envVars.required.length > 0) {
+        response += ` **Required Env Vars:** ${analysis.envVars.required.slice(0, 3).join(', ')}`;
+        if (analysis.envVars.required.length > 3) {
+          response += ` +${analysis.envVars.required.length - 3} more`;
+        }
+        response += `\n\n`;
+      }
+      
+      // Services
+      if (analysis.services.length > 0) {
+        response += ` **Services:**\n`;
+        analysis.services.forEach(s => {
+          response += `    ${s.name}${s.port ? ` (port ${s.port})` : ''}\n`;
+        });
+        response += `\n`;
+      }
+      
+      // Databases
+      if (analysis.databases.length > 0) {
+        response += ` **Databases:** ${analysis.databases.map(d => d.type).join(', ')}\n\n`;
+      }
+      
+      // Quality metrics
+      response += ` **Metrics:**\n`;
+      response += `    ${analysis.metrics.linesOfCode.toLocaleString()} lines of code\n`;
+      response += `    ${analysis.metrics.fileCount} files\n`;
+      if (analysis.metrics.complexity !== null) {
+        response += `    Complexity: ${analysis.metrics.complexity}\n`;
+      }
+      
+      // Install git hooks for automatic context capture
+      const GitHookManager = require('./git-hook-manager').GitHookManager;
+      const hookManager = new GitHookManager(projectPath, this.storage.getDbPath());
+      
+      if (hookManager.isGitRepo()) {
+        const result = hookManager.installHooks();
+        if (result.success) {
+          response += `\n\n **Git Hooks:** Installed ${result.installed.length} hook(s) (${result.installed.join(', ')})`;
+          response += `\n   Context Sync will now automatically track commits, pushes, merges, and branch switches!`;
+        } else {
+          response += `\n\n **Git Hooks:** Failed to install (${result.errors.join(', ')})`;
+        }
+      }
+      
+      response += `\n\n **Deep context captured. Ready to work!**`;
 
       return {
         content: [{ type: 'text', text: response }],
       };
-      
-    } catch (error) {
+    } catch (error: any) {
       return {
         content: [{
           type: 'text',
-          text: `❌ **Context Analysis Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nMake sure to provide conversation text for analysis.`,
+          text: ` Failed to initialize project: ${error.message}\n\nStack: ${error.stack}`,
         }],
-        isError: true,
       };
     }
   }
 
-  private async handleSuggestMissingContext(args: { includeFileAnalysis?: boolean }) {
+  /**
+   * Remember - Store context intentionally
+   */
+  private async handleRemember(args: RememberInput) {
+    const project = this.getCurrentProject();
+    if (!project) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' No project initialized. Run `set_project` first.',
+        }],
+      };
+    }
+
+    const { type, content, metadata } = args;
+
     try {
-      const { includeFileAnalysis = true } = args;
-      const currentProject = this.getCurrentProject();
+      // Use optimized remember engine with git integration
+      const engine = new RememberEngine(
+        this.storage.getDb(),
+        project.id,
+        project.path || process.cwd()
+      );
+      const result = await engine.remember({ type, content, metadata });
+
+      // Format response based on action
+      let response = '';
       
-      if (!currentProject) {
+      if (result.action === 'created') {
+        response = ` **Remembered as ${type}**\n\n`;
+        response += `"${content}"\n\n`;
+        
+        // Show auto-extracted metadata
+        if (metadata?.files && metadata.files.length > 0) {
+          response += ` **Files:** ${metadata.files.join(', ')}\n`;
+        }
+        
+        // Show file context from auto-enrichment
+        if (result.fileContext && result.fileContext.files.length > 0) {
+          response += `\n **File Context:**\n`;
+          for (const file of result.fileContext.files) {
+            const complexityEmoji = file.complexity === 'low' ? '' : 
+                                   file.complexity === 'medium' ? '' : 
+                                   file.complexity === 'high' ? '' : '';
+            response += `   ${file.path.split(/[/\\]/).pop()} ${complexityEmoji} ${file.complexity} (${file.linesOfCode} LOC`;
+            if (file.imports.length > 0) {
+              response += `, imports: ${file.imports.slice(0, 3).join(', ')}`;
+            }
+            response += `)\n`;
+          }
+          response += `\n`;
+        }
+        
+        if (result.gitContext) {
+          response += ` **Branch:** ${result.gitContext.branch}\n`;
+          if (result.gitContext.uncommittedFiles.length > 0) {
+            response += ` **Uncommitted:** ${result.gitContext.uncommittedFiles.length} file(s)\n`;
+          }
+        } else if (metadata?.branch) {
+          response += ` **Branch:** ${metadata.branch}\n`;
+        }
+        if (metadata?.target_date) {
+          response += ` **Target:** ${metadata.target_date}\n`;
+        }
+        
+        // Show Notion suggestions if detected
+        if (metadata?.notionPages && metadata.notionPages.length > 0) {
+          response += `\n **Notion References Detected:**\n`;
+          for (const page of metadata.notionPages) {
+            response += `   ${page}\n`;
+          }
+          response += `\n Tip: Use \`notion action=read pageId=<id>\` to view content\n`;
+        } else if (metadata?.suggestNotionSearch && metadata?.notionSearchSuggestion) {
+          response += `\n **Documentation Mentioned!**\n`;
+          response += ` Search Notion: \`notion action=search query="${metadata.notionSearchSuggestion}"\`\n`;
+        }
+        
+        response += `\n This will be available in future sessions via \`recall\`.`;
+      } else if (result.action === 'updated') {
+        response = ` **Updated existing ${type}**\n\n`;
+        response += `"${content}"\n\n`;
+        
+        // Show file context from auto-enrichment
+        if (result.fileContext && result.fileContext.files.length > 0) {
+          response += ` **File Context:**\n`;
+          for (const file of result.fileContext.files) {
+            const complexityEmoji = file.complexity === 'low' ? '' : 
+                                   file.complexity === 'medium' ? '' : 
+                                   file.complexity === 'high' ? '' : '';
+            response += `   ${file.path.split(/[/\\]/).pop()} ${complexityEmoji} ${file.complexity} (${file.linesOfCode} LOC)\n`;
+          }
+          response += `\n`;
+        }
+        
+        if (result.gitContext) {
+          response += ` **Branch:** ${result.gitContext.branch}\n`;
+        }
+        response += ` Found similar context and updated it instead of creating duplicate.`;
+      } else {
+        response = ` **Skipped ${type}**\n\n`;
+        response += `Reason: ${result.reason}`;
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: response,
+        }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: ` Failed to remember: ${error.message}`,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Recall - Retrieve layered context
+   */
+  private async handleRecall(args?: { query?: string; limit?: number }) {
+    const project = this.getCurrentProject();
+    if (!project) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' No project initialized. Run `set_project` first.',
+        }],
+      };
+    }
+
+    const limit = args?.limit || 10;
+    const query = args?.query;
+    const db = this.storage.getDb();
+
+    try {
+      // Use optimized recall engine
+      const engine = new RecallEngine(db, project.id);
+      const synthesis = await engine.recall(query, limit);
+
+      // Format intelligent response
+      let response = ` **Context Recall: ${project.name}**\n\n`;
+      
+      // 1. Smart Summary (2 paragraphs)
+      response += ` **Where You Left Off**\n\n`;
+      response += synthesis.summary;
+      response += `\n\n`;
+
+      // 2. Critical Path (ordered next steps)
+      if (synthesis.criticalPath.length > 0) {
+        response += ` **Critical Path** (in order):\n`;
+        synthesis.criticalPath.forEach((step, i) => {
+          response += `   ${i + 1}. ${step}\n`;
+        });
+        response += `\n`;
+      }
+
+      // 3. Freshness indicator
+      const { fresh, recent, stale, expired } = synthesis.freshness;
+      const total = fresh + recent + stale + expired;
+      if (total > 0) {
+        response += ` **Context Freshness**: `;
+        const parts = [];
+        if (fresh > 0) parts.push(`${fresh} fresh`);
+        if (recent > 0) parts.push(`${recent} recent`);
+        if (stale > 0) parts.push(`${stale} stale`);
+        if (expired > 0) parts.push(`${expired} expired`);
+        response += parts.join(', ');
+        response += `\n\n`;
+      }
+
+      // 4. Active Work
+      if (synthesis.activeWork.length > 0) {
+        response += ` **Active Work**\n`;
+        synthesis.activeWork.forEach((work: any) => {
+          const freshness = work.staleness === 'fresh' ? '' : work.staleness === 'recent' ? '' : '';
+          response += `${freshness} ${work.content}\n`;
+          if (work.metadata?.files && work.metadata.files.length > 0) {
+            response += `   Files: ${work.metadata.files.join(', ')}\n`;
+          }
+        });
+        response += `\n`;
+      }
+
+      // 4.5. Caveats (AI mistakes, tech debt, unverified changes) - HIGH PRIORITY!
+      if (synthesis.caveats.length > 0) {
+        response += ` **Tech Debt & Unresolved Issues** (${synthesis.caveats.length})\n`;
+        synthesis.caveats.forEach((cav: any) => {
+          // Severity icons
+          const severityIcon = cav.metadata?.severity === 'critical' ? '' : 
+                              cav.metadata?.severity === 'high' ? '' : 
+                              cav.metadata?.severity === 'medium' ? '' : '';
+          
+          // Category badges
+          const categoryBadge = cav.metadata?.category === 'mistake' ? '[MISTAKE]' :
+                               cav.metadata?.category === 'shortcut' ? '[SHORTCUT]' :
+                               cav.metadata?.category === 'unverified' ? '[UNVERIFIED]' :
+                               cav.metadata?.category === 'assumption' ? '[ASSUMPTION]' : '[WORKAROUND]';
+          
+          response += `${severityIcon} ${categoryBadge} ${cav.content}\n`;
+          
+          if (cav.metadata?.attempted) {
+            response += `   Attempted: ${cav.metadata.attempted}\n`;
+          }
+          if (cav.metadata?.recovery) {
+            response += `   Recovery: ${cav.metadata.recovery}\n`;
+          }
+          if (cav.metadata?.action_required) {
+            response += `    Action Required: ${cav.metadata.action_required}\n`;
+          }
+          if (cav.metadata?.affects_production) {
+            response += `     Affects Production: YES\n`;
+          }
+        });
+        response += `\n`;
+      }
+
+      // 5. Open Problems
+      if (synthesis.problems.length > 0) {
+        response += ` **Open Problems**\n`;
+        synthesis.problems.slice(0, 3).forEach((p: any) => {
+          response += ` ${p.content}\n`;
+        });
+        if (synthesis.problems.length > 3) {
+          response += `   ... and ${synthesis.problems.length - 3} more\n`;
+        }
+        response += `\n`;
+      }
+
+      // 6. Constraints
+      if (synthesis.constraints.length > 0) {
+        response += ` **Constraints**\n`;
+        synthesis.constraints.slice(0, 3).forEach((c: any) => {
+          response += ` ${c.content}\n`;
+        });
+        response += `\n`;
+      }
+
+      // 7. Goals
+      if (synthesis.goals.length > 0) {
+        response += ` **Goals**\n`;
+        synthesis.goals.slice(0, 3).forEach((g: any) => {
+          response += ` ${g.content}`;
+          if (g.metadata?.status) {
+            response += ` [${g.metadata.status}]`;
+          }
+          response += `\n`;
+        });
+        response += `\n`;
+      }
+
+      // 8. Relationships (decision  files)
+      if (synthesis.relationships.size > 0) {
+        response += ` **Relationships**\n`;
+        let count = 0;
+        for (const [decision, files] of synthesis.relationships) {
+          if (count >= 2) break;
+          response += ` "${decision}" affects: ${files.join(', ')}\n`;
+          count++;
+        }
+        response += `\n`;
+      }
+
+      // 9. Gaps (missing context)
+      if (synthesis.gaps.length > 0) {
+        response += ` **Context Gaps**\n`;
+        synthesis.gaps.forEach(gap => {
+          response += `${gap}\n`;
+        });
+        response += `\n`;
+      }
+
+      // 10. Suggestions (actionable next steps)
+      if (synthesis.suggestions.length > 0) {
+        response += ` **Suggestions**\n`;
+        synthesis.suggestions.forEach(suggestion => {
+          response += ` ${suggestion}\n`;
+        });
+        response += `\n`;
+      }
+
+      // Empty state
+      if (total === 0) {
+        response += `\n_No context stored yet. Use \`remember\` to add important information._`;
+      }
+
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: ` Failed to recall: ${error.message}\n\nStack: ${error.stack}`,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Read file from workspace
+   */
+  private async handleReadFile(args: { path: string }) {
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    if (!workspace) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' No workspace set. Run `set_project` first.',
+        }],
+      };
+    }
+
+    try {
+      // Use optimized read file engine
+      const engine = new ReadFileEngine(workspace);
+      const fileContext = await engine.read(args.path);
+
+      // Format rich response
+      let response = ` **${fileContext.path}**\n\n`;
+
+      // Metadata section
+      response += ` **Metadata**\n`;
+      response += ` Language: ${fileContext.metadata.language}\n`;
+      response += ` Size: ${(fileContext.metadata.size / 1024).toFixed(1)} KB\n`;
+      response += ` Lines: ${fileContext.metadata.linesOfCode} LOC\n`;
+      response += ` Last Modified: ${fileContext.metadata.lastModified.toLocaleDateString()}\n`;
+      if (fileContext.metadata.author) {
+        response += ` Last Author: ${fileContext.metadata.author}\n`;
+      }
+      if (fileContext.metadata.changeFrequency > 0) {
+        response += ` Change Frequency: ${fileContext.metadata.changeFrequency} commit(s) in last 30 days\n`;
+      }
+      response += `\n`;
+
+      // Complexity section
+      const complexityEmoji = {
+        'low': '',
+        'medium': '',
+        'high': '',
+        'very-high': ''
+      };
+      response += `${complexityEmoji[fileContext.complexity.level]} **Complexity: ${fileContext.complexity.level}** (score: ${fileContext.complexity.score})\n`;
+      if (fileContext.complexity.reasons.length > 0) {
+        response += `   ${fileContext.complexity.reasons.join(', ')}\n`;
+      }
+      response += `\n`;
+
+      // Relationships section
+      if (fileContext.relationships.imports.length > 0) {
+        response += ` **Imports** (${fileContext.relationships.imports.length}):\n`;
+        fileContext.relationships.imports.slice(0, 5).forEach(imp => {
+          response += `    ${imp}\n`;
+        });
+        if (fileContext.relationships.imports.length > 5) {
+          response += `   ... and ${fileContext.relationships.imports.length - 5} more\n`;
+        }
+        response += `\n`;
+      }
+
+      if (fileContext.relationships.relatedTests.length > 0) {
+        response += ` **Related Tests**:\n`;
+        fileContext.relationships.relatedTests.forEach(test => {
+          response += `    ${test}\n`;
+        });
+        response += `\n`;
+      }
+
+      if (fileContext.relationships.relatedConfigs.length > 0) {
+        response += ` **Related Configs**:\n`;
+        fileContext.relationships.relatedConfigs.forEach(config => {
+          response += `    ${config}\n`;
+        });
+        response += `\n`;
+      }
+
+      // Content section
+      response += ` **Content**\n\n\`\`\`${fileContext.metadata.language.toLowerCase()}\n${fileContext.content}\n\`\`\``;
+
+      return {
+        content: [{
+          type: 'text',
+          text: response,
+        }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: ` Failed to read file: ${error.message}\n\nStack: ${error.stack}`,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Search workspace (unified search for files and content)
+   */
+  private async handleSearch(args: { query: string; type: 'files' | 'content'; options?: any }) {
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    if (!workspace) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' No workspace set. Run `set_project` first.',
+        }],
+      };
+    }
+
+    try {
+      const { query, type, options = {} } = args;
+      
+      // Use optimized search engine
+      const engine = new SearchEngine(workspace);
+
+      if (type === 'files') {
+        const result = await engine.searchFiles(query, {
+          maxResults: options.maxResults || 50,
+          enrichContext: true,
+          caseSensitive: options.caseSensitive || false
+        });
+        
+        if (result.totalMatches === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: ` No files found matching "${query}"`,
+            }],
+          };
+        }
+
+        let response = ` **Found ${result.totalMatches} files**\n\n`;
+        
+        // Show top matches with context
+        result.matches.slice(0, 20).forEach((match, i) => {
+          const score = Math.round(match.relevanceScore);
+          const matchTypeEmoji = match.matchType === 'exact' ? '' : 
+                                 match.matchType === 'prefix' ? '' : '';
+          
+          response += `${i + 1}. ${matchTypeEmoji} ${match.relativePath}`;
+          
+          // Show file context if available
+          if (match.context) {
+            const complexityEmoji = match.context.complexity === 'low' ? '' : 
+                                   match.context.complexity === 'medium' ? '' : 
+                                   match.context.complexity === 'high' ? '' : '';
+            response += ` (${complexityEmoji} ${match.context.complexity}`;
+            if (match.context.linesOfCode) {
+              response += `, ${match.context.linesOfCode} LOC`;
+            }
+            response += `)`;
+          }
+          response += `\n`;
+        });
+
+        if (result.totalMatches > 20) {
+          response += `\n... and ${result.totalMatches - 20} more matches`;
+        }
+
+        // Show suggestions
+        if (result.suggestions && result.suggestions.length > 0) {
+          response += `\n\n **Suggestions:** ${result.suggestions.join(', ')}`;
+        }
+
+        // Show clusters
+        if (result.clusters && Object.keys(result.clusters).length > 1) {
+          response += `\n\n **Clustered by directory:**\n`;
+          Object.entries(result.clusters).slice(0, 5).forEach(([dir, matches]) => {
+            response += `   ${dir}: ${matches.length} file(s)\n`;
+          });
+        }
+        
+        return {
+          content: [{ type: 'text', text: response }],
+        };
+      } else {
+        const result = await engine.searchContent(query, {
+          maxResults: options.maxResults || 100,
+          filePattern: options.filePattern,
+          caseSensitive: options.caseSensitive || false,
+          regex: options.regex || false,
+          enrichContext: false // Skip for performance on content search
+        });
+        
+        if (result.totalMatches === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: ` No content found matching "${query}"`,
+            }],
+          };
+        }
+
+        let response = ` **Found ${result.totalMatches} matches**\n\n`;
+        
+        // Group by file for better readability
+        if (result.clusters) {
+          const files = Object.keys(result.clusters).slice(0, 10);
+          files.forEach(file => {
+            const matches = result.clusters![file];
+            response += ` **${file}** (${matches.length} match${matches.length > 1 ? 'es' : ''})\n`;
+            matches.slice(0, 3).forEach(match => {
+              response += `   Line ${match.line}: ${match.text?.trim().substring(0, 100)}\n`;
+            });
+            if (matches.length > 3) {
+              response += `   ... and ${matches.length - 3} more\n`;
+            }
+            response += `\n`;
+          });
+
+          if (Object.keys(result.clusters).length > 10) {
+            response += `... and ${Object.keys(result.clusters).length - 10} more files\n`;
+          }
+        }
+
+        return {
+          content: [{ type: 'text', text: response }],
+        };
+      }
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: ` Search failed: ${error.message}`,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Get project structure with complexity analysis
+   */
+  private async handleStructure(args?: { depth?: number }) {
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    if (!workspace) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' No workspace set. Run `set_project` first.',
+        }],
+      };
+    }
+
+    try {
+      const depth = args?.depth || 3;
+      
+      // Use optimized structure engine
+      const engine = new StructureEngine(workspace);
+      const result = await engine.getStructure(depth, {
+        includeMetadata: true,
+        analyzeComplexity: true,
+        detectHotspots: true
+      });
+
+      let response = ` **Project Structure**\n\n`;
+      response += `\`\`\`\n${result.tree}\`\`\`\n\n`;
+      
+      // Summary statistics
+      response += ` **Summary**\n`;
+      response += ` ${result.summary.totalFiles} files, ${result.summary.totalDirectories} directories\n`;
+      if (result.summary.totalLOC > 0) {
+        response += ` ${result.summary.totalLOC.toLocaleString()} lines of code\n`;
+      }
+      response += ` ${(result.summary.totalSize / (1024 * 1024)).toFixed(2)} MB total size\n`;
+      
+      if (Object.keys(result.summary.languages).length > 0) {
+        const languages = Object.entries(result.summary.languages)
+          .sort(([, a], [, b]) => b - a)
+          .map(([lang]) => lang)
+          .slice(0, 3)
+          .join(', ');
+        response += ` Languages: ${languages}\n`;
+      }
+      
+      // Architecture pattern
+      if (result.summary.architecturePattern) {
+        response += `\n **Architecture:** ${result.summary.architecturePattern}\n`;
+      }
+
+      // Hotspots
+      if (result.summary.hotspots && result.summary.hotspots.length > 0) {
+        response += `\n **Hotspots** (high complexity areas):\n`;
+        result.summary.hotspots.forEach((hotspot, i) => {
+          const complexityEmoji = hotspot.complexity >= 60 ? '' : '';
+          response += `${i + 1}. ${complexityEmoji} ${hotspot.path} - ${hotspot.reason} (${hotspot.loc.toLocaleString()} LOC)\n`;
+        });
+      }
+
+      // Insights
+      if (result.insights && result.insights.length > 0) {
+        response += `\n **Insights**\n`;
+        result.insights.forEach(insight => {
+          response += ` ${insight}\n`;
+        });
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: response,
+        }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: ` Failed to get structure: ${error.message}`,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Git operations dispatcher (namespaced tool)
+   */
+  private async handleGit(args: { 
+    action: 'status' | 'context' | 'hotspots' | 'coupling' | 'blame' | 'analysis'; 
+    staged?: boolean; 
+    files?: string[]; 
+    path?: string;
+    limit?: number;
+    minCoupling?: number;
+  }) {
+    const { action, ...restArgs } = args;
+
+    switch (action) {
+      case 'status':
+        return await this.handleGitStatus();
+      case 'context':
+        return await this.handleGitContext(restArgs);
+      case 'hotspots':
+        return await this.handleGitHotspots(restArgs.limit);
+      case 'coupling':
+        return await this.handleGitCoupling(restArgs.minCoupling);
+      case 'blame':
+        if (!restArgs.path) {
+          return {
+            content: [{
+              type: 'text',
+              text: ` Missing required parameter 'path' for git blame action.`,
+            }],
+          };
+        }
+        return await this.handleGitBlame(restArgs.path);
+      case 'analysis':
+        return await this.handleGitAnalysis();
+      default:
         return {
           content: [{
             type: 'text',
-            text: `❌ **No Active Project**\n\nUse \`set_workspace\` to set up a project first before analyzing missing context.`,
+            text: ` Unknown git action: ${action}. Use 'status', 'context', 'hotspots', 'coupling', 'blame', or 'analysis'.`,
+          }],
+        };
+    }
+  }
+
+  /**
+   * Git status with impact analysis
+   */
+  private async handleGitStatus() {
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    if (!workspace) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' No workspace set. Run `set_project` first.',
+        }],
+      };
+    }
+
+    try {
+      // Use optimized git status engine
+      const engine = new GitStatusEngine(workspace);
+      const result = await engine.getStatus({
+        analyzeImpact: true,
+        enrichContext: true
+      });
+
+      let response = ` **Git Status**\n\n`;
+      response += ` Branch: ${result.branch}\n`;
+      
+      if (result.ahead > 0) response += ` Ahead: ${result.ahead} commit(s)\n`;
+      if (result.behind > 0) response += ` Behind: ${result.behind} commit(s)\n`;
+      
+      response += `\n`;
+
+      if (result.clean) {
+        response += ` Working tree clean`;
+      } else {
+        // Staged files with context
+        if (result.changes.staged.length > 0) {
+          response += ` **Staged** (${result.changes.staged.length}):\n`;
+          result.changes.staged.forEach(change => {
+            const impactEmoji = change.impact === 'high' ? '' : 
+                               change.impact === 'medium' ? '' : '';
+            const complexityEmoji = change.complexity === 'low' ? '' : 
+                                   change.complexity === 'medium' ? '' : 
+                                   change.complexity === 'high' ? '' : 
+                                   change.complexity === 'very-high' ? '' : '';
+            
+            response += `   ${impactEmoji} ${change.path}`;
+            if (change.category) response += ` [${change.category}]`;
+            if (complexityEmoji) response += ` ${complexityEmoji}`;
+            response += `\n`;
+          });
+        }
+
+        // Modified files
+        if (result.changes.modified.length > 0) {
+          response += `\n **Modified** (${result.changes.modified.length}):\n`;
+          result.changes.modified.slice(0, 10).forEach(change => {
+            const impactEmoji = change.impact === 'high' ? '' : 
+                               change.impact === 'medium' ? '' : '';
+            response += `   ${impactEmoji} ${change.path}`;
+            if (change.category) response += ` [${change.category}]`;
+            response += `\n`;
+          });
+          if (result.changes.modified.length > 10) {
+            response += `  ... and ${result.changes.modified.length - 10} more\n`;
+          }
+        }
+
+        // Untracked files
+        if (result.changes.untracked.length > 0) {
+          response += `\n **Untracked** (${result.changes.untracked.length}):\n`;
+          result.changes.untracked.slice(0, 5).forEach(change => {
+            response += `   ${change.path}`;
+            if (change.category) response += ` [${change.category}]`;
+            response += `\n`;
+          });
+          if (result.changes.untracked.length > 5) {
+            response += `  ... and ${result.changes.untracked.length - 5} more\n`;
+          }
+        }
+
+        // Deleted files
+        if (result.changes.deleted.length > 0) {
+          response += `\n  **Deleted** (${result.changes.deleted.length}):\n`;
+          result.changes.deleted.forEach(change => {
+            response += `   ${change.path}\n`;
+          });
+        }
+      }
+
+      // Summary
+      if (result.summary.totalChanges > 0) {
+        response += `\n **Summary:**\n`;
+        response += ` ${result.summary.totalChanges} total change(s)`;
+        if (result.summary.highImpact > 0) {
+          response += ` (${result.summary.highImpact} high-impact)`;
+        }
+        response += `\n`;
+
+        if (Object.keys(result.summary.categories).length > 0) {
+          const categories = Object.entries(result.summary.categories)
+            .map(([cat, count]) => `${count} ${cat}`)
+            .join(', ');
+          response += ` Categories: ${categories}\n`;
+        }
+
+        if (result.summary.complexity.high > 0) {
+          response += ` ${result.summary.complexity.high} complex file(s) changed\n`;
+        }
+      }
+
+      // Commit readiness
+      if (result.changes.staged.length > 0) {
+        response += `\n **Commit Readiness:** ${result.commitReadiness.ready ? 'Ready' : 'Review needed'}\n`;
+        
+        if (result.commitReadiness.warnings.length > 0) {
+          response += `\n  **Warnings:**\n`;
+          result.commitReadiness.warnings.forEach(w => response += `   ${w}\n`);
+        }
+
+        if (result.commitReadiness.suggestions.length > 0) {
+          response += `\n **Suggestions:**\n`;
+          result.commitReadiness.suggestions.forEach(s => response += `   ${s}\n`);
+        }
+      }
+
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: ` Git status failed: ${error.message}`,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Git context with smart commit message generation
+   */
+  private async handleGitContext(args?: { staged?: boolean; files?: string[] }) {
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    if (!workspace) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' No workspace set. Run `set_project` first.',
+        }],
+      };
+    }
+
+    try {
+      // Use optimized git context engine
+      const engine = new GitContextEngine(workspace);
+      const context = await engine.getContext({
+        generateCommitMessage: true,
+        analyzeChanges: true
+      });
+
+      let response = ` **Git Context**\n\n`;
+      
+      // Branch info
+      response += ` **Current Branch**: ${context.branch}\n`;
+      if (context.ahead > 0) response += ` Ahead: ${context.ahead} commit(s)\n`;
+      if (context.behind > 0) response += ` Behind: ${context.behind} commit(s)\n`;
+      response += `\n`;
+
+      // Last commit
+      if (context.lastCommit) {
+        response += ` **Last Commit**:\n`;
+        response += `   Hash: ${context.lastCommit.hash}\n`;
+        response += `   Author: ${context.lastCommit.author}\n`;
+        response += `   Date: ${context.lastCommit.date.toLocaleDateString()}\n`;
+        response += `   Message: ${context.lastCommit.message}\n\n`;
+      }
+
+      // Changes summary
+      const totalChanges = context.stagedFiles.length + context.uncommittedFiles.length;
+      if (totalChanges > 0) {
+        response += ` **Changes**: ${totalChanges} file(s)\n`;
+        if (context.stagedFiles.length > 0) {
+          response += `   Staged: ${context.stagedFiles.length}\n`;
+        }
+        if (context.uncommittedFiles.length > 0) {
+          response += `   Uncommitted: ${context.uncommittedFiles.length}\n`;
+        }
+        response += `\n`;
+      }
+
+      // Change analysis
+      if (context.changeAnalysis) {
+        const analysis = context.changeAnalysis;
+        response += ` **Change Analysis**:\n`;
+        response += `   Files changed: ${analysis.filesChanged}\n`;
+        response += `   Insertions: +${analysis.insertions}\n`;
+        response += `   Deletions: -${analysis.deletions}\n`;
+        
+        if (analysis.primaryCategory) {
+          response += `   Primary category: ${analysis.primaryCategory}\n`;
+        }
+        if (analysis.scope) {
+          response += `   Scope: ${analysis.scope}\n`;
+        }
+        
+        if (Object.keys(analysis.categories).length > 0) {
+          const categories = Object.entries(analysis.categories)
+            .map(([cat, count]) => `${count} ${cat}`)
+            .join(', ');
+          response += `   Categories: ${categories}\n`;
+        }
+        response += `\n`;
+      }
+
+      // Suggested commit message
+      if (context.suggestedCommitMessage) {
+        response += ` **Suggested Commit Message**:\n\`\`\`\n${context.suggestedCommitMessage}\n\`\`\`\n\n`;
+        response += ` This follows conventional commits format. Edit as needed.`;
+      } else if (context.stagedFiles.length === 0) {
+        response += ` Stage files to get a suggested commit message.`;
+      }
+
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: ` Git context failed: ${error.message}`,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Git hotspots - files with high change frequency (risk analysis)
+   */
+  private async handleGitHotspots(limit: number = 10) {
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    
+    if (!workspace) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' No workspace set. Run `set_project` first.',
+        }],
+      };
+    }
+
+    try {
+      const git = new GitIntegration(workspace);
+      
+      if (!git.isGitRepo()) {
+        return {
+          content: [{
+            type: 'text',
+            text: ' Not a git repository',
+          }],
+        };
+      }
+
+      const hotspots = git.getHotspots(limit);
+      
+      if (!hotspots || hotspots.length === 0) {
+        return {
+          content: [{
+            type: 'text',
+            text: ' No hotspots found. Repository may be too new or have limited history.',
+          }],
+        };
+      }
+
+      let response = ` **Git Hotspots - Risk Analysis**\n\n`;
+      response += `Files with high change frequency (last 6 months):\n\n`;
+
+      for (const spot of hotspots) {
+        const riskIcon = spot.risk === 'critical' ? '' : 
+                        spot.risk === 'high' ? '' : 
+                        spot.risk === 'medium' ? '' : '';
+        
+        response += `${riskIcon} **${spot.file}** (${spot.risk} risk)\n`;
+        response += `   ${spot.changes} changes\n`;
+        response += `   Last changed: ${spot.lastChanged}\n\n`;
+      }
+
+      response += `\n **Why This Matters:**\n`;
+      response += ` High churn = complexity or instability\n`;
+      response += ` Critical/high risk files need extra testing\n`;
+      response += ` Consider refactoring frequently changed files\n`;
+
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: ` Git hotspots failed: ${error.message}`,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Git coupling - files that change together (hidden dependencies)
+   */
+  private async handleGitCoupling(minCoupling: number = 3) {
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    
+    if (!workspace) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' No workspace set. Run `set_project` first.',
+        }],
+      };
+    }
+
+    try {
+      const git = new GitIntegration(workspace);
+      
+      if (!git.isGitRepo()) {
+        return {
+          content: [{
+            type: 'text',
+            text: ' Not a git repository',
+          }],
+        };
+      }
+
+      const couplings = git.getFileCoupling(minCoupling);
+      
+      if (!couplings || couplings.length === 0) {
+        return {
+          content: [{
+            type: 'text',
+            text: ` No strong file couplings found (minimum ${minCoupling} co-changes).`,
+          }],
+        };
+      }
+
+      let response = ` **Git Coupling - Hidden Dependencies**\n\n`;
+      response += `Files that frequently change together (last 6 months):\n\n`;
+
+      for (const coupling of couplings) {
+        const strengthIcon = coupling.coupling === 'strong' ? '' : 
+                            coupling.coupling === 'medium' ? '' : '';
+        
+        response += `${strengthIcon} **${coupling.coupling.toUpperCase()} coupling** (${coupling.timesChanged} together)\n`;
+        response += `   ${coupling.fileA}\n`;
+        response += `   ${coupling.fileB}\n\n`;
+      }
+
+      response += `\n **Why This Matters:**\n`;
+      response += ` Strong coupling = hidden dependencies\n`;
+      response += ` Files that change together should maybe be merged\n`;
+      response += ` Or they need better abstraction/interfaces\n`;
+      response += ` Use this to find refactoring opportunities\n`;
+
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: ` Git coupling failed: ${error.message}`,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Git blame - code ownership analysis
+   */
+  private async handleGitBlame(filepath: string) {
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    
+    if (!workspace) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' No workspace set. Run `set_project` first.',
+        }],
+      };
+    }
+
+    try {
+      const git = new GitIntegration(workspace);
+      
+      if (!git.isGitRepo()) {
+        return {
+          content: [{
+            type: 'text',
+            text: ' Not a git repository',
+          }],
+        };
+      }
+
+      const ownership = git.getBlame(filepath);
+      
+      if (!ownership || ownership.length === 0) {
+        return {
+          content: [{
+            type: 'text',
+            text: ` Could not get blame info for ${filepath}. File may not exist or not be tracked.`,
+          }],
+        };
+      }
+
+      let response = ` **Code Ownership - ${filepath}**\n\n`;
+
+      for (const owner of ownership) {
+        const barLength = Math.floor(owner.percentage / 5);
+        const bar = ''.repeat(barLength) + ''.repeat(20 - barLength);
+        
+        response += `**${owner.author}** - ${owner.percentage}%\n`;
+        response += `${bar}\n`;
+        response += `   ${owner.lines} lines\n`;
+        response += `   Last edit: ${owner.lastEdit}\n\n`;
+      }
+
+      const primaryOwner = ownership[0];
+      response += `\n **Primary Expert:** ${primaryOwner.author} (${primaryOwner.percentage}% ownership)\n`;
+      response += `Ask them about this file's architecture and design decisions.\n`;
+
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: ` Git blame failed: ${error.message}`,
+        }],
+      };
+    }
+  }
+
+  /**
+   * Git analysis - comprehensive overview
+   */
+  private async handleGitAnalysis() {
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    
+    if (!workspace) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' No workspace set. Run `set_project` first.',
+        }],
+      };
+    }
+
+    try {
+      const git = new GitIntegration(workspace);
+      
+      if (!git.isGitRepo()) {
+        return {
+          content: [{
+            type: 'text',
+            text: ' Not a git repository',
+          }],
+        };
+      }
+
+      const analysis = git.getAnalysis();
+      
+      if (!analysis) {
+        return {
+          content: [{
+            type: 'text',
+            text: ' Could not analyze repository',
+          }],
+        };
+      }
+
+      let response = ` **Git Repository Analysis**\n\n`;
+
+      // Branch health
+      response += ` **Branch Health**\n`;
+      response += `   Current: ${analysis.branchHealth.current}\n`;
+      
+      if (analysis.branchHealth.ahead > 0) {
+        response += `   Ahead: ${analysis.branchHealth.ahead} commits\n`;
+      }
+      if (analysis.branchHealth.behind > 0) {
+        response += `   Behind: ${analysis.branchHealth.behind} commits`;
+        if (analysis.branchHealth.stale) {
+          response += `  STALE - merge main!\n`;
+        } else {
+          response += `\n`;
+        }
+      }
+      response += `\n`;
+
+      // Top contributors
+      if (analysis.contributors.length > 0) {
+        response += ` **Top Contributors** (last 6 months)\n`;
+        for (const contributor of analysis.contributors.slice(0, 5)) {
+          response += `   ${contributor.name} - ${contributor.commits} commits (last: ${contributor.lastCommit})\n`;
+        }
+        response += `\n`;
+      }
+
+      // Top hotspots
+      if (analysis.hotspots.length > 0) {
+        response += ` **Top 5 Hotspots** (high-risk files)\n`;
+        for (const spot of analysis.hotspots.slice(0, 5)) {
+          const riskIcon = spot.risk === 'critical' ? '' : 
+                          spot.risk === 'high' ? '' : 
+                          spot.risk === 'medium' ? '' : '';
+          response += `  ${riskIcon} ${spot.file} - ${spot.changes} changes\n`;
+        }
+        response += `\n`;
+      }
+
+      // Strongest couplings
+      if (analysis.coupling.length > 0) {
+        response += ` **Strongest Couplings** (hidden dependencies)\n`;
+        for (const coupling of analysis.coupling.slice(0, 5)) {
+          response += `   ${coupling.fileA}  ${coupling.fileB} (${coupling.timesChanged} together)\n`;
+        }
+        response += `\n`;
+      }
+
+      // Recommendations
+      response += ` **Recommendations:**\n`;
+      
+      if (analysis.branchHealth.stale) {
+        response += `    Merge main branch - you're ${analysis.branchHealth.behind} commits behind\n`;
+      }
+      
+      if (analysis.hotspots.some((h: any) => h.risk === 'critical')) {
+        const criticalFiles = analysis.hotspots.filter((h: any) => h.risk === 'critical');
+        response += `    Review ${criticalFiles.length} critical-risk file(s) - consider refactoring\n`;
+      }
+      
+      if (analysis.coupling.some((c: any) => c.coupling === 'strong')) {
+        const strongCouplings = analysis.coupling.filter((c: any) => c.coupling === 'strong');
+        response += `    ${strongCouplings.length} strong coupling(s) detected - refactor to reduce dependencies\n`;
+      }
+
+      return {
+        content: [{ type: 'text', text: response }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text',
+          text: ` Git analysis failed: ${error.message}`,
+        }],
+      };
+    }
+  }
+
+  private async handleNotion(args: { action: 'search' | 'read'; query?: string; pageId?: string }) {
+    // Validate action parameter
+    if (!args.action) {
+      return {
+        content: [{
+          type: 'text',
+          text: ' Missing required parameter: action (must be "search" or "read")',
+        }],
+        isError: true,
+      };
+    }
+
+    // Handle search action
+    if (args.action === 'search') {
+      if (!args.query) {
+        return {
+          content: [{
+            type: 'text',
+            text: ' Missing required parameter: query (required for search action)',
           }],
           isError: true,
         };
       }
-
-      let response = `🔍 **Missing Context Analysis for "${currentProject.name}"**\n\n`;
-      
-      // Get current context
-      const summary = this.storage.getContextSummary(currentProject.id);
-      const decisions = summary.recentDecisions || [];
-      const conversations = summary.recentConversations || [];
-      
-      response += `📊 **Current Context State:**\n`;
-      response += `• Decisions: ${decisions.length}\n`;
-      response += `• Conversations: ${conversations.length}\n`;
-      response += `• Tech Stack: ${currentProject.techStack?.length || 0} items\n`;
-      response += `• Architecture: ${currentProject.architecture || 'Not specified'}\n\n`;
-      
-      // Analyze missing context
-      const suggestions: string[] = [];
-      
-      // Check for missing architecture
-      if (!currentProject.architecture || currentProject.architecture === 'Not specified') {
-        suggestions.push(`🏗️ **Architecture Decision Missing**: Document the overall architecture pattern (microservices, monolith, serverless, etc.)`);
-      }
-      
-      // Check for missing tech stack decisions
-      if (!currentProject.techStack || currentProject.techStack.length === 0) {
-        suggestions.push(`⚙️ **Technology Stack Missing**: Document key technologies, frameworks, and libraries used`);
-      }
-      
-      // Check for recent decisions
-      if (decisions.length === 0) {
-        suggestions.push(`📋 **No Technical Decisions Recorded**: Start documenting architectural choices, library selections, and design decisions`);
-      } else if (decisions.length < 3) {
-        suggestions.push(`📋 **Limited Decision History**: Most projects have 5-10+ key decisions documented`);
-      }
-      
-      // Check for configuration decisions
-      const hasConfigDecisions = decisions.some((d: any) => 
-        d.type === 'configuration' || d.description.toLowerCase().includes('config')
-      );
-      if (!hasConfigDecisions) {
-        suggestions.push(`⚙️ **Configuration Decisions Missing**: Document environment setup, deployment configs, and key settings`);
-      }
-      
-      // Check for security decisions
-      const hasSecurityDecisions = decisions.some((d: any) => 
-        d.description.toLowerCase().includes('security') || 
-        d.description.toLowerCase().includes('auth')
-      );
-      if (!hasSecurityDecisions) {
-        suggestions.push(`🔒 **Security Context Missing**: Document authentication, authorization, and security patterns`);
-      }
-      
-      // Check for performance decisions
-      const hasPerformanceDecisions = decisions.some((d: any) => 
-        d.description.toLowerCase().includes('performance') || 
-        d.description.toLowerCase().includes('optimize')
-      );
-      if (!hasPerformanceDecisions) {
-        suggestions.push(`⚡ **Performance Context Missing**: Document optimization decisions and performance considerations`);
-      }
-      
-      if (suggestions.length === 0) {
-        response += `✅ **Well-Documented Project!**\n\n`;
-        response += `Your project has comprehensive context coverage:\n`;
-        response += `• Architecture documented\n`;
-        response += `• Technology stack defined\n`;
-        response += `• Multiple decisions recorded\n`;
-        response += `• Various decision types covered\n\n`;
-        response += `💡 **Keep up the good work!** Continue documenting new decisions as the project evolves.`;
-      } else {
-        response += `⚠️ **Missing Context Areas (${suggestions.length}):**\n\n`;
-        suggestions.forEach((suggestion, i) => {
-          response += `${i + 1}. ${suggestion}\n\n`;
-        });
-        
-        response += `🚀 **Quick Actions:**\n`;
-        response += `• Use \`save_decision\` to document technical choices\n`;
-        response += `• Update project info with \`update_project\` (if available)\n`;
-        response += `• Use \`analyze_conversation_context\` on recent discussions\n`;
-        response += `• Document key patterns and conventions as decisions\n\n`;
-        
-        response += `💡 **Pro Tip**: Well-documented projects help AI assistants provide more relevant and context-aware assistance!`;
-      }
-
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-      
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: `❌ **Missing Context Analysis Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        }],
-        isError: true,
-      };
+      return await this.notionHandlers.handleNotionSearch({ query: args.query });
     }
-  }
 
-  private async handleMigrateDatabase(args: { dryRun?: boolean }) {
-    const { dryRun = false } = args;
-    
-    try {
-      // Use null to let DatabaseMigrator use default path (same as Storage)
-      const migrator = new DatabaseMigrator();
-      
-      if (dryRun) {
-        // For dry run, just get the stats
-        const stats = await migrator.getMigrationStats();
-        
-        let response = `� **Database Migration Preview (Dry Run)**\n\n`;
-        
-        if (stats.duplicateGroups === 0) {
-          response += `✅ No duplicate projects found! Your database is clean.\n\n`;
-          response += `📊 **Summary:**\n`;
-          response += `• Total projects: ${stats.totalProjects}\n`;
-          response += `• Duplicates: 0\n`;
-          response += `• No migration needed\n`;
-          
-          migrator.close();
-          return {
-            content: [{ type: 'text', text: response }],
-          };
-        }
-        
-        response += `📊 **Would be migrated:**\n`;
-        response += `• Total projects: ${stats.totalProjects}\n`;
-        response += `• Duplicate groups: ${stats.duplicateGroups}\n`;
-        response += `• Total duplicates: ${stats.totalDuplicates}\n`;
-        response += `• Projects after cleanup: ${stats.totalProjects - stats.totalDuplicates}\n\n`;
-        
-        response += `🔍 **Duplicate groups found:**\n\n`;
-        
-        stats.duplicateDetails.forEach((group, i) => {
-          response += `${i + 1}. **${group.path}**\n`;
-          response += `   → ${group.count} projects: ${group.names.slice(0, 3).join(', ')}`;
-          if (group.names.length > 3) {
-            response += ` +${group.names.length - 3} more`;
-          }
-          response += `\n\n`;
-        });
-        
-        response += `💡 **Next Steps:**\n`;
-        response += `• Review the changes above\n`;
-        response += `• Run "migrate database" (without dryRun) to apply changes\n`;
-        response += `• Backup recommended before running actual migration\n`;
-        
-        migrator.close();
+    // Handle read action
+    if (args.action === 'read') {
+      if (!args.pageId) {
         return {
-          content: [{ type: 'text', text: response }],
+          content: [{
+            type: 'text',
+            text: ' Missing required parameter: pageId (required for read action)',
+          }],
+          isError: true,
         };
       }
-      
-      // Actual migration
-      const result = await migrator.migrateDuplicateProjects();
-      
-      let response = `🔄 **Database Migration Complete**\n\n`;
-      
-      if (result.duplicatesFound === 0) {
-        response += `✅ No duplicate projects found! Your database was already clean.\n\n`;
-        response += `📊 **Summary:**\n`;
-        response += `• No duplicates found\n`;
-        response += `• No changes made\n`;
-      } else {
-        response += `✅ **Migration successful!**\n\n`;
-        response += `� **Summary:**\n`;
-        response += `• Duplicates found: ${result.duplicatesFound}\n`;
-        response += `• Duplicates removed: ${result.duplicatesRemoved}\n`;
-        response += `• Projects merged: ${result.projectsMerged}\n\n`;
-        
-        if (result.details.length > 0) {
-          response += `📋 **Details:**\n`;
-          result.details.forEach(detail => {
-            response += `• ${detail}\n`;
-          });
-          response += `\n`;
-        }
-        
-        response += `🎉 **Migration Complete!**\n`;
-        response += `• Database has been cleaned up\n`;
-        response += `• All related data (conversations, decisions, todos) preserved\n`;
-        response += `• You should see fewer duplicate projects now\n`;
-      }
-      
-      if (result.errors.length > 0) {
-        response += `\n⚠️ **Warnings:**\n`;
-        result.errors.forEach(error => {
-          response += `• ${error}\n`;
-        });
-      }
-      
-      migrator.close();
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-      
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: `❌ **Migration Failed**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nThe database was not modified. Please try again or check the logs.`,
-        }],
-        isError: true,
-      };
+      return await this.notionHandlers.handleNotionReadPage({ pageId: args.pageId });
     }
+
+    // Unknown action
+    return {
+      content: [{
+        type: 'text',
+        text: ` Unknown action: "${args.action}". Use "search" or "read".`,
+      }],
+      isError: true,
+    };
   }
-  
-  private async handleGetMigrationStats() {
-    try {
-      const migrator = new DatabaseMigrator();
-      const stats = await migrator.getMigrationStats();
-      
-      let response = `📊 **Database Migration Statistics**\n\n`;
-      
-      response += `📈 **Current State:**\n`;
-      response += `• Total projects: ${stats.totalProjects}\n`;
-      response += `• Projects with paths: ${stats.projectsWithPaths}\n`;
-      response += `• Duplicate groups: ${stats.duplicateGroups}\n`;
-      response += `• Total duplicates: ${stats.totalDuplicates}\n\n`;
-      
-      if (stats.duplicateGroups === 0) {
-        response += `✅ **No duplicates found!** Your database is clean.\n\n`;
-        response += `🎯 **Recommendations:**\n`;
-        response += `• Your Context Sync database is optimized\n`;
-        response += `• No migration needed\n`;
-        response += `• All projects have unique paths\n`;
-        
-        migrator.close();
-        return {
-          content: [{ type: 'text', text: response }],
-        };
-      }
-      
-      response += `⚠️ **Duplicates Detected:**\n\n`;
-      
-      stats.duplicateDetails.forEach((group, i) => {
-        response += `${i + 1}. **${group.path}**\n`;
-        response += `   Projects: ${group.count}\n`;
-        response += `   Names: ${group.names.slice(0, 3).join(', ')}`;
-        if (group.names.length > 3) {
-          response += ` +${group.names.length - 3} more`;
-        }
-        response += `\n\n`;
-      });
-      
-      response += `🛠️ **Next Steps:**\n`;
-      response += `• Run "migrate database dryRun:true" to preview changes\n`;
-      response += `• Run "migrate database" to clean up duplicates\n`;
-      response += `• This will preserve all your data while removing duplicates\n\n`;
-      
-      response += `💡 **Migration Benefits:**\n`;
-      response += `• Cleaner project list\n`;
-      response += `• Improved performance\n`;
-      response += `• Consolidated project context\n`;
-      response += `• Better AI tool integration\n`;
-      
-      migrator.close();
+
+  // ========== HELPERS ==========
+
+  private getCurrentProject() {
+    if (!this.currentProjectId) return null;
+    return this.storage.getProject(this.currentProjectId);
+  }
+
+  private parseKeyValue(content: string): { key: string; value: string } {
+    // Try to parse "Key: Value" or "Key = Value" format
+    const match = content.match(/^(.+?)[:=](.+)$/);
+    if (match) {
       return {
-        content: [{ type: 'text', text: response }],
-      };
-      
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: `❌ **Failed to get migration stats**\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        }],
-        isError: true,
+        key: match[1].trim(),
+        value: match[2].trim()
       };
     }
+    // Fallback: use content as key
+    return {
+      key: content,
+      value: ''
+    };
   }
 
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    
-    console.error('Context Sync MCP server v1.0.3 running on stdio');
   }
 
   close(): void {
     this.storage.close();
   }
 }
+
+

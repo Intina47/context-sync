@@ -1,4 +1,4 @@
-// Git Integration for Version Control Operations
+﻿// Git Integration for Version Control Operations
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -248,6 +248,250 @@ export class GitIntegration {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Get hotspots - files with high change frequency (risk analysis)
+   */
+  getHotspots(limit: number = 10): Array<{ file: string; changes: number; lastChanged: string; risk: string }> | null {
+    if (!this.isGitRepo()) {
+      return null;
+    }
+
+    try {
+      // Get file change frequency from git log
+      const output = this.exec('git log --format=format: --name-only --since="6 months ago"');
+      const files = output.split('\n').filter(f => f.trim() && !f.startsWith('commit'));
+      
+      // Count changes per file
+      const changeCount = new Map<string, number>();
+      for (const file of files) {
+        changeCount.set(file, (changeCount.get(file) || 0) + 1);
+      }
+
+      // Sort by change frequency
+      const sorted = Array.from(changeCount.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit);
+
+      // Get last changed date for each file
+      const hotspots = sorted.map(([file, changes]) => {
+        try {
+          const lastChanged = this.exec(`git log -1 --format="%ar" -- "${file}"`).trim();
+          
+          // Risk calculation based on change frequency
+          let risk = 'low';
+          if (changes > 50) risk = 'critical';
+          else if (changes > 30) risk = 'high';
+          else if (changes > 15) risk = 'medium';
+          
+          return { file, changes, lastChanged, risk };
+        } catch {
+          return { file, changes, lastChanged: 'unknown', risk: 'low' };
+        }
+      });
+
+      return hotspots;
+    } catch (error) {
+      console.error('Error getting hotspots:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get file coupling - files that frequently change together (hidden dependencies)
+   */
+  getFileCoupling(minCoupling: number = 3): Array<{ fileA: string; fileB: string; timesChanged: number; coupling: string }> | null {
+    if (!this.isGitRepo()) {
+      return null;
+    }
+
+    try {
+      // Get commits with changed files
+      const output = this.exec('git log --format="COMMIT:%H" --name-only --since="6 months ago"');
+      const lines = output.split('\n');
+
+      // Parse commits and their files
+      const commits: string[][] = [];
+      let currentCommit: string[] = [];
+
+      for (const line of lines) {
+        if (line.startsWith('COMMIT:')) {
+          if (currentCommit.length > 0) {
+            commits.push([...currentCommit]);
+          }
+          currentCommit = [];
+        } else if (line.trim()) {
+          currentCommit.push(line.trim());
+        }
+      }
+      if (currentCommit.length > 0) {
+        commits.push(currentCommit);
+      }
+
+      // Count co-changes
+      const couplingMap = new Map<string, number>();
+
+      for (const files of commits) {
+        if (files.length < 2) continue;
+
+        // For each pair of files in the commit
+        for (let i = 0; i < files.length; i++) {
+          for (let j = i + 1; j < files.length; j++) {
+            const pair = [files[i], files[j]].sort().join('|||');
+            couplingMap.set(pair, (couplingMap.get(pair) || 0) + 1);
+          }
+        }
+      }
+
+      // Filter and format results
+      const couplings = Array.from(couplingMap.entries())
+        .filter(([_, count]) => count >= minCoupling)
+        .map(([pair, count]) => {
+          const [fileA, fileB] = pair.split('|||');
+          
+          // Coupling strength
+          let coupling = 'weak';
+          if (count > 15) coupling = 'strong';
+          else if (count > 8) coupling = 'medium';
+          
+          return { fileA, fileB, timesChanged: count, coupling };
+        })
+        .sort((a, b) => b.timesChanged - a.timesChanged)
+        .slice(0, 20);
+
+      return couplings;
+    } catch (error) {
+      console.error('Error getting file coupling:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get blame/ownership info for a file
+   */
+  getBlame(filepath: string): Array<{ author: string; lines: number; percentage: number; lastEdit: string }> | null {
+    if (!this.isGitRepo()) {
+      return null;
+    }
+
+    try {
+      // Get blame with author info
+      const output = this.exec(`git blame --line-porcelain "${filepath}"`);
+      const lines = output.split('\n');
+
+      // Parse blame output
+      const authorLines = new Map<string, number>();
+      const authorDates = new Map<string, string>();
+      let currentAuthor = '';
+      let totalLines = 0;
+
+      for (const line of lines) {
+        if (line.startsWith('author ')) {
+          currentAuthor = line.substring(7);
+          authorLines.set(currentAuthor, (authorLines.get(currentAuthor) || 0) + 1);
+          totalLines++;
+        } else if (line.startsWith('author-time ')) {
+          const timestamp = parseInt(line.substring(12)) * 1000;
+          const existing = authorDates.get(currentAuthor);
+          if (!existing || timestamp > new Date(existing).getTime()) {
+            authorDates.set(currentAuthor, new Date(timestamp).toISOString());
+          }
+        }
+      }
+
+      // Calculate percentages and format
+      const ownership = Array.from(authorLines.entries())
+        .map(([author, lines]) => {
+          const percentage = Math.round((lines / totalLines) * 100);
+          const lastEditISO = authorDates.get(author) || '';
+          const lastEdit = lastEditISO ? this.formatRelativeTime(lastEditISO) : 'unknown';
+          
+          return { author, lines, percentage, lastEdit };
+        })
+        .sort((a, b) => b.lines - a.lines);
+
+      return ownership;
+    } catch (error) {
+      console.error('Error getting blame:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get comprehensive git analysis (combines hotspots, coupling, and more)
+   */
+  getAnalysis(): {
+    hotspots: Array<{ file: string; changes: number; lastChanged: string; risk: string }>;
+    coupling: Array<{ fileA: string; fileB: string; timesChanged: number; coupling: string }>;
+    contributors: Array<{ name: string; commits: number; lastCommit: string }>;
+    branchHealth: { current: string; behind: number; ahead: number; stale: boolean };
+  } | null {
+    if (!this.isGitRepo()) {
+      return null;
+    }
+
+    try {
+      const hotspots = this.getHotspots(10) || [];
+      const coupling = this.getFileCoupling(3) || [];
+      
+      // Get contributor activity
+      const contributorOutput = this.exec('git shortlog -sn --since="6 months ago"');
+      const contributors = contributorOutput
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+          const match = line.trim().match(/(\d+)\s+(.+)/);
+          if (!match) return null;
+          
+          const commits = parseInt(match[1]);
+          const name = match[2];
+          
+          // Get last commit date for this author
+          const lastCommitOutput = this.exec(`git log -1 --author="${name}" --format="%ar"`);
+          const lastCommit = lastCommitOutput.trim();
+          
+          return { name, commits, lastCommit };
+        })
+        .filter(c => c !== null) as Array<{ name: string; commits: number; lastCommit: string }>;
+
+      // Branch health
+      const status = this.getStatus();
+      const branchHealth = {
+        current: status?.branch || 'unknown',
+        behind: status?.behind || 0,
+        ahead: status?.ahead || 0,
+        stale: (status?.behind || 0) > 10
+      };
+
+      return { hotspots, coupling, contributors, branchHealth };
+    } catch (error) {
+      console.error('Error getting git analysis:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Format relative time from ISO string
+   */
+  private formatRelativeTime(isoString: string): string {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    const weeks = Math.floor(days / 7);
+    const months = Math.floor(days / 30);
+    
+    if (months > 0) return `${months} month${months > 1 ? 's' : ''} ago`;
+    if (weeks > 0) return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
+    if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+    if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    return 'just now';
   }
 
   // ========== PRIVATE HELPER METHODS ==========

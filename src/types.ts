@@ -1,4 +1,4 @@
-// Core types for Context Sync
+﻿// Core types for Context Sync
 
 export interface ProjectContext {
   id: string;
@@ -49,15 +49,10 @@ export interface StorageInterface {
   // Conversations
   addConversation(conv: Omit<Conversation, 'id' | 'timestamp'>): Conversation;
   getRecentConversations(projectId: string, limit?: number): Conversation[];
-  streamConversations(projectId: string, limit?: number): Generator<Conversation>;
   
   // Decisions
   addDecision(decision: Omit<Decision, 'id' | 'timestamp'>): Decision;
   getDecisions(projectId: string): Decision[];
-  streamDecisions(projectId: string, limit?: number): Generator<Decision>;
-  
-  // Projects streaming
-  streamAllProjects(): Generator<ProjectContext>;
   
   // Context
   getContextSummary(projectId: string): ContextSummary;

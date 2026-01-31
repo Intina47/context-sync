@@ -5,7 +5,6 @@ const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
 const PLATFORM_CONFIGS = require('./platform-configs.cjs');
-const TieredDetector = require('./tiered-detector.cjs');
 const yaml = require('js-yaml');
 
 /**
@@ -23,7 +22,6 @@ class PlatformAutoConfigurator {
     this.packagePath = packagePath;
     this.verbose = verbose;
     this.platform = os.platform();
-    this.tieredDetector = new TieredDetector();
     this.results = {
       detected: [],
       configured: [],
@@ -36,32 +34,52 @@ class PlatformAutoConfigurator {
    * Main entry point - detect and configure all platforms
    */
   async configureAllPlatforms() {
-    console.log('🔍 Scanning for installed AI platforms...\n');
+    console.log(' Scanning for installed AI platforms...\n');
 
-    // Focus on local development and desktop apps first
-    const localPlatforms = ['claude', 'cursor', 'copilot', 'continue', 'zed', 'windsurf', 'codeium', 'tabnine'];
+    const platformOrder = [
+      'claude',
+      'cursor',
+      'copilot',
+      'continue',
+      'zed',
+      'windsurf',
+      'codeium',
+      'tabnine',
+      'codex',
+      'continue-dev',
+      'claude-code',
+      'antigravity'
+    ];
     
-    for (const platformId of localPlatforms) {
+    for (const platformId of platformOrder) {
       const config = PLATFORM_CONFIGS[platformId];
       if (!config) continue;
 
-      console.log(`🔍 Checking ${config.name}...`);
+      if (config.enabled === false) {
+        const reason = config.todo ? 'TODO (not configured yet)' : 'Disabled';
+        this.results.skipped.push({ platform: platformId, reason });
+        console.log(` ${config.name}...`);
+        console.log(`    ${config.name} skipped: ${reason}\n`);
+        continue;
+      }
+
+      console.log(` Checking ${config.name}...`);
       
-      const isInstalled = await this.detectPlatform(platformId, config);
-      if (isInstalled) {
+      const detection = await this.detectPlatform(platformId, config);
+      if (detection) {
         this.results.detected.push(platformId);
-        console.log(`   ✅ ${config.name} detected`);
+        console.log(`    ${config.name} detected`);
         
         const configResult = await this.configurePlatform(platformId, config);
         if (configResult.success) {
           this.results.configured.push(platformId);
-          console.log(`   🔧 ${config.name} configured successfully`);
+          console.log(`    ${config.name} configured successfully`);
         } else {
           this.results.skipped.push({ platform: platformId, reason: configResult.reason });
-          console.log(`   ⚠️  ${config.name} skipped: ${configResult.reason}`);
+          console.log(`     ${config.name} skipped: ${configResult.reason}`);
         }
       } else {
-        console.log(`   ⚪ ${config.name} not installed`);
+        console.log(`    ${config.name} not installed`);
       }
       console.log('');
     }
@@ -71,20 +89,59 @@ class PlatformAutoConfigurator {
 
   /**
    * Detect if a platform is installed on the system
-   * Uses tiered detection: current working method first, enhanced as fallback
    */
   async detectPlatform(platformId, config) {
-    const result = await this.tieredDetector.detectPlatform(platformId, config);
-    
-    if (result) {
-      const reliabilityNote = result.reliable ? '' : ' (fallback detection)';
+    const detection = config.detection || {};
+
+    const pathResult = this.detectByPaths(detection.paths);
+    if (pathResult) {
       if (this.verbose) {
-        console.log(`     Found via ${result.method}: ${result.path}${reliabilityNote}`);
+        console.log(`     Found via path: ${pathResult}`);
       }
-      return true;
+      return { method: 'path', path: pathResult };
     }
 
-    return false;
+    if (detection.extensionId || detection.extensionCheck) {
+      const extFound = await this.checkVSCodeExtension(platformId, detection);
+      if (extFound) {
+        if (this.verbose) {
+          console.log(`     Found via extension: ${extFound}`);
+        }
+        return { method: 'extension', path: extFound };
+      }
+    }
+
+    if (detection.command) {
+      try {
+        execSync(detection.command, { stdio: 'ignore' });
+        if (this.verbose) {
+          console.log(`     Found via command: ${detection.command}`);
+        }
+        return { method: 'command', path: detection.command };
+      } catch (error) {
+        // Command not available
+      }
+    }
+
+    return null;
+  }
+
+  detectByPaths(pathsByPlatform) {
+    if (!pathsByPlatform) return null;
+    const candidates = pathsByPlatform[this.platform];
+    if (!Array.isArray(candidates)) return null;
+
+    for (const checkPath of candidates) {
+      try {
+        if (fs.existsSync(checkPath)) {
+          return checkPath;
+        }
+      } catch (error) {
+        // Ignore invalid paths
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -100,7 +157,7 @@ class PlatformAutoConfigurator {
     }
 
     if (!extensionsPath || !fs.existsSync(extensionsPath)) {
-      return false;
+      return null;
     }
 
     try {
@@ -112,7 +169,7 @@ class PlatformAutoConfigurator {
         if (found && this.verbose) {
           console.log(`     Extension found: ${detection.extensionId}`);
         }
-        return found;
+        return found ? extensionsPath : null;
       }
 
       // For Copilot, look for github.copilot extension
@@ -123,13 +180,13 @@ class PlatformAutoConfigurator {
         if (copilotFound && this.verbose) {
           console.log(`     GitHub Copilot extension found`);
         }
-        return copilotFound;
+        return copilotFound ? extensionsPath : null;
       }
 
-      return false;
+      return null;
     } catch (error) {
       if (this.verbose) console.log(`     Error checking extensions: ${error.message}`);
-      return false;
+      return null;
     }
   }
 
@@ -139,14 +196,26 @@ class PlatformAutoConfigurator {
   async configurePlatform(platformId, config) {
     const configInfo = config.config;
     
-    if (!configInfo.paths || !configInfo.paths[this.platform]) {
-      return { success: false, reason: 'No configuration path for this platform' };
+    if (!configInfo) {
+      return { success: false, reason: 'No configuration definition for this platform' };
     }
 
-    const configPath = configInfo.paths[this.platform];
-    const configDir = path.dirname(configPath);
-
     try {
+      if (configInfo.format === 'continue-yaml') {
+        return await this.configureContinueYaml(configInfo, platformId);
+      }
+
+      if (configInfo.format === 'toml') {
+        return await this.configureTomlFile(configInfo);
+      }
+
+      if (!configInfo.paths || !configInfo.paths[this.platform]) {
+        return { success: false, reason: 'No configuration path for this platform' };
+      }
+
+      const configPath = configInfo.paths[this.platform];
+      const configDir = path.dirname(configPath);
+
       // Create directory if it doesn't exist
       if (!fs.existsSync(configDir)) {
         fs.mkdirSync(configDir, { recursive: true });
@@ -163,9 +232,6 @@ class PlatformAutoConfigurator {
         
         case 'json-merge':
           return await this.configureJsonFile(configPath, configInfo, platformId);
-        
-        case 'continue-yaml':
-          return await this.configureContinueYaml(configInfo, platformId);
         
         default:
           return { success: false, reason: 'Unsupported configuration format' };
@@ -200,8 +266,8 @@ class PlatformAutoConfigurator {
       return { success: false, reason: 'Already configured' };
     }
 
-    // Create structure from template
-    const template = configInfo.structure;
+    // Create structure from adapter or legacy template
+    const template = this.buildConfigPayload(configInfo, platformId);
     const newConfig = this.processTemplate(template, this.packagePath);
 
     // Merge configurations
@@ -267,13 +333,7 @@ class PlatformAutoConfigurator {
       }
 
       // Use workspaceStructure (direct server definition, NOT nested)
-      const structure = configInfo.workspaceStructure || configInfo.structure || {
-        name: 'Context Sync',
-        type: 'stdio',
-        command: 'npx',
-        args: ['-y', '@context-sync/server'],
-        env: {}
-      };
+      const structure = configInfo.workspaceStructure || this.buildServerDefinition(configInfo);
 
       // Determine file name - use a simple, standard name
       const fileName = 'context-sync.yaml';
@@ -362,13 +422,7 @@ class PlatformAutoConfigurator {
       }
 
       // Use globalStructure or default
-      const newEntry = configInfo.globalStructure || configInfo.structure || {
-        name: 'Context Sync',
-        type: 'stdio',
-        command: 'npx',
-        args: ['-y', '@context-sync/server'],
-        env: {}
-      };
+      const newEntry = configInfo.globalStructure || this.buildServerDefinition(configInfo);
 
       // Process template
       const processed = this.processTemplate(newEntry, this.packagePath);
@@ -427,6 +481,147 @@ class PlatformAutoConfigurator {
     return processed;
   }
 
+  renderTomlTable(tableKey, entries) {
+    const lines = [`[${tableKey}]`];
+    for (const key of Object.keys(entries)) {
+      lines.push(`${key} = ${this.toTomlValue(entries[key])}`);
+    }
+    return lines.join('\n');
+  }
+
+  toTomlValue(value) {
+    if (Array.isArray(value)) {
+      const items = value.map(item => this.toTomlValue(item)).join(', ');
+      return `[${items}]`;
+    }
+    if (typeof value === 'string') {
+      return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    if (value === null || value === undefined) {
+      return '""';
+    }
+    return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  }
+
+  escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
+   * Build a unified server definition with platform overrides
+   */
+  buildServerDefinition(configInfo) {
+    const base = {
+      name: 'Context Sync',
+      command: 'node',
+      args: ['{{packagePath}}']
+    };
+
+    const overrides = configInfo.serverOverrides || {};
+    return this.mergeConfigs(base, overrides);
+  }
+
+  /**
+   * Build config payload from adapter or legacy structure
+   */
+  buildConfigPayload(configInfo, platformId) {
+    if (!configInfo.adapter) {
+      return configInfo.structure || {};
+    }
+
+    const adapter = configInfo.adapter;
+    const serverId = adapter.serverId || 'context-sync';
+    const serverDef = this.buildServerDefinition(configInfo);
+    const payload = adapter.rootExtras ? JSON.parse(JSON.stringify(adapter.rootExtras)) : {};
+    const serverPayload = { [serverId]: serverDef };
+
+    if (adapter.flatKey) {
+      if (adapter.containerKey) {
+        payload[adapter.flatKey] = {};
+        this.setDeep(payload[adapter.flatKey], adapter.containerKey, serverPayload);
+      } else {
+        payload[adapter.flatKey] = serverPayload;
+      }
+      return payload;
+    }
+
+    if (adapter.containerKey) {
+      this.setDeep(payload, adapter.containerKey, serverPayload);
+    } else {
+      payload[serverId] = serverDef;
+    }
+
+    return payload;
+  }
+
+  /**
+   * Set nested object values using dot paths
+   */
+  setDeep(target, pathKey, value) {
+    const parts = pathKey.split('.');
+    let current = target;
+    for (let i = 0; i < parts.length; i++) {
+      const key = parts[i];
+      if (i === parts.length - 1) {
+        current[key] = value;
+        return;
+      }
+      if (!current[key] || typeof current[key] !== 'object' || Array.isArray(current[key])) {
+        current[key] = {};
+      }
+      current = current[key];
+    }
+  }
+
+  /**
+   * Configure TOML-based config files (Codex CLI)
+   */
+  async configureTomlFile(configInfo) {
+    if (!configInfo.paths || !configInfo.paths[this.platform]) {
+      return { success: false, reason: 'No configuration path for this platform' };
+    }
+
+    const configPath = configInfo.paths[this.platform];
+    const configDir = path.dirname(configPath);
+    const tableKey = configInfo.tomlTableKey || 'mcp_servers.context-sync';
+
+    try {
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+        if (this.verbose) console.log(`     Created directory: ${configDir}`);
+      }
+
+      let existing = '';
+      if (fs.existsSync(configPath)) {
+        existing = fs.readFileSync(configPath, 'utf8');
+
+        const tableRegex = new RegExp(`^\\[${this.escapeRegex(tableKey)}\\]\\s*$`, 'm');
+        if (tableRegex.test(existing)) {
+          return { success: false, reason: 'Already configured' };
+        }
+
+        const backupPath = `${configPath}.backup.${Date.now()}`;
+        fs.copyFileSync(configPath, backupPath);
+        if (this.verbose) console.log(`     Backup created: ${backupPath}`);
+      }
+
+      const serverDef = this.buildServerDefinition(configInfo);
+      if (configInfo.omitName) {
+        delete serverDef.name;
+      }
+      const tomlBlock = this.renderTomlTable(tableKey, serverDef);
+      const output = existing ? `${existing.trimEnd()}\n\n${tomlBlock}\n` : `${tomlBlock}\n`;
+
+      fs.writeFileSync(configPath, output, 'utf8');
+      return { success: true };
+    } catch (error) {
+      return { success: false, reason: `Error writing TOML: ${error.message}` };
+    }
+  }
+
   /**
    * Deep merge two configuration objects
    */
@@ -470,42 +665,42 @@ class PlatformAutoConfigurator {
   generateReport() {
     const { detected, configured, skipped, errors } = this.results;
     
-    let report = '\n🎉 Auto-Configuration Complete!\n\n';
+    let report = '\n Auto-Configuration Complete!\n\n';
     
-    report += `📊 Summary:\n`;
-    report += `   • Platforms detected: ${detected.length}\n`;
-    report += `   • Successfully configured: ${configured.length}\n`;
-    report += `   • Skipped: ${skipped.length}\n`;
-    report += `   • Errors: ${errors.length}\n\n`;
+    report += ` Summary:\n`;
+    report += `    Platforms detected: ${detected.length}\n`;
+    report += `    Successfully configured: ${configured.length}\n`;
+    report += `    Skipped: ${skipped.length}\n`;
+    report += `    Errors: ${errors.length}\n\n`;
 
     if (configured.length > 0) {
-      report += `✅ Configured Platforms:\n`;
+      report += ` Configured Platforms:\n`;
       configured.forEach(platform => {
         const config = PLATFORM_CONFIGS[platform];
-        report += `   • ${config.name}\n`;
+        report += `    ${config.name}\n`;
       });
       report += '\n';
     }
 
     if (skipped.length > 0) {
-      report += `⚠️  Skipped Platforms:\n`;
+      report += `  Skipped Platforms:\n`;
       skipped.forEach(({ platform, reason }) => {
         const config = PLATFORM_CONFIGS[platform];
-        report += `   • ${config.name}: ${reason}\n`;
+        report += `    ${config.name}: ${reason}\n`;
       });
       report += '\n';
     }
 
     if (errors.length > 0) {
-      report += `❌ Errors:\n`;
+      report += ` Errors:\n`;
       errors.forEach(({ platform, error }) => {
         const config = PLATFORM_CONFIGS[platform];
-        report += `   • ${config.name}: ${error}\n`;
+        report += `    ${config.name}: ${error}\n`;
       });
       report += '\n';
     }
 
-    report += `🚀 Next Steps:\n`;
+    report += ` Next Steps:\n`;
     if (configured.length > 0) {
       report += `   1. Restart your AI applications\n`;
       report += `   2. Context Sync should appear in their MCP/tools list\n`;
@@ -521,3 +716,5 @@ class PlatformAutoConfigurator {
 }
 
 module.exports = PlatformAutoConfigurator;
+
+

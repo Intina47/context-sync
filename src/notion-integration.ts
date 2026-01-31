@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Notion Integration for Context Sync
  * Provides direct Notion API integration for reading and writing documentation
  */
@@ -70,8 +70,8 @@ export class NotionIntegration {
       });
 
       const pages = response.results
-        .filter(result => result.object === 'page')
-        .map(page => {
+        .filter((result: any) => result.object === 'page')
+        .map((page: any) => {
           const pageData = page as any;
           const title = this.extractPageTitle(pageData);
           
@@ -272,7 +272,7 @@ export class NotionIntegration {
         page_size: 20
       });
 
-      return response.results.map(page => {
+      return response.results.map((page: any) => {
         const pageData = page as any;
         return {
           id: pageData.id,
@@ -541,3 +541,4 @@ ${project.architecture ? `\n## Architecture\n${project.architecture}` : ''}
     `.trim();
   }
 }
+

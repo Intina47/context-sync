@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Path normalization utilities for consistent path handling across platforms
  */
 

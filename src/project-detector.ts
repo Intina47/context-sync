@@ -1,4 +1,4 @@
-// Automatic project detection from filesystem
+﻿// Automatic project detection from filesystem
 
 import * as fs from 'fs';
 import { promises as fsAsync } from 'fs';
@@ -283,7 +283,7 @@ export class ProjectDetector {
     const metadata = await this.detectFromPath(normalizedPath);
     
     if (!metadata) {
-      console.error('❌ No project detected at:', displayPath);
+      console.error(' No project detected at:', displayPath);
       return;
     }
 
@@ -298,8 +298,8 @@ export class ProjectDetector {
         architecture: metadata.architecture || existing.architecture,
       });
       
-      // ✅ No longer setting current project - that's session state now!
-      console.error(`🔄 Updated project: ${existing.name}`);
+      //  No longer setting current project - that's session state now!
+      console.error(` Updated project: ${existing.name}`);
     } else {
       // Create new project (using normalized path for storage)
       const projectName = metadata.name || path.basename(normalizedPath);
@@ -308,8 +308,9 @@ export class ProjectDetector {
         techStack: metadata.techStack,
         architecture: metadata.architecture,
       });
-      console.error(`📁 Auto-detected project: ${metadata.name}`);
+      console.error(` Auto-detected project: ${metadata.name}`);
       console.error(`   Tech Stack: ${metadata.techStack.join(', ')}`);
     }
   }
 }
+

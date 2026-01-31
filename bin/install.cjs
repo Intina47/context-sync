@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
 const PlatformAutoConfigurator = require('./auto-configurator.cjs');
+const readlineSync = require('readline-sync');
 
 // Simple colored output without dependencies (for initial install)
 const colors = {
@@ -22,6 +23,9 @@ function log(color, message) {
   // Use console.error to ensure output is visible during npm install
   console.error(color + message + colors.reset);
 }
+
+const CONFIG_DIR = path.join(os.homedir(), '.context-sync');
+const STATUS_FILE = path.join(CONFIG_DIR, 'install-status.json');
 
 // Get version from package.json
 function getVersion() {
@@ -42,30 +46,30 @@ const version = getVersion();
 
 // ALWAYS show banner - use process.stdout.write to bypass npm suppression
 process.stdout.write('\n' + '='.repeat(80) + '\n');
-process.stdout.write('\x1b[36m\x1b[1m🧠 Context Sync MCP Server v' + version + '\x1b[0m\n');
+process.stdout.write('\x1b[36m\x1b[1m Context Sync MCP Server v' + version + '\x1b[0m\n');
 process.stdout.write('='.repeat(80) + '\n\n');
 
 if (!isGlobalInstall) {
-  log(colors.yellow, '⚠️  Detected local installation.');
+  log(colors.yellow, '  Detected local installation.');
   log(colors.yellow, 'For automatic setup, install globally:\n');
   log(colors.reset, '  npm install -g @context-sync/server\n');
   log(colors.gray, 'Skipping automatic configuration.\n');
   
   // Still show Notion message even for local installs
-  log(colors.cyan + colors.bold, '🎯 NEW: Notion Integration Available!\n');
-  log(colors.gray, '📝 Sync your AI context directly to Notion:\n');
-  log(colors.green + colors.bold, '🚀 To set up, run:\n');
+  log(colors.cyan + colors.bold, ' NEW: Notion Integration Available!\n');
+  log(colors.gray, ' Sync your AI context directly to Notion:\n');
+  log(colors.green + colors.bold, ' To set up, run:\n');
   log(colors.cyan + colors.bold, '   npx context-sync-setup\n');
   
   process.exit(0);
 }
 
 // Only auto-configure if globally installed
-log(colors.green, '✅ Global installation detected');
+log(colors.green, ' Global installation detected');
 log(colors.gray, 'Setting up AI platform configurations...\n');
 
 // Find the globally installed package path
-log(colors.gray, '🔍 Locating installed package...');
+log(colors.gray, ' Locating installed package...');
 let packagePath;
 try {
   const npmRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
@@ -76,24 +80,24 @@ try {
     packagePath = path.join(npmRoot, 'context-sync-mcp', 'dist', 'index.js');
   }
 } catch (error) {
-  log(colors.red, '❌ Could not locate package');
+  log(colors.red, ' Could not locate package');
   log(colors.gray, error.message);
   printManualInstructions();
   process.exit(1);
 }
 
 if (!fs.existsSync(packagePath)) {
-  log(colors.red, `❌ Package not found at: ${packagePath}`);
+  log(colors.red, ` Package not found at: ${packagePath}`);
   printManualInstructions();
   process.exit(1);
 }
 
-log(colors.green, `✅ Package found: ${packagePath}\n`);
+log(colors.green, ` Package found: ${packagePath}\n`);
 
 // ============================================================================
 // UNIVERSAL AI PLATFORM AUTO-CONFIGURATION
 // ============================================================================
-log(colors.cyan + colors.bold, '🌍 Universal AI Platform Auto-Configuration\n');
+log(colors.cyan + colors.bold, ' Universal AI Platform Auto-Configuration\n');
 log(colors.gray, 'Context Sync will now automatically detect and configure all installed AI platforms...\n');
 
 // ============================================================================
@@ -109,19 +113,19 @@ async function runSetupWizard() {
       try {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         if (config.notion?.token && config.notion?.configuredAt) {
-          log(colors.green, '\n✅ Notion integration already configured');
+          log(colors.green, '\n Notion integration already configured');
           log(colors.gray, '   Configured at: ' + new Date(config.notion.configuredAt).toLocaleString());
           if (config.notion.defaultParentPageId) {
             log(colors.gray, '   Default parent page: Set');
           }
-          log(colors.gray, '\n💡 To reconfigure Notion integration:');
+          log(colors.gray, '\n To reconfigure Notion integration:');
           log(colors.gray, '   Edit: ' + configPath);
           log(colors.gray, '   Or reinstall: npm install -g @context-sync/server\n');
           skipWizard = true;
         }
       } catch (error) {
         // If we can't read config, proceed with wizard
-        log(colors.gray, '⚠️  Could not read existing config, running setup wizard...\n');
+        log(colors.gray, '  Could not read existing config, running setup wizard...\n');
       }
     }
     
@@ -130,27 +134,66 @@ async function runSetupWizard() {
     }
     
     // Show optional Notion integration info - ALWAYS visible with prominent formatting
-    console.error('\n' + '━'.repeat(80));
-    log(colors.cyan + colors.bold, '🎯 NEW: Notion Integration Available!');
-    console.error('━'.repeat(80));
-    log(colors.gray, '\n📝 Context Sync can now sync your AI context directly to Notion:\n');
+    console.error('\n' + ''.repeat(80));
+    log(colors.cyan + colors.bold, ' NEW: Notion Integration Available!');
+    console.error(''.repeat(80));
+    log(colors.gray, '\n Context Sync can now sync your AI context directly to Notion:\n');
     
-    log(colors.white, '   • Generate feature docs and export to Notion');
-    log(colors.white, '   • Pull project specs from Notion for AI to implement');
-    log(colors.white, '   • Export architecture decisions as ADRs');
-    log(colors.white, '   • Create beautifully formatted pages automatically\n');
+    log(colors.white, '    Generate feature docs and export to Notion');
+    log(colors.white, '    Pull project specs from Notion for AI to implement');
+    log(colors.white, '    Export architecture decisions as ADRs');
+    log(colors.white, '    Create beautifully formatted pages automatically\n');
     
-    log(colors.green + colors.bold, '🚀 To set up Notion integration, run:\n');
+    log(colors.green + colors.bold, ' To set up Notion integration, run:\n');
     log(colors.cyan + colors.bold, '   context-sync-setup\n');
     log(colors.gray, '   (or: npx context-sync-setup)\n');
     
     log(colors.gray, '   The interactive wizard will guide you through connecting Notion.');
-    console.error('━'.repeat(80) + '\n');
+    console.error(''.repeat(80) + '\n');
     
   } catch (error) {
-    log(colors.yellow, '\n⚠️  Setup wizard encountered an issue.');
+    log(colors.yellow, '\n  Setup wizard encountered an issue.');
     log(colors.gray, 'You can run it manually later with: npm run setup\n');
     log(colors.gray, `Details: ${error.message}\n`);
+  }
+}
+
+function writeInstallStatus(status) {
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) {
+      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    }
+    fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2), 'utf8');
+  } catch (error) {
+    // Best-effort only
+  }
+}
+
+function buildInstallStatus(outcome, results, errorMessage) {
+  const needsManual =
+    outcome !== 'success' ||
+    (results && (results.errors?.length > 0 || results.configured?.length === 0));
+
+  return {
+    version,
+    timestamp: new Date().toISOString(),
+    outcome,
+    needsManual,
+    results: results || null,
+    error: errorMessage || null
+  };
+}
+
+function maybePromptManualConfig(packagePath) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    log(colors.yellow, 'Manual configuration may be required.');
+    log(colors.gray, `Details saved to: ${STATUS_FILE}`);
+    return;
+  }
+
+  const showManual = readlineSync.keyInYNStrict('Would you like manual configuration steps now?');
+  if (showManual) {
+    printManualInstructions(packagePath);
   }
 }
 
@@ -164,14 +207,17 @@ async function runAutoConfiguration() {
     const report = autoConfigurator.generateReport();
     console.error(report);
 
+    const status = buildInstallStatus('success', results);
+    writeInstallStatus(status);
+
     // Show platform-specific next steps
     if (results.configured.length > 0) {
-      log(colors.cyan + colors.bold, '🚀 Platform-Specific Instructions:\n');
+      log(colors.cyan + colors.bold, ' Platform-Specific Instructions:\n');
 
       results.configured.forEach(platformId => {
         switch (platformId) {
           case 'claude':
-            log(colors.cyan, '📱 Claude Desktop:');
+            log(colors.cyan, ' Claude Desktop:');
             log(colors.reset, '   1. Restart Claude Desktop completely');
             log(colors.reset, '   2. Open a new chat');
             log(colors.reset, '   3. Type: ' + colors.gray + '"help context-sync"' + colors.reset);
@@ -179,7 +225,7 @@ async function runAutoConfiguration() {
             break;
 
           case 'cursor':
-            log(colors.cyan, '🖱️  Cursor IDE:');
+            log(colors.cyan, '  Cursor IDE:');
             log(colors.reset, '   1. Restart Cursor IDE');
             log(colors.reset, '   2. Open Copilot Chat (Ctrl+Shift+I / Cmd+Shift+I)');
             log(colors.reset, '   3. Look for context-sync in Tools list');
@@ -187,7 +233,7 @@ async function runAutoConfiguration() {
             break;
 
           case 'copilot':
-            log(colors.cyan, '💻 VS Code (GitHub Copilot):');
+            log(colors.cyan, ' VS Code (GitHub Copilot):');
             log(colors.reset, '   1. Restart VS Code completely');
             log(colors.reset, '   2. Open Copilot Chat (Ctrl+Shift+I / Cmd+Shift+I)');
             log(colors.reset, '   3. Switch to Agent mode');
@@ -196,7 +242,7 @@ async function runAutoConfiguration() {
             break;
 
           case 'continue':
-            log(colors.cyan, '🔄 Continue.dev:');
+            log(colors.cyan, ' Continue.dev:');
             log(colors.reset, '   1. Restart VS Code');
             log(colors.reset, '   2. Open Continue chat panel');
             log(colors.reset, '   3. Context Sync should be available as MCP tool');
@@ -204,7 +250,7 @@ async function runAutoConfiguration() {
             break;
 
           default:
-            log(colors.cyan, `� ${platformId}:`);
+            log(colors.cyan, ` ${platformId}:`);
             log(colors.reset, '   1. Restart the application');
             log(colors.reset, '   2. Look for context-sync in MCP/Tools menu');
             log(colors.reset, '   3. Try: "help context-sync"\n');
@@ -212,11 +258,11 @@ async function runAutoConfiguration() {
         }
       });
 
-      log(colors.green + colors.bold, '🎉 Context Sync is now your universal AI memory layer!\n');
-      log(colors.reset, '💡 All configured platforms share the same persistent context and memory.');
-      log(colors.reset, '� Switch between platforms seamlessly with full context preservation.\n');
+      log(colors.green + colors.bold, ' Context Sync is now your universal AI memory layer!\n');
+      log(colors.reset, ' All configured platforms share the same persistent context and memory.');
+      log(colors.reset, ' Switch between platforms seamlessly with full context preservation.\n');
     } else {
-      log(colors.yellow, '⚠️  No AI platforms were auto-configured.');
+      log(colors.yellow, '  No AI platforms were auto-configured.');
       log(colors.reset, '\nTo get started:');
       log(colors.reset, '1. Install an AI platform that supports MCP (Claude Desktop, Cursor, VS Code + Copilot)');
       log(colors.reset, '2. Re-run: npm install -g @context-sync/server');
@@ -225,18 +271,24 @@ async function runAutoConfiguration() {
       printManualInstructions(packagePath);
     }
 
+    if (status.needsManual) {
+      maybePromptManualConfig(packagePath);
+    }
+
     // Run the setup wizard for additional integrations (Notion, etc.)
     await runSetupWizard();
 
-    log(colors.reset, '📚 Documentation: ' + colors.cyan + 'https://github.com/Intina47/context-sync');
-    log(colors.reset, '💬 Issues: ' + colors.cyan + 'https://github.com/Intina47/context-sync/issues');
-    log(colors.reset, '\n🎉 Happy coding with universal AI context!\n');
+    log(colors.reset, ' Documentation: ' + colors.cyan + 'https://github.com/Intina47/context-sync');
+    log(colors.reset, ' Issues: ' + colors.cyan + 'https://github.com/Intina47/context-sync/issues');
+    log(colors.reset, '\n Happy coding with universal AI context!\n');
 
   } catch (error) {
-    log(colors.red, '❌ Auto-configuration failed:');
+    log(colors.red, ' Auto-configuration failed:');
     log(colors.gray, error.message);
     log(colors.yellow, '\nFalling back to manual configuration...\n');
     printManualInstructions(packagePath);
+    writeInstallStatus(buildInstallStatus('error', null, error.message));
+    maybePromptManualConfig(packagePath);
     process.exit(1);
   }
 }
@@ -290,7 +342,7 @@ function setupClaudeDesktop(configPath, packagePath) {
     // Backup and write
     const backupPath = configPath + '.backup';
     fs.copyFileSync(configPath, backupPath);
-    log(colors.gray, `   💾 Backup created: ${backupPath}`);
+    log(colors.gray, `    Backup created: ${backupPath}`);
     
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
     
@@ -339,7 +391,7 @@ function setupVSCode(mcpPath, packagePath) {
       try {
         mcpConfig = JSON.parse(mcpContent);
       } catch (parseError) {
-        log(colors.gray, '   ⚠️  Could not parse existing MCP config, creating new one');
+        log(colors.gray, '     Could not parse existing MCP config, creating new one');
         mcpConfig = {
           servers: {},
           inputs: []
@@ -379,7 +431,7 @@ function setupVSCode(mcpPath, packagePath) {
     if (fs.existsSync(mcpPath)) {
       const backupPath = mcpPath + '.backup';
       fs.copyFileSync(mcpPath, backupPath);
-      log(colors.gray, `   💾 Backup created: ${backupPath}`);
+      log(colors.gray, `    Backup created: ${backupPath}`);
     }
 
     // Write updated config
@@ -395,11 +447,11 @@ function setupVSCode(mcpPath, packagePath) {
 }
 
 function printManualInstructions(pkgPath) {
-  log(colors.cyan + colors.bold, '\n📝 Manual Configuration Instructions:\n');
+  log(colors.cyan + colors.bold, '\n Manual Configuration Instructions:\n');
   
-  log(colors.cyan, '🤖 Claude Desktop:');
+  log(colors.cyan, ' Claude Desktop:');
   log(colors.reset, '1. Open Claude Desktop');
-  log(colors.reset, '2. Go to Settings → Developer → MCP Servers');
+  log(colors.reset, '2. Go to Settings  Developer  MCP Servers');
   log(colors.reset, '3. Add this configuration:\n');
   log(colors.gray, '{');
   log(colors.gray, '  "mcpServers": {');
@@ -410,7 +462,7 @@ function printManualInstructions(pkgPath) {
   log(colors.gray, '  }');
   log(colors.gray, '}\n');
   
-  log(colors.cyan, '💻 VS Code (GitHub Copilot):');
+  log(colors.cyan, ' VS Code (GitHub Copilot):');
   log(colors.reset, '1. Create file: ~/.vscode/mcp.json (macOS/Linux)');
   log(colors.reset, '   or %APPDATA%\\Code\\User\\globalStorage\\mcp.json (Windows)');
   log(colors.reset, '2. Add this configuration:\n');
@@ -425,3 +477,5 @@ function printManualInstructions(pkgPath) {
   log(colors.gray, '  "inputs": []');
   log(colors.gray, '}\n');
 }
+
+

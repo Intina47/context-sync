@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+﻿import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import * as crypto from 'crypto';
 import * as path from 'path';
@@ -11,13 +11,12 @@ import type {
   ContextSummary,
   StorageInterface,
 } from './types.js';
-import {createTodoTable} from './todo-schema.js';
 import { PathNormalizer } from './path-normalizer.js';
-import { PerformanceMonitor } from './performance-monitor.js';
-import { MigrationPrompter } from './migration-prompter.js';
+import { migrateSchema, isSchemaCurrent } from './schema.js';
 
 export class Storage implements StorageInterface {
   private db: Database.Database;
+  private dbPath: string;
   
   // Prepared statement cache for 2-5x faster queries with LRU eviction
   private preparedStatements: Map<string, Database.Statement> = new Map();
@@ -26,17 +25,20 @@ export class Storage implements StorageInterface {
   constructor(dbPath?: string) {
     // Default to user's home directory
     const defaultPath = path.join(os.homedir(), '.context-sync', 'data.db');
-    const actualPath = dbPath || defaultPath;
+    this.dbPath = dbPath || defaultPath;
     
     // Ensure directory exists
-    const dir = path.dirname(actualPath);
+    const dir = path.dirname(this.dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    this.db = new Database(actualPath);
+    this.db = new Database(this.dbPath);
     this.initDatabase();
-    createTodoTable(this.db);
+    // Migrate schema if needed
+    if (!isSchemaCurrent(this.db)) {
+      migrateSchema(this.db);
+    }
   }
 
   private initDatabase(): void {
@@ -113,9 +115,7 @@ export class Storage implements StorageInterface {
     return statement;
   }
 
-    createProject(name: string, projectPath?: string): ProjectContext {
-    const timer = PerformanceMonitor.startTimer('createProject');
-    
+  createProject(name: string, projectPath?: string): ProjectContext {
     // Normalize the path before storing if provided
     const normalizedPath = projectPath ? PathNormalizer.normalize(projectPath) : undefined;
     
@@ -123,7 +123,6 @@ export class Storage implements StorageInterface {
     if (normalizedPath) {
       const existing = this.findProjectByPath(normalizedPath);
       if (existing) {
-        timer();
         return existing;
       }
     }
@@ -135,8 +134,6 @@ export class Storage implements StorageInterface {
       INSERT INTO projects (id, name, path, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?)
     `).run(id, name, normalizedPath, now, now);
-
-    timer();
 
     return {
       id,
@@ -226,16 +223,12 @@ export class Storage implements StorageInterface {
   }
 
   findProjectByPath(projectPath: string): ProjectContext | null {
-    const timer = PerformanceMonitor.startTimer('findProjectByPath');
-    
     // Normalize the input path for consistent lookup
     const normalizedPath = PathNormalizer.normalize(projectPath);
     
     const row = this.getStatement(`
       SELECT * FROM projects WHERE path = ?
     `).get(normalizedPath) as any;
-
-    timer();
 
     if (!row) return null;
 
@@ -301,85 +294,6 @@ export class Storage implements StorageInterface {
     }));
   }
 
-  /**
-   * Stream conversations one at a time for memory efficiency
-   * Use when processing large result sets (>100 rows)
-   * 
-   * Usage examples:
-   * 
-   * // Process all conversations lazily (low memory)
-   * for (const conv of storage.streamConversations(projectId)) {
-   *   console.log(conv.content);
-   * }
-   * 
-   * // Take first 10 efficiently
-   * const first10 = Storage.take(storage.streamConversations(projectId), 10);
-   * 
-   * // Filter + map (lazy, no intermediate arrays)
-   * const userMessages = Storage.filter(
-   *   storage.streamConversations(projectId),
-   *   c => c.role === 'user'
-   * );
-   */
-  *streamConversations(projectId: string, limit?: number): Generator<Conversation> {
-    const sql = limit 
-      ? `SELECT * FROM conversations WHERE project_id = ? ORDER BY timestamp DESC LIMIT ?`
-      : `SELECT * FROM conversations WHERE project_id = ? ORDER BY timestamp DESC`;
-    
-    const stmt = this.getStatement(sql);
-    const iterator = limit ? stmt.iterate(projectId, limit) : stmt.iterate(projectId);
-    
-    for (const row of iterator as any) {
-      yield {
-        id: row.id,
-        projectId: row.project_id,
-        tool: row.tool,
-        role: row.role,
-        content: row.content,
-        timestamp: new Date(row.timestamp),
-        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-      };
-    }
-  }
-
-  /**
-   * Stream decisions one at a time for memory efficiency
-   * Use when processing large result sets (>100 rows)
-   */
-  *streamDecisions(projectId: string, limit?: number): Generator<Decision> {
-    const sql = limit
-      ? `SELECT * FROM decisions WHERE project_id = ? ORDER BY timestamp DESC LIMIT ?`
-      : `SELECT * FROM decisions WHERE project_id = ? ORDER BY timestamp DESC`;
-    
-    const stmt = this.getStatement(sql);
-    const iterator = limit ? stmt.iterate(projectId, limit) : stmt.iterate(projectId);
-    
-    for (const row of iterator as any) {
-      yield {
-        id: row.id,
-        projectId: row.project_id,
-        type: row.type,
-        description: row.description,
-        reasoning: row.reasoning,
-        timestamp: new Date(row.timestamp),
-      };
-    }
-  }
-
-  /**
-   * Stream all projects one at a time for memory efficiency
-   * Useful for bulk operations across many projects
-   */
-  *streamAllProjects(): Generator<ProjectContext> {
-    const stmt = this.getStatement(`
-      SELECT * FROM projects ORDER BY updated_at DESC
-    `);
-    
-    for (const row of stmt.iterate() as any) {
-      yield this.rowToProject(row);
-    }
-  }
-
   getContextSummary(projectId: string): ContextSummary {
     const project = this.getProject(projectId);
     if (!project) {
@@ -417,14 +331,11 @@ export class Storage implements StorageInterface {
   }
 
   getAllProjects(): ProjectContext[] {
-    const timer = PerformanceMonitor.startTimer('getAllProjects');
-    
     const rows = this.getStatement(`
       SELECT * FROM projects ORDER BY updated_at DESC
     `).all();
     
     const projects = rows.map((row: any) => this.rowToProject(row));
-    timer();
     
     return projects;
   }
@@ -434,67 +345,10 @@ export class Storage implements StorageInterface {
   }
 
   /**
-   * Check if user should be prompted for database migration
-   * This is called by the server to provide migration suggestions
+   * Get the database file path
    */
-  async checkMigrationPrompt(currentVersion: string): Promise<{ shouldPrompt: boolean; message: string }> {
-    try {
-      const result = await MigrationPrompter.shouldPromptForMigration(currentVersion, this.db.name);
-      return {
-        shouldPrompt: result.shouldPrompt,
-        message: result.message
-      };
-    } catch (error) {
-      console.warn('Migration prompt check failed:', error);
-      return { shouldPrompt: false, message: '' };
-    }
-  }
-
-  // ========== STREAMING UTILITY METHODS ==========
-
-  /**
-   * Helper: Take first N items from a generator (efficient limit)
-   * Example: const first10 = Storage.take(storage.streamDecisions(projectId), 10);
-   */
-  static take<T>(generator: Generator<T>, count: number): T[] {
-    const results: T[] = [];
-    let i = 0;
-    for (const item of generator) {
-      if (i >= count) break;
-      results.push(item);
-      i++;
-    }
-    return results;
-  }
-
-  /**
-   * Helper: Convert generator to array (use sparingly with limits!)
-   * Example: const allDecisions = Storage.toArray(storage.streamDecisions(projectId, 100));
-   */
-  static toArray<T>(generator: Generator<T>): T[] {
-    return Array.from(generator);
-  }
-
-  /**
-   * Helper: Filter generator items (lazy evaluation)
-   * Example: const filtered = Storage.filter(storage.streamDecisions(projectId), d => d.type === 'architecture');
-   */
-  static *filter<T>(generator: Generator<T>, predicate: (item: T) => boolean): Generator<T> {
-    for (const item of generator) {
-      if (predicate(item)) {
-        yield item;
-      }
-    }
-  }
-
-  /**
-   * Helper: Map generator items (lazy evaluation)
-   * Example: const descriptions = Storage.map(storage.streamDecisions(projectId), d => d.description);
-   */
-  static *map<T, U>(generator: Generator<T>, transform: (item: T) => U): Generator<U> {
-    for (const item of generator) {
-      yield transform(item);
-    }
+  getDbPath(): string {
+    return this.dbPath;
   }
 
   close(): void {
