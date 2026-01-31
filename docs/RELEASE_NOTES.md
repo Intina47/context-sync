@@ -7,6 +7,7 @@ This release is a major v2-focused cleanup. It removes legacy v1 tooling and nar
 - Notion-only setup wizard with clearer prompts and retry flow.
 - Post-install status tracking with manual-config fallback when auto-config fails.
 - Setup wizard now summarizes auto-configured platforms and any install issues.
+- Expanded developer documentation with deeper configuration, tooling, and troubleshooting details.
 
 ## Breaking changes
 - Removed v1-only tools (todos, platform sync, call graph, type analysis, dependency analysis, file write/preview tools, performance monitor, migration prompter, and related modules).
