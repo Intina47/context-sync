@@ -7,6 +7,7 @@ This release is a major v2-focused cleanup. It removes legacy v1 tooling and nar
 - Notion-only setup wizard with clearer prompts and retry flow.
 - Post-install status tracking with manual-config fallback when auto-config fails.
 - Setup wizard now summarizes auto-configured platforms and any install issues.
+- Added a curl-based installer for global installs.
 
 ## Breaking changes
 - Removed v1-only tools (todos, platform sync, call graph, type analysis, dependency analysis, file write/preview tools, performance monitor, migration prompter, and related modules).
@@ -25,3 +26,4 @@ This release is a major v2-focused cleanup. It removes legacy v1 tooling and nar
 - Auto-config does not run on local installs; use global install or manual config.
 - Notion setup is intentionally manual via the wizard.
 - Fixed Windows setup command failing due to a stray BOM in the setup script.
+- The curl installer wraps the same npm global install flow.
