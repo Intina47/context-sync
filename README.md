@@ -5,10 +5,19 @@ Local-first memory layer for AI development tools via MCP.
 ![alt text](image.png)
 
 ## Install and auto-config (60 seconds)
-1) Install globally:
+Choose one install method:
+
+**Option A: npm (recommended)**
 ```bash
 npm install -g @context-sync/server
 ```
+
+**Option B: curl**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Intina47/context-sync/main/bin/install.sh | bash
+```
+
+Requires Node.js 18+ and npm.
 
 2) Auto-config runs on install. Restart your AI tool.
 
