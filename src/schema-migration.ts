@@ -455,7 +455,7 @@ export class SchemaMigrator {
       );
       
       INSERT INTO migration_history (id, version, completed_at)
-      VALUES ('v1-to-v2', '1.0.5', ${Date.now()});
+      VALUES ('v1-to-v2', '2.0.0', ${Date.now()});
     `);
   }
 
@@ -466,7 +466,7 @@ export class SchemaMigrator {
     try {
       const result = db.prepare(`
         SELECT * FROM migration_history 
-        WHERE version = '1.0.5'
+        WHERE version = '2.0.0'
       `).get();
       
       return !!result;

@@ -67,7 +67,7 @@ export class ContextSyncServer {
     this.server = new Server(
       {
         name: 'context-sync',
-        version: '1.0.5',
+        version: '2.0.0',
       },
       {
         capabilities: {
