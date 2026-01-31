@@ -1,10 +1,15 @@
-﻿# Context Sync
+# Context Sync
 
 Local-first memory layer for AI development tools via MCP.
 
 ![alt text](image.png)
 
-## Install and auto-config (60 seconds)
+## Why Context Sync?
+- **Local-first**: all data stays on your machine.
+- **Developer workflow**: built around projects, git activity, and structured context.
+- **Minimal tools**: 9 core tools focused on speed and clarity.
+
+## Install & auto-config (60 seconds)
 1) Install globally:
 ```bash
 npm install -g @context-sync/server
@@ -15,13 +20,12 @@ npm install -g @context-sync/server
 3) Verify tools:
 - Claude Desktop: Tools list
 - Cursor: Tools list
-- VS Code/Copilot: Copilot Chat -> Agent mode -> Tools
+- VS Code/Copilot: Copilot Chat → Agent mode → Tools
 - Continue.dev: open Continue panel
-- Codex CLI: codex mcp list
-- Claude Code: claude mcp list
+- Codex CLI: `codex mcp list`
+- Claude Code: `claude mcp list`
 
 If auto-config fails, see `docs/TROUBLESHOOTING.md` and `docs/CONFIG.md`.
-If you installed locally (non-global), auto-config does not run.
 
 ## Optional: Notion setup
 ```bash
@@ -70,9 +74,10 @@ When you run `set_project` inside a git repo, Context Sync installs hooks:
 
 Hooks are marked with "Context Sync Auto-Hook" and existing hooks are backed up.
 
-## Docs
+## Documentation
 - Release notes: `docs/RELEASE_NOTES.md`
 - Manual config: `docs/CONFIG.md`
 - Tools: `docs/TOOLS.md`
 - Troubleshooting: `docs/TROUBLESHOOTING.md`
 - Data and storage: `docs/DATA.md`
+- Notion integration: `docs/NOTION_INTERGRATION.md`
