@@ -17,23 +17,22 @@ import { Storage } from './storage.js';
 import { ProjectDetector } from './project-detector.js';
 import { WorkspaceDetector } from './workspace-detector.js';
 import { CORE_TOOLS } from './core-tools.js';
-import type { ProjectIdentity, RememberInput, RecallResult } from './context-layers.js';
+import type { RememberInput } from './context-layers.js';
 import { ProjectProfiler } from './project-profiler.js';
 import { RecallEngine } from './recall-engine.js';
 import { RememberEngine } from './remember-engine.js';
-import { ReadFileEngine } from './read-file-engine.js';
-import { SearchEngine } from './search-engine.js';
-import { StructureEngine } from './structure-engine.js';
-import { GitStatusEngine } from './git-status-engine.js';
-import { GitContextEngine } from './git-context-engine.js';
-import { GitIntegration } from './git-integration.js';
+import { GitToolHandler, type GitToolArgs } from './git-tool-handler.js';
+import { NotionToolHandler, type NotionToolArgs } from './notion-tool-handler.js';
+import { WorkspaceToolHandler, type SearchToolArgs } from './workspace-tool-handler.js';
 import { NotionIntegration } from './notion-integration.js';
 import { createNotionHandlers } from './notion-handlers.js';
 import { SchemaMigrator } from './schema-migration.js';
+import type { ProjectContext } from './types.js';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { errorResponse, stackErrorResponse, textResponse, type ToolResponse } from './tool-responses.js';
 
 type PromptRequest = { params: { name: string } };
 type ResourceRequest = { params: { uri: string } };
@@ -57,9 +56,6 @@ export class ContextSyncServer {
 
     // Initialize with null integration (will be set up if config exists)
     this.notionHandlers = createNotionHandlers(null);
-
-    // Initialize Notion integration (optional - gracefully handles missing config)
-    this.initializeNotion();
 
     // Run v1  schema migration if needed (safe, automatic, with backup)
     this.runMigrationIfNeeded();
@@ -939,14 +935,9 @@ Example: Jot project
    * Remember - Store context intentionally
    */
   private async handleRemember(args: RememberInput) {
-    const project = this.getCurrentProject();
-    if (!project) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' No project initialized. Run `set_project` first.',
-        }],
-      };
+    const project = this.requireProject();
+    if ('content' in project) {
+      return project;
     }
 
     const { type, content, metadata } = args;
@@ -1038,19 +1029,10 @@ Example: Jot project
         response += `Reason: ${result.reason}`;
       }
 
-      return {
-        content: [{
-          type: 'text',
-          text: response,
-        }],
-      };
-    } catch (error: any) {
-      return {
-        content: [{
-          type: 'text',
-          text: ` Failed to remember: ${error.message}`,
-        }],
-      };
+      return textResponse(response);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return errorResponse(` Failed to remember: ${message}`);
     }
   }
 
@@ -1058,14 +1040,9 @@ Example: Jot project
    * Recall - Retrieve layered context
    */
   private async handleRecall(args?: { query?: string; limit?: number }) {
-    const project = this.getCurrentProject();
-    if (!project) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' No project initialized. Run `set_project` first.',
-        }],
-      };
+    const project = this.requireProject();
+    if ('content' in project) {
+      return project;
     }
 
     const limit = args?.limit || 10;
@@ -1223,16 +1200,9 @@ Example: Jot project
         response += `\n_No context stored yet. Use \`remember\` to add important information._`;
       }
 
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-    } catch (error: any) {
-      return {
-        content: [{
-          type: 'text',
-          text: ` Failed to recall: ${error.message}\n\nStack: ${error.stack}`,
-        }],
-      };
+      return textResponse(response);
+    } catch (error: unknown) {
+      return stackErrorResponse(' Failed to recall', error);
     }
   }
 
@@ -1240,313 +1210,24 @@ Example: Jot project
    * Read file from workspace
    */
   private async handleReadFile(args: { path: string }) {
-    const workspace = this.workspaceDetector.getCurrentWorkspace();
-    if (!workspace) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' No workspace set. Run `set_project` first.',
-        }],
-      };
-    }
-
-    try {
-      // Use optimized read file engine
-      const engine = new ReadFileEngine(workspace);
-      const fileContext = await engine.read(args.path);
-
-      // Format rich response
-      let response = ` **${fileContext.path}**\n\n`;
-
-      // Metadata section
-      response += ` **Metadata**\n`;
-      response += ` Language: ${fileContext.metadata.language}\n`;
-      response += ` Size: ${(fileContext.metadata.size / 1024).toFixed(1)} KB\n`;
-      response += ` Lines: ${fileContext.metadata.linesOfCode} LOC\n`;
-      response += ` Last Modified: ${fileContext.metadata.lastModified.toLocaleDateString()}\n`;
-      if (fileContext.metadata.author) {
-        response += ` Last Author: ${fileContext.metadata.author}\n`;
-      }
-      if (fileContext.metadata.changeFrequency > 0) {
-        response += ` Change Frequency: ${fileContext.metadata.changeFrequency} commit(s) in last 30 days\n`;
-      }
-      response += `\n`;
-
-      // Complexity section
-      const complexityEmoji = {
-        'low': '',
-        'medium': '',
-        'high': '',
-        'very-high': ''
-      };
-      response += `${complexityEmoji[fileContext.complexity.level]} **Complexity: ${fileContext.complexity.level}** (score: ${fileContext.complexity.score})\n`;
-      if (fileContext.complexity.reasons.length > 0) {
-        response += `   ${fileContext.complexity.reasons.join(', ')}\n`;
-      }
-      response += `\n`;
-
-      // Relationships section
-      if (fileContext.relationships.imports.length > 0) {
-        response += ` **Imports** (${fileContext.relationships.imports.length}):\n`;
-        fileContext.relationships.imports.slice(0, 5).forEach(imp => {
-          response += `    ${imp}\n`;
-        });
-        if (fileContext.relationships.imports.length > 5) {
-          response += `   ... and ${fileContext.relationships.imports.length - 5} more\n`;
-        }
-        response += `\n`;
-      }
-
-      if (fileContext.relationships.relatedTests.length > 0) {
-        response += ` **Related Tests**:\n`;
-        fileContext.relationships.relatedTests.forEach(test => {
-          response += `    ${test}\n`;
-        });
-        response += `\n`;
-      }
-
-      if (fileContext.relationships.relatedConfigs.length > 0) {
-        response += ` **Related Configs**:\n`;
-        fileContext.relationships.relatedConfigs.forEach(config => {
-          response += `    ${config}\n`;
-        });
-        response += `\n`;
-      }
-
-      // Content section
-      response += ` **Content**\n\n\`\`\`${fileContext.metadata.language.toLowerCase()}\n${fileContext.content}\n\`\`\``;
-
-      return {
-        content: [{
-          type: 'text',
-          text: response,
-        }],
-      };
-    } catch (error: any) {
-      return {
-        content: [{
-          type: 'text',
-          text: ` Failed to read file: ${error.message}\n\nStack: ${error.stack}`,
-        }],
-      };
-    }
+    const handler = new WorkspaceToolHandler(() => this.requireWorkspace());
+    return await handler.handleReadFile(args);
   }
 
   /**
    * Search workspace (unified search for files and content)
    */
   private async handleSearch(args: { query: string; type: 'files' | 'content'; options?: any }) {
-    const workspace = this.workspaceDetector.getCurrentWorkspace();
-    if (!workspace) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' No workspace set. Run `set_project` first.',
-        }],
-      };
-    }
-
-    try {
-      const { query, type, options = {} } = args;
-      
-      // Use optimized search engine
-      const engine = new SearchEngine(workspace);
-
-      if (type === 'files') {
-        const result = await engine.searchFiles(query, {
-          maxResults: options.maxResults || 50,
-          enrichContext: true,
-          caseSensitive: options.caseSensitive || false
-        });
-        
-        if (result.totalMatches === 0) {
-          return {
-            content: [{
-              type: 'text',
-              text: ` No files found matching "${query}"`,
-            }],
-          };
-        }
-
-        let response = ` **Found ${result.totalMatches} files**\n\n`;
-        
-        // Show top matches with context
-        result.matches.slice(0, 20).forEach((match, i) => {
-          const score = Math.round(match.relevanceScore);
-          const matchTypeEmoji = match.matchType === 'exact' ? '' : 
-                                 match.matchType === 'prefix' ? '' : '';
-          
-          response += `${i + 1}. ${matchTypeEmoji} ${match.relativePath}`;
-          
-          // Show file context if available
-          if (match.context) {
-            const complexityEmoji = match.context.complexity === 'low' ? '' : 
-                                   match.context.complexity === 'medium' ? '' : 
-                                   match.context.complexity === 'high' ? '' : '';
-            response += ` (${complexityEmoji} ${match.context.complexity}`;
-            if (match.context.linesOfCode) {
-              response += `, ${match.context.linesOfCode} LOC`;
-            }
-            response += `)`;
-          }
-          response += `\n`;
-        });
-
-        if (result.totalMatches > 20) {
-          response += `\n... and ${result.totalMatches - 20} more matches`;
-        }
-
-        // Show suggestions
-        if (result.suggestions && result.suggestions.length > 0) {
-          response += `\n\n **Suggestions:** ${result.suggestions.join(', ')}`;
-        }
-
-        // Show clusters
-        if (result.clusters && Object.keys(result.clusters).length > 1) {
-          response += `\n\n **Clustered by directory:**\n`;
-          Object.entries(result.clusters).slice(0, 5).forEach(([dir, matches]) => {
-            response += `   ${dir}: ${matches.length} file(s)\n`;
-          });
-        }
-        
-        return {
-          content: [{ type: 'text', text: response }],
-        };
-      } else {
-        const result = await engine.searchContent(query, {
-          maxResults: options.maxResults || 100,
-          filePattern: options.filePattern,
-          caseSensitive: options.caseSensitive || false,
-          regex: options.regex || false,
-          enrichContext: false // Skip for performance on content search
-        });
-        
-        if (result.totalMatches === 0) {
-          return {
-            content: [{
-              type: 'text',
-              text: ` No content found matching "${query}"`,
-            }],
-          };
-        }
-
-        let response = ` **Found ${result.totalMatches} matches**\n\n`;
-        
-        // Group by file for better readability
-        if (result.clusters) {
-          const files = Object.keys(result.clusters).slice(0, 10);
-          files.forEach(file => {
-            const matches = result.clusters![file];
-            response += ` **${file}** (${matches.length} match${matches.length > 1 ? 'es' : ''})\n`;
-            matches.slice(0, 3).forEach(match => {
-              response += `   Line ${match.line}: ${match.text?.trim().substring(0, 100)}\n`;
-            });
-            if (matches.length > 3) {
-              response += `   ... and ${matches.length - 3} more\n`;
-            }
-            response += `\n`;
-          });
-
-          if (Object.keys(result.clusters).length > 10) {
-            response += `... and ${Object.keys(result.clusters).length - 10} more files\n`;
-          }
-        }
-
-        return {
-          content: [{ type: 'text', text: response }],
-        };
-      }
-    } catch (error: any) {
-      return {
-        content: [{
-          type: 'text',
-          text: ` Search failed: ${error.message}`,
-        }],
-      };
-    }
+    const handler = new WorkspaceToolHandler(() => this.requireWorkspace());
+    return await handler.handleSearch(args as SearchToolArgs);
   }
 
   /**
    * Get project structure with complexity analysis
    */
   private async handleStructure(args?: { depth?: number }) {
-    const workspace = this.workspaceDetector.getCurrentWorkspace();
-    if (!workspace) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' No workspace set. Run `set_project` first.',
-        }],
-      };
-    }
-
-    try {
-      const depth = args?.depth || 3;
-      
-      // Use optimized structure engine
-      const engine = new StructureEngine(workspace);
-      const result = await engine.getStructure(depth, {
-        includeMetadata: true,
-        analyzeComplexity: true,
-        detectHotspots: true
-      });
-
-      let response = ` **Project Structure**\n\n`;
-      response += `\`\`\`\n${result.tree}\`\`\`\n\n`;
-      
-      // Summary statistics
-      response += ` **Summary**\n`;
-      response += ` ${result.summary.totalFiles} files, ${result.summary.totalDirectories} directories\n`;
-      if (result.summary.totalLOC > 0) {
-        response += ` ${result.summary.totalLOC.toLocaleString()} lines of code\n`;
-      }
-      response += ` ${(result.summary.totalSize / (1024 * 1024)).toFixed(2)} MB total size\n`;
-      
-      if (Object.keys(result.summary.languages).length > 0) {
-        const languages = Object.entries(result.summary.languages)
-          .sort(([, a], [, b]) => b - a)
-          .map(([lang]) => lang)
-          .slice(0, 3)
-          .join(', ');
-        response += ` Languages: ${languages}\n`;
-      }
-      
-      // Architecture pattern
-      if (result.summary.architecturePattern) {
-        response += `\n **Architecture:** ${result.summary.architecturePattern}\n`;
-      }
-
-      // Hotspots
-      if (result.summary.hotspots && result.summary.hotspots.length > 0) {
-        response += `\n **Hotspots** (high complexity areas):\n`;
-        result.summary.hotspots.forEach((hotspot, i) => {
-          const complexityEmoji = hotspot.complexity >= 60 ? '' : '';
-          response += `${i + 1}. ${complexityEmoji} ${hotspot.path} - ${hotspot.reason} (${hotspot.loc.toLocaleString()} LOC)\n`;
-        });
-      }
-
-      // Insights
-      if (result.insights && result.insights.length > 0) {
-        response += `\n **Insights**\n`;
-        result.insights.forEach(insight => {
-          response += ` ${insight}\n`;
-        });
-      }
-
-      return {
-        content: [{
-          type: 'text',
-          text: response,
-        }],
-      };
-    } catch (error: any) {
-      return {
-        content: [{
-          type: 'text',
-          text: ` Failed to get structure: ${error.message}`,
-        }],
-      };
-    }
+    const handler = new WorkspaceToolHandler(() => this.requireWorkspace());
+    return await handler.handleStructure(args);
   }
 
   /**
@@ -1560,643 +1241,13 @@ Example: Jot project
     limit?: number;
     minCoupling?: number;
   }) {
-    const { action, ...restArgs } = args;
-
-    switch (action) {
-      case 'status':
-        return await this.handleGitStatus();
-      case 'context':
-        return await this.handleGitContext(restArgs);
-      case 'hotspots':
-        return await this.handleGitHotspots(restArgs.limit);
-      case 'coupling':
-        return await this.handleGitCoupling(restArgs.minCoupling);
-      case 'blame':
-        if (!restArgs.path) {
-          return {
-            content: [{
-              type: 'text',
-              text: ` Missing required parameter 'path' for git blame action.`,
-            }],
-          };
-        }
-        return await this.handleGitBlame(restArgs.path);
-      case 'analysis':
-        return await this.handleGitAnalysis();
-      default:
-        return {
-          content: [{
-            type: 'text',
-            text: ` Unknown git action: ${action}. Use 'status', 'context', 'hotspots', 'coupling', 'blame', or 'analysis'.`,
-          }],
-        };
-    }
-  }
-
-  /**
-   * Git status with impact analysis
-   */
-  private async handleGitStatus() {
-    const workspace = this.workspaceDetector.getCurrentWorkspace();
-    if (!workspace) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' No workspace set. Run `set_project` first.',
-        }],
-      };
-    }
-
-    try {
-      // Use optimized git status engine
-      const engine = new GitStatusEngine(workspace);
-      const result = await engine.getStatus({
-        analyzeImpact: true,
-        enrichContext: true
-      });
-
-      let response = ` **Git Status**\n\n`;
-      response += ` Branch: ${result.branch}\n`;
-      
-      if (result.ahead > 0) response += ` Ahead: ${result.ahead} commit(s)\n`;
-      if (result.behind > 0) response += ` Behind: ${result.behind} commit(s)\n`;
-      
-      response += `\n`;
-
-      if (result.clean) {
-        response += ` Working tree clean`;
-      } else {
-        // Staged files with context
-        if (result.changes.staged.length > 0) {
-          response += ` **Staged** (${result.changes.staged.length}):\n`;
-          result.changes.staged.forEach(change => {
-            const impactEmoji = change.impact === 'high' ? '' : 
-                               change.impact === 'medium' ? '' : '';
-            const complexityEmoji = change.complexity === 'low' ? '' : 
-                                   change.complexity === 'medium' ? '' : 
-                                   change.complexity === 'high' ? '' : 
-                                   change.complexity === 'very-high' ? '' : '';
-            
-            response += `   ${impactEmoji} ${change.path}`;
-            if (change.category) response += ` [${change.category}]`;
-            if (complexityEmoji) response += ` ${complexityEmoji}`;
-            response += `\n`;
-          });
-        }
-
-        // Modified files
-        if (result.changes.modified.length > 0) {
-          response += `\n **Modified** (${result.changes.modified.length}):\n`;
-          result.changes.modified.slice(0, 10).forEach(change => {
-            const impactEmoji = change.impact === 'high' ? '' : 
-                               change.impact === 'medium' ? '' : '';
-            response += `   ${impactEmoji} ${change.path}`;
-            if (change.category) response += ` [${change.category}]`;
-            response += `\n`;
-          });
-          if (result.changes.modified.length > 10) {
-            response += `  ... and ${result.changes.modified.length - 10} more\n`;
-          }
-        }
-
-        // Untracked files
-        if (result.changes.untracked.length > 0) {
-          response += `\n **Untracked** (${result.changes.untracked.length}):\n`;
-          result.changes.untracked.slice(0, 5).forEach(change => {
-            response += `   ${change.path}`;
-            if (change.category) response += ` [${change.category}]`;
-            response += `\n`;
-          });
-          if (result.changes.untracked.length > 5) {
-            response += `  ... and ${result.changes.untracked.length - 5} more\n`;
-          }
-        }
-
-        // Deleted files
-        if (result.changes.deleted.length > 0) {
-          response += `\n  **Deleted** (${result.changes.deleted.length}):\n`;
-          result.changes.deleted.forEach(change => {
-            response += `   ${change.path}\n`;
-          });
-        }
-      }
-
-      // Summary
-      if (result.summary.totalChanges > 0) {
-        response += `\n **Summary:**\n`;
-        response += ` ${result.summary.totalChanges} total change(s)`;
-        if (result.summary.highImpact > 0) {
-          response += ` (${result.summary.highImpact} high-impact)`;
-        }
-        response += `\n`;
-
-        if (Object.keys(result.summary.categories).length > 0) {
-          const categories = Object.entries(result.summary.categories)
-            .map(([cat, count]) => `${count} ${cat}`)
-            .join(', ');
-          response += ` Categories: ${categories}\n`;
-        }
-
-        if (result.summary.complexity.high > 0) {
-          response += ` ${result.summary.complexity.high} complex file(s) changed\n`;
-        }
-      }
-
-      // Commit readiness
-      if (result.changes.staged.length > 0) {
-        response += `\n **Commit Readiness:** ${result.commitReadiness.ready ? 'Ready' : 'Review needed'}\n`;
-        
-        if (result.commitReadiness.warnings.length > 0) {
-          response += `\n  **Warnings:**\n`;
-          result.commitReadiness.warnings.forEach(w => response += `   ${w}\n`);
-        }
-
-        if (result.commitReadiness.suggestions.length > 0) {
-          response += `\n **Suggestions:**\n`;
-          result.commitReadiness.suggestions.forEach(s => response += `   ${s}\n`);
-        }
-      }
-
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-    } catch (error: any) {
-      return {
-        content: [{
-          type: 'text',
-          text: ` Git status failed: ${error.message}`,
-        }],
-      };
-    }
-  }
-
-  /**
-   * Git context with smart commit message generation
-   */
-  private async handleGitContext(args?: { staged?: boolean; files?: string[] }) {
-    const workspace = this.workspaceDetector.getCurrentWorkspace();
-    if (!workspace) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' No workspace set. Run `set_project` first.',
-        }],
-      };
-    }
-
-    try {
-      // Use optimized git context engine
-      const engine = new GitContextEngine(workspace);
-      const context = await engine.getContext({
-        generateCommitMessage: true,
-        analyzeChanges: true
-      });
-
-      let response = ` **Git Context**\n\n`;
-      
-      // Branch info
-      response += ` **Current Branch**: ${context.branch}\n`;
-      if (context.ahead > 0) response += ` Ahead: ${context.ahead} commit(s)\n`;
-      if (context.behind > 0) response += ` Behind: ${context.behind} commit(s)\n`;
-      response += `\n`;
-
-      // Last commit
-      if (context.lastCommit) {
-        response += ` **Last Commit**:\n`;
-        response += `   Hash: ${context.lastCommit.hash}\n`;
-        response += `   Author: ${context.lastCommit.author}\n`;
-        response += `   Date: ${context.lastCommit.date.toLocaleDateString()}\n`;
-        response += `   Message: ${context.lastCommit.message}\n\n`;
-      }
-
-      // Changes summary
-      const totalChanges = context.stagedFiles.length + context.uncommittedFiles.length;
-      if (totalChanges > 0) {
-        response += ` **Changes**: ${totalChanges} file(s)\n`;
-        if (context.stagedFiles.length > 0) {
-          response += `   Staged: ${context.stagedFiles.length}\n`;
-        }
-        if (context.uncommittedFiles.length > 0) {
-          response += `   Uncommitted: ${context.uncommittedFiles.length}\n`;
-        }
-        response += `\n`;
-      }
-
-      // Change analysis
-      if (context.changeAnalysis) {
-        const analysis = context.changeAnalysis;
-        response += ` **Change Analysis**:\n`;
-        response += `   Files changed: ${analysis.filesChanged}\n`;
-        response += `   Insertions: +${analysis.insertions}\n`;
-        response += `   Deletions: -${analysis.deletions}\n`;
-        
-        if (analysis.primaryCategory) {
-          response += `   Primary category: ${analysis.primaryCategory}\n`;
-        }
-        if (analysis.scope) {
-          response += `   Scope: ${analysis.scope}\n`;
-        }
-        
-        if (Object.keys(analysis.categories).length > 0) {
-          const categories = Object.entries(analysis.categories)
-            .map(([cat, count]) => `${count} ${cat}`)
-            .join(', ');
-          response += `   Categories: ${categories}\n`;
-        }
-        response += `\n`;
-      }
-
-      // Suggested commit message
-      if (context.suggestedCommitMessage) {
-        response += ` **Suggested Commit Message**:\n\`\`\`\n${context.suggestedCommitMessage}\n\`\`\`\n\n`;
-        response += ` This follows conventional commits format. Edit as needed.`;
-      } else if (context.stagedFiles.length === 0) {
-        response += ` Stage files to get a suggested commit message.`;
-      }
-
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-    } catch (error: any) {
-      return {
-        content: [{
-          type: 'text',
-          text: ` Git context failed: ${error.message}`,
-        }],
-      };
-    }
-  }
-
-  /**
-   * Git hotspots - files with high change frequency (risk analysis)
-   */
-  private async handleGitHotspots(limit: number = 10) {
-    const workspace = this.workspaceDetector.getCurrentWorkspace();
-    
-    if (!workspace) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' No workspace set. Run `set_project` first.',
-        }],
-      };
-    }
-
-    try {
-      const git = new GitIntegration(workspace);
-      
-      if (!git.isGitRepo()) {
-        return {
-          content: [{
-            type: 'text',
-            text: ' Not a git repository',
-          }],
-        };
-      }
-
-      const hotspots = git.getHotspots(limit);
-      
-      if (!hotspots || hotspots.length === 0) {
-        return {
-          content: [{
-            type: 'text',
-            text: ' No hotspots found. Repository may be too new or have limited history.',
-          }],
-        };
-      }
-
-      let response = ` **Git Hotspots - Risk Analysis**\n\n`;
-      response += `Files with high change frequency (last 6 months):\n\n`;
-
-      for (const spot of hotspots) {
-        const riskIcon = spot.risk === 'critical' ? '' : 
-                        spot.risk === 'high' ? '' : 
-                        spot.risk === 'medium' ? '' : '';
-        
-        response += `${riskIcon} **${spot.file}** (${spot.risk} risk)\n`;
-        response += `   ${spot.changes} changes\n`;
-        response += `   Last changed: ${spot.lastChanged}\n\n`;
-      }
-
-      response += `\n **Why This Matters:**\n`;
-      response += ` High churn = complexity or instability\n`;
-      response += ` Critical/high risk files need extra testing\n`;
-      response += ` Consider refactoring frequently changed files\n`;
-
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-    } catch (error: any) {
-      return {
-        content: [{
-          type: 'text',
-          text: ` Git hotspots failed: ${error.message}`,
-        }],
-      };
-    }
-  }
-
-  /**
-   * Git coupling - files that change together (hidden dependencies)
-   */
-  private async handleGitCoupling(minCoupling: number = 3) {
-    const workspace = this.workspaceDetector.getCurrentWorkspace();
-    
-    if (!workspace) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' No workspace set. Run `set_project` first.',
-        }],
-      };
-    }
-
-    try {
-      const git = new GitIntegration(workspace);
-      
-      if (!git.isGitRepo()) {
-        return {
-          content: [{
-            type: 'text',
-            text: ' Not a git repository',
-          }],
-        };
-      }
-
-      const couplings = git.getFileCoupling(minCoupling);
-      
-      if (!couplings || couplings.length === 0) {
-        return {
-          content: [{
-            type: 'text',
-            text: ` No strong file couplings found (minimum ${minCoupling} co-changes).`,
-          }],
-        };
-      }
-
-      let response = ` **Git Coupling - Hidden Dependencies**\n\n`;
-      response += `Files that frequently change together (last 6 months):\n\n`;
-
-      for (const coupling of couplings) {
-        const strengthIcon = coupling.coupling === 'strong' ? '' : 
-                            coupling.coupling === 'medium' ? '' : '';
-        
-        response += `${strengthIcon} **${coupling.coupling.toUpperCase()} coupling** (${coupling.timesChanged} together)\n`;
-        response += `   ${coupling.fileA}\n`;
-        response += `   ${coupling.fileB}\n\n`;
-      }
-
-      response += `\n **Why This Matters:**\n`;
-      response += ` Strong coupling = hidden dependencies\n`;
-      response += ` Files that change together should maybe be merged\n`;
-      response += ` Or they need better abstraction/interfaces\n`;
-      response += ` Use this to find refactoring opportunities\n`;
-
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-    } catch (error: any) {
-      return {
-        content: [{
-          type: 'text',
-          text: ` Git coupling failed: ${error.message}`,
-        }],
-      };
-    }
-  }
-
-  /**
-   * Git blame - code ownership analysis
-   */
-  private async handleGitBlame(filepath: string) {
-    const workspace = this.workspaceDetector.getCurrentWorkspace();
-    
-    if (!workspace) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' No workspace set. Run `set_project` first.',
-        }],
-      };
-    }
-
-    try {
-      const git = new GitIntegration(workspace);
-      
-      if (!git.isGitRepo()) {
-        return {
-          content: [{
-            type: 'text',
-            text: ' Not a git repository',
-          }],
-        };
-      }
-
-      const ownership = git.getBlame(filepath);
-      
-      if (!ownership || ownership.length === 0) {
-        return {
-          content: [{
-            type: 'text',
-            text: ` Could not get blame info for ${filepath}. File may not exist or not be tracked.`,
-          }],
-        };
-      }
-
-      let response = ` **Code Ownership - ${filepath}**\n\n`;
-
-      for (const owner of ownership) {
-        const barLength = Math.floor(owner.percentage / 5);
-        const bar = ''.repeat(barLength) + ''.repeat(20 - barLength);
-        
-        response += `**${owner.author}** - ${owner.percentage}%\n`;
-        response += `${bar}\n`;
-        response += `   ${owner.lines} lines\n`;
-        response += `   Last edit: ${owner.lastEdit}\n\n`;
-      }
-
-      const primaryOwner = ownership[0];
-      response += `\n **Primary Expert:** ${primaryOwner.author} (${primaryOwner.percentage}% ownership)\n`;
-      response += `Ask them about this file's architecture and design decisions.\n`;
-
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-    } catch (error: any) {
-      return {
-        content: [{
-          type: 'text',
-          text: ` Git blame failed: ${error.message}`,
-        }],
-      };
-    }
-  }
-
-  /**
-   * Git analysis - comprehensive overview
-   */
-  private async handleGitAnalysis() {
-    const workspace = this.workspaceDetector.getCurrentWorkspace();
-    
-    if (!workspace) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' No workspace set. Run `set_project` first.',
-        }],
-      };
-    }
-
-    try {
-      const git = new GitIntegration(workspace);
-      
-      if (!git.isGitRepo()) {
-        return {
-          content: [{
-            type: 'text',
-            text: ' Not a git repository',
-          }],
-        };
-      }
-
-      const analysis = git.getAnalysis();
-      
-      if (!analysis) {
-        return {
-          content: [{
-            type: 'text',
-            text: ' Could not analyze repository',
-          }],
-        };
-      }
-
-      let response = ` **Git Repository Analysis**\n\n`;
-
-      // Branch health
-      response += ` **Branch Health**\n`;
-      response += `   Current: ${analysis.branchHealth.current}\n`;
-      
-      if (analysis.branchHealth.ahead > 0) {
-        response += `   Ahead: ${analysis.branchHealth.ahead} commits\n`;
-      }
-      if (analysis.branchHealth.behind > 0) {
-        response += `   Behind: ${analysis.branchHealth.behind} commits`;
-        if (analysis.branchHealth.stale) {
-          response += `  STALE - merge main!\n`;
-        } else {
-          response += `\n`;
-        }
-      }
-      response += `\n`;
-
-      // Top contributors
-      if (analysis.contributors.length > 0) {
-        response += ` **Top Contributors** (last 6 months)\n`;
-        for (const contributor of analysis.contributors.slice(0, 5)) {
-          response += `   ${contributor.name} - ${contributor.commits} commits (last: ${contributor.lastCommit})\n`;
-        }
-        response += `\n`;
-      }
-
-      // Top hotspots
-      if (analysis.hotspots.length > 0) {
-        response += ` **Top 5 Hotspots** (high-risk files)\n`;
-        for (const spot of analysis.hotspots.slice(0, 5)) {
-          const riskIcon = spot.risk === 'critical' ? '' : 
-                          spot.risk === 'high' ? '' : 
-                          spot.risk === 'medium' ? '' : '';
-          response += `  ${riskIcon} ${spot.file} - ${spot.changes} changes\n`;
-        }
-        response += `\n`;
-      }
-
-      // Strongest couplings
-      if (analysis.coupling.length > 0) {
-        response += ` **Strongest Couplings** (hidden dependencies)\n`;
-        for (const coupling of analysis.coupling.slice(0, 5)) {
-          response += `   ${coupling.fileA}  ${coupling.fileB} (${coupling.timesChanged} together)\n`;
-        }
-        response += `\n`;
-      }
-
-      // Recommendations
-      response += ` **Recommendations:**\n`;
-      
-      if (analysis.branchHealth.stale) {
-        response += `    Merge main branch - you're ${analysis.branchHealth.behind} commits behind\n`;
-      }
-      
-      if (analysis.hotspots.some((h: any) => h.risk === 'critical')) {
-        const criticalFiles = analysis.hotspots.filter((h: any) => h.risk === 'critical');
-        response += `    Review ${criticalFiles.length} critical-risk file(s) - consider refactoring\n`;
-      }
-      
-      if (analysis.coupling.some((c: any) => c.coupling === 'strong')) {
-        const strongCouplings = analysis.coupling.filter((c: any) => c.coupling === 'strong');
-        response += `    ${strongCouplings.length} strong coupling(s) detected - refactor to reduce dependencies\n`;
-      }
-
-      return {
-        content: [{ type: 'text', text: response }],
-      };
-    } catch (error: any) {
-      return {
-        content: [{
-          type: 'text',
-          text: ` Git analysis failed: ${error.message}`,
-        }],
-      };
-    }
+    const handler = new GitToolHandler(() => this.requireWorkspace());
+    return await handler.handle(args as GitToolArgs);
   }
 
   private async handleNotion(args: { action: 'search' | 'read'; query?: string; pageId?: string }) {
-    // Validate action parameter
-    if (!args.action) {
-      return {
-        content: [{
-          type: 'text',
-          text: ' Missing required parameter: action (must be "search" or "read")',
-        }],
-        isError: true,
-      };
-    }
-
-    // Handle search action
-    if (args.action === 'search') {
-      if (!args.query) {
-        return {
-          content: [{
-            type: 'text',
-            text: ' Missing required parameter: query (required for search action)',
-          }],
-          isError: true,
-        };
-      }
-      return await this.notionHandlers.handleNotionSearch({ query: args.query });
-    }
-
-    // Handle read action
-    if (args.action === 'read') {
-      if (!args.pageId) {
-        return {
-          content: [{
-            type: 'text',
-            text: ' Missing required parameter: pageId (required for read action)',
-          }],
-          isError: true,
-        };
-      }
-      return await this.notionHandlers.handleNotionReadPage({ pageId: args.pageId });
-    }
-
-    // Unknown action
-    return {
-      content: [{
-        type: 'text',
-        text: ` Unknown action: "${args.action}". Use "search" or "read".`,
-      }],
-      isError: true,
-    };
+    const handler = new NotionToolHandler(this.notionHandlers);
+    return await handler.handle(args as NotionToolArgs);
   }
 
   // ========== HELPERS ==========
@@ -2204,6 +1255,16 @@ Example: Jot project
   private getCurrentProject() {
     if (!this.currentProjectId) return null;
     return this.storage.getProject(this.currentProjectId);
+  }
+
+  private requireProject(): ProjectContext | ToolResponse {
+    const project = this.getCurrentProject();
+    return project ?? errorResponse(' No project initialized. Run `set_project` first.');
+  }
+
+  private requireWorkspace(): string | ToolResponse {
+    const workspace = this.workspaceDetector.getCurrentWorkspace();
+    return workspace ?? errorResponse(' No workspace set. Run `set_project` first.');
   }
 
   private parseKeyValue(content: string): { key: string; value: string } {
@@ -2223,11 +1284,13 @@ Example: Jot project
   }
 
   async run(): Promise<void> {
+    await this.initializeNotion();
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
   }
 
   close(): void {
+    this.workspaceDetector.dispose();
     this.storage.close();
   }
 }

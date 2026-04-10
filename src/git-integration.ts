@@ -1,6 +1,5 @@
 ﻿// Git Integration for Version Control Operations
 
-import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 
@@ -28,8 +27,8 @@ export class GitIntegration {
    */
   isGitRepo(): boolean {
     try {
-      const gitDir = path.join(this.workspacePath, '.git');
-      return fs.existsSync(gitDir);
+      this.exec('git rev-parse --show-toplevel');
+      return true;
     } catch {
       return false;
     }
