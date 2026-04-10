@@ -990,6 +990,14 @@ Example: Jot project
         if (metadata?.target_date) {
           response += ` **Target:** ${metadata.target_date}\n`;
         }
+
+        if (result.conflictResult?.hasConflict) {
+          response += `\n **Conflict Warning** (${result.conflictResult.conflicts.length})\n`;
+          result.conflictResult.conflicts.forEach(conflict => {
+            response += `   [${conflict.severity.toUpperCase()}] ${conflict.reason}\n`;
+          });
+          response += `\n Stored anyway so the conflict is available in recall.\n`;
+        }
         
         // Show Notion suggestions if detected
         if (metadata?.notionPages && metadata.notionPages.length > 0) {
@@ -1161,6 +1169,15 @@ Example: Jot project
             response += ` [${g.metadata.status}]`;
           }
           response += `\n`;
+        });
+        response += `\n`;
+      }
+
+      // 7.5. Conflicts detected
+      if (synthesis.conflictResult?.hasConflict) {
+        response += ` **Conflicts Detected** (${synthesis.conflictResult.conflicts.length})\n`;
+        synthesis.conflictResult.conflicts.forEach(conflict => {
+          response += ` [${conflict.severity.toUpperCase()}] ${conflict.reason}\n`;
         });
         response += `\n`;
       }

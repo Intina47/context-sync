@@ -4,10 +4,10 @@
  */
 
 import type { Database } from 'better-sqlite3';
+import { ConflictDetector, type ConflictContextItem, type ConflictResult } from './conflict-detector.js';
 
-interface ContextItem {
+interface ContextItem extends ConflictContextItem {
   type: 'active_work' | 'constraint' | 'problem' | 'goal' | 'decision' | 'note' | 'caveat';
-  content: string;
   timestamp: number;
   metadata?: any;
   relevance?: number;
@@ -27,6 +27,7 @@ interface RecallSynthesis {
   relationships: Map<string, string[]>; // decision  affected files
   gaps: string[]; // Missing context warnings
   suggestions: string[]; // Concrete next actions
+  conflictResult?: ConflictResult;
   freshness: {
     fresh: number;
     recent: number;
@@ -38,10 +39,12 @@ interface RecallSynthesis {
 export class RecallEngine {
   private db: Database;
   private projectId: string;
+  private conflictDetector: ConflictDetector;
 
   constructor(db: Database, projectId: string) {
     this.db = db;
     this.projectId = projectId;
+    this.conflictDetector = new ConflictDetector(db);
   }
 
   /**
@@ -51,28 +54,31 @@ export class RecallEngine {
     // 1. Gather all context
     const context = await this.gatherContext(limit);
 
-    // 2. Analyze freshness
+    // 2. Detect conflicts in the current context
+    const conflictResult = this.conflictDetector.detectInContext(context);
+
+    // 3. Analyze freshness
     this.analyzeFreshness(context);
 
-    // 3. Rank by relevance
+    // 4. Rank by relevance
     this.rankByRelevance(context, query);
 
-    // 4. Build relationships
+    // 5. Build relationships
     const relationships = this.buildRelationships(context);
 
-    // 5. Detect gaps
+    // 6. Detect gaps
     const gaps = this.detectGaps(context);
 
-    // 6. Generate summary
+    // 7. Generate summary
     const summary = this.generateSummary(context);
 
-    // 7. Extract critical path
+    // 8. Extract critical path
     const criticalPath = this.extractCriticalPath(context);
 
-    // 8. Generate suggestions
+    // 9. Generate suggestions
     const suggestions = this.generateSuggestions(context, gaps);
 
-    // 9. Calculate freshness stats
+    // 10. Calculate freshness stats
     const freshness = this.calculateFreshness(context);
 
     return {
@@ -88,6 +94,7 @@ export class RecallEngine {
       relationships,
       gaps,
       suggestions,
+      conflictResult,
       freshness
     };
   }
@@ -107,6 +114,7 @@ export class RecallEngine {
 
     activeWork.forEach(work => {
       context.push({
+        id: work.id,
         type: 'active_work',
         content: work.task,
         timestamp: work.timestamp,
@@ -127,6 +135,7 @@ export class RecallEngine {
 
     constraints.forEach(c => {
       context.push({
+        id: c.id,
         type: 'constraint',
         content: `${c.key}: ${c.value}`,
         timestamp: c.timestamp,
@@ -143,6 +152,7 @@ export class RecallEngine {
 
     problems.forEach(p => {
       context.push({
+        id: p.id,
         type: 'problem',
         content: p.description,
         timestamp: p.timestamp,
@@ -162,6 +172,7 @@ export class RecallEngine {
 
     goals.forEach(g => {
       context.push({
+        id: g.id,
         type: 'goal',
         content: g.description,
         timestamp: g.timestamp,
@@ -181,6 +192,7 @@ export class RecallEngine {
 
     decisions.forEach(d => {
       context.push({
+        id: d.id,
         type: 'decision',
         content: d.description,
         timestamp: d.timestamp,
@@ -200,6 +212,7 @@ export class RecallEngine {
 
     notes.forEach(n => {
       context.push({
+        id: n.id,
         type: 'note',
         content: n.content,
         timestamp: n.timestamp,
@@ -216,6 +229,7 @@ export class RecallEngine {
 
     caveats.forEach(c => {
       context.push({
+        id: c.id,
         type: 'caveat',
         content: c.description,
         timestamp: c.timestamp,

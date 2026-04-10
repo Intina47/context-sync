@@ -7,19 +7,17 @@
 import type { Database } from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import simpleGit from 'simple-git';
+import type { ConflictResult } from './conflict-detector.js';
+import { ConflictDetector } from './conflict-detector.js';
+import type { RememberInput } from './context-layers.js';
 import { ReadFileEngine } from './read-file-engine.js';
-
-interface RememberInput {
-  type: 'active_work' | 'constraint' | 'problem' | 'goal' | 'decision' | 'note' | 'caveat';
-  content: string;
-  metadata?: Record<string, any>;
-}
 
 interface RememberResult {
   action: 'created' | 'updated' | 'skipped';
   id: string;
   type: string;
   reason?: string;
+  conflictResult?: ConflictResult;
   gitContext?: {
     branch: string;
     uncommittedFiles: string[];
@@ -41,12 +39,14 @@ export class RememberEngine {
   private projectId: string;
   private projectPath: string;
   private readFileEngine: ReadFileEngine;
+  private conflictDetector: ConflictDetector;
 
   constructor(db: Database, projectId: string, projectPath: string) {
     this.db = db;
     this.projectId = projectId;
     this.projectPath = projectPath;
     this.readFileEngine = new ReadFileEngine(projectPath);
+    this.conflictDetector = new ConflictDetector(db);
   }
 
   /**
@@ -76,15 +76,18 @@ export class RememberEngine {
       }
     }
 
-    // 5. Check for duplicates/updates
+    // 5. Detect conflicts before storing
+    const conflictResult = this.conflictDetector.detect(this.projectId, input);
+
+    // 6. Check for duplicates/updates
     const existing = this.findSimilar(input);
     if (existing) {
       // Update existing instead of creating duplicate
-      return this.updateExisting(existing, input, gitContext, fileContext);
+      return this.updateExisting(existing, input, gitContext, fileContext, conflictResult);
     }
 
-    // 6. Store new context
-    return this.storeNew(input, gitContext, fileContext);
+    // 7. Store new context
+    return this.storeNew(input, gitContext, fileContext, conflictResult);
   }
 
   /**
@@ -360,7 +363,8 @@ export class RememberEngine {
     existing: any,
     input: RememberInput,
     gitContext: RememberResult['gitContext'] | null,
-    fileContext?: RememberResult['fileContext']
+    fileContext?: RememberResult['fileContext'],
+    conflictResult?: ConflictResult
   ): RememberResult {
     const timestamp = Date.now();
     const files = input.metadata?.files || [];
@@ -421,6 +425,7 @@ export class RememberEngine {
       id: existing.id,
       type: input.type,
       reason: 'Found similar existing context and updated it',
+      conflictResult,
       gitContext: gitContext || undefined,
       fileContext
     };
@@ -432,7 +437,8 @@ export class RememberEngine {
   private storeNew(
     input: RememberInput,
     gitContext: RememberResult['gitContext'] | null,
-    fileContext?: RememberResult['fileContext']
+    fileContext?: RememberResult['fileContext'],
+    conflictResult?: ConflictResult
   ): RememberResult {
     const { type, content, metadata } = input;
     const timestamp = Date.now();
@@ -571,6 +577,7 @@ export class RememberEngine {
       id,
       type,
       reason: 'Stored new context',
+      conflictResult,
       gitContext: gitContext || undefined,
       fileContext
     };

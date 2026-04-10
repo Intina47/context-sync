@@ -29,6 +29,8 @@ export const CORE_TOOLS = [
     name: 'remember',
     description: `Store important context about the project. Use when the user shares something that matters for future sessions: active work, architectural constraints, problems encountered, goals, decisions, notes, or **caveats** (AI mistakes/tech debt).
 
+\`remember\` also checks new entries against existing constraints, decisions, and active work. If a conflict is detected, it warns before storing so the item is still captured for later review.
+
 ** NEW: CAVEAT TYPE - Track AI Mistakes & Tech Debt**
 
 When you (the AI) realize something went wrong, ALWAYS call remember with type='caveat':
