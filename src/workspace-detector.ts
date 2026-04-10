@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as chokidar from 'chokidar';
 import type { Storage } from './storage.js';
 import { ProjectDetector } from './project-detector.js';
+import { resolveWorkspacePath } from './workspace-paths.js';
 
 export interface FileContent {
   path: string;
@@ -135,7 +136,12 @@ export class WorkspaceDetector {
       return null;
     }
 
-    const fullPath = path.join(this.currentWorkspace, relativePath);
+    let fullPath: string;
+    try {
+      fullPath = resolveWorkspacePath(this.currentWorkspace, relativePath);
+    } catch {
+      return null;
+    }
     
     // Check cache first
     if (this.fileCache.has(fullPath)) {

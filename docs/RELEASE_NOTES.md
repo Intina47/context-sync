@@ -1,5 +1,14 @@
 # Release notes
 
+## Unreleased
+
+### Highlights
+- Refactored the server into smaller handler-oriented modules for git, workspace tools, and Notion tool routing.
+- Added shared tool response helpers to reduce duplicated MCP response boilerplate.
+- Added shared workspace path validation for safer file reads inside the active workspace.
+- Improved git repo detection so nested repos and worktrees are handled more reliably.
+- Clarified and expanded README and reference docs.
+
 This release is a major v2-focused cleanup. It removes legacy v1 tooling and narrows the surface area to the v2 core server, engines, storage, Notion, and git hooks.
 
 ## Highlights

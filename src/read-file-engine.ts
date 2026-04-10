@@ -6,6 +6,7 @@
 import { promises as fs } from 'fs';
 import { join, extname, relative, dirname } from 'path';
 import simpleGit from 'simple-git';
+import { resolveWorkspacePath } from './workspace-paths.js';
 
 interface FileMetadata {
   size: number;
@@ -50,7 +51,7 @@ export class ReadFileEngine {
    * Read file with rich context
    */
   async read(relativePath: string): Promise<FileContext> {
-    const fullPath = join(this.projectPath, relativePath);
+    const fullPath = resolveWorkspacePath(this.projectPath, relativePath);
 
     // Layer 1: Read file content and basic info
     const content = await fs.readFile(fullPath, 'utf-8');
