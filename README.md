@@ -1,36 +1,126 @@
-﻿# Context Sync
+# Context Sync
 
-Local-first memory layer for AI development tools via MCP.
+Local-first project memory for AI coding tools over MCP.
 
-![alt text](image.png)
+Context Sync gives an agent a persistent memory layer for a codebase:
+- project identity and tech stack
+- active work, decisions, constraints, and caveats
+- structured file exploration
+- git-aware context
+- optional read-only Notion lookup
 
-## Install and auto-config (60 seconds)
-1) Install globally:
+![Context Sync](image.png)
+
+## What It Does
+
+Context Sync is built for session continuity. Instead of relying on a model to remember earlier conversations, it stores the project context that matters and makes it retrievable through a small MCP tool surface.
+
+The current core tools are:
+- `set_project`
+- `remember`
+- `recall`
+- `read_file`
+- `search`
+- `structure`
+- `git`
+- `notion`
+
+## Install
+
+Install globally:
+
 ```bash
 npm install -g @context-sync/server
 ```
 
-2) Auto-config runs on install. Restart your AI tool.
+Auto-configuration runs during global install. After install, restart your AI tool.
 
-3) Verify tools:
-- Claude Desktop: Tools list
-- Cursor: Tools list
-- VS Code/Copilot: Copilot Chat -> Agent mode -> Tools
-- Continue.dev: open Continue panel
-- Codex CLI: codex mcp list
-- Claude Code: claude mcp list
+If you install locally instead of globally, auto-config does not run. Use the manual config guide in [docs/CONFIG.md](docs/CONFIG.md).
 
-If auto-config fails, see `docs/TROUBLESHOOTING.md` and `docs/CONFIG.md`.
-If you installed locally (non-global), auto-config does not run.
+## Verify
 
-## Optional: Notion setup
+Check that `context-sync` appears in your MCP tool list:
+- Claude Desktop: open the tools list
+- Cursor: open the tools list
+- VS Code / Copilot Chat Agent mode: check tools
+- Continue.dev: open the Continue panel
+- Codex CLI: `codex mcp list`
+- Claude Code: `claude mcp list`
+
+If auto-config fails, use [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) and [docs/CONFIG.md](docs/CONFIG.md).
+
+## Optional Notion Setup
+
+Run the setup wizard if you want Notion integration:
+
 ```bash
 context-sync-setup
-# or
+```
+
+or:
+
+```bash
 npx context-sync-setup
 ```
 
-## Supported platforms
+Notion support is intentionally read-only at the tool surface:
+- `notion({ action: "search", query: "..." })`
+- `notion({ action: "read", pageId: "..." })`
+
+## First-Time Workflow
+
+Start every new session by setting the project first:
+
+```text
+1. set_project({ path: "/absolute/path/to/project" })
+2. recall()
+3. structure({ depth: 2 })
+4. read_file({ path: "src/index.ts" })
+5. remember({ type: "decision", content: "Use SQLite for local storage" })
+```
+
+Recommended pattern:
+- `set_project` once per project/session start
+- `recall` to recover context
+- `structure` and `search` to explore
+- `read_file` for focused inspection
+- `remember` when something should survive the current session
+
+## Git Integration
+
+When you run `set_project` inside a git repository, Context Sync can install hooks for automatic context capture.
+
+Installed hooks:
+- `post-commit`
+- `pre-push`
+- `post-merge`
+- `post-checkout`
+
+Hooks are marked with `Context Sync Auto-Hook`, and existing hooks are backed up first.
+
+The `git` tool supports:
+- `status`
+- `context`
+- `hotspots`
+- `coupling`
+- `blame`
+- `analysis`
+
+## Data And Config
+
+Default locations:
+- Database: `~/.context-sync/data.db`
+- Config: `~/.context-sync/config.json`
+- Install status: `~/.context-sync/install-status.json`
+
+Custom database options:
+- CLI: `context-sync --db-path /absolute/path/to/db`
+- Env var: `CONTEXT_SYNC_DB_PATH`
+
+See [docs/DATA.md](docs/DATA.md) for storage details.
+
+## Supported Platforms
+
 - Claude Desktop
 - Cursor
 - VS Code + GitHub Copilot
@@ -41,38 +131,12 @@ npx context-sync-setup
 - TabNine
 - Codex CLI
 - Claude Code
-- Antigravity (Google Gemini IDE)
-
-## First-time workflow
-```text
-1) set_project({ path: "/abs/path/to/project" })
-2) recall()
-3) read_file({ path: "src/index.ts" })
-4) remember({ type: "decision", content: "Use SQLite for local storage" })
-```
-
-Tool reference: `docs/TOOLS.md`
-
-## Data and config
-- Database: `~/.context-sync/data.db`
-- Config: `~/.context-sync/config.json`
-- Install status: `~/.context-sync/install-status.json`
-- Custom DB: `context-sync --db-path /absolute/path/to/db` or `CONTEXT_SYNC_DB_PATH`
-
-More details: `docs/DATA.md`
-
-## Git hooks
-When you run `set_project` inside a git repo, Context Sync installs hooks:
-- post-commit
-- pre-push
-- post-merge
-- post-checkout
-
-Hooks are marked with "Context Sync Auto-Hook" and existing hooks are backed up.
+- Antigravity
 
 ## Docs
-- Release notes: `docs/RELEASE_NOTES.md`
-- Manual config: `docs/CONFIG.md`
-- Tools: `docs/TOOLS.md`
-- Troubleshooting: `docs/TROUBLESHOOTING.md`
-- Data and storage: `docs/DATA.md`
+
+- [docs/TOOLS.md](docs/TOOLS.md)
+- [docs/CONFIG.md](docs/CONFIG.md)
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+- [docs/DATA.md](docs/DATA.md)
+- [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md)
