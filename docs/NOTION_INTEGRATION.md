@@ -4,7 +4,7 @@
 This guide shows you how to connect Context Sync directly to Notion using the official Notion API. You’ll be able to read and write Notion pages, search your workspace, and manage documentation—no separate MCP server required!
 ## Prerequisites
 
-- Node.js 16+ installed
+- Node.js 18+ installed
 - A Notion account with workspace access
 - Notion API integration token
 ## Step 1: Get Your Notion API Token
@@ -39,16 +39,11 @@ You’re all set! Context Sync will connect directly to Notion using your API to
 Try searching, reading, or creating pages in Notion using Context Sync’s tools and commands. If you run into any issues, check your API token and make sure the pages are shared with your integration.
 ## Available Capabilities
 
-Once configured, you can:
-- 🔍 Search all accessible Notion pages
-- 📖 Read full page content (including blocks and databases)
-- ✍️ Create new pages with rich content
-- 📝 Update existing page content
-- 🏗️ Add blocks (text, headings, lists, code, etc.)
-- 📊 Create and update database entries
-- 📁 Organize pages in hierarchies
-- 🏷️ Add tags and properties
-- 🔗 Create relationships between pages
+Once configured, you can use the `notion` tool with two actions:
+- **search** — Search all accessible Notion pages by keyword
+- **read** — Read full page content (including blocks and databases)
+
+Note: The Notion integration is read-only. Write operations (creating pages, updating content) are not currently exposed through the MCP tool interface.
 ## Security Best Practices
 
 1. **Token Management:**
@@ -75,14 +70,13 @@ node --version  # Should be 16+
 ```
 ## Example Use Cases
 
-### 1. Documentation Management
-- "Create a troubleshooting guide in Notion for the authentication errors we discussed"
+### 1. Documentation Lookup
 - "Search my Notion for notes from the Q1 planning meeting"
-- "Update the API documentation page in Notion with the new endpoints we just created"
-- "Create a project roadmap page with milestones for Q2"
+- "Read the API documentation page in Notion"
+- "Find the project roadmap page in Notion"
 ## Context Sync Integration
 
-Context Sync recognizes Notion as a platform and can sync, search, and update docs directly.
+Context Sync can search and read Notion docs directly.
 - **Notion API:** https://developers.notion.com
 - **Context Sync:** https://github.com/Intina47/context-sync
 ## Next Steps

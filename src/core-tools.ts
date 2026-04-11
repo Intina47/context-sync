@@ -1,6 +1,6 @@
 ﻿/**
- * Core Tool Definitions - The 9 Essential Tools
- * Set of core tools: 8 project tools + 1 documentation tool (Notion)
+ * Core Tool Definitions - The 8 Essential Tools
+ * Set of core tools: 7 project tools + 1 documentation tool (Notion)
  */
 
 export const CORE_TOOLS = [
