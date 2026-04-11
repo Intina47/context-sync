@@ -87,6 +87,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.9",
     "@types/chokidar": "^1.7.5",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.11.0",
     "@types/readline-sync": "^1.4.8",
     "tsx": "^4.20.6",
