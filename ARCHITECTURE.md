@@ -4,7 +4,7 @@
 **Version:** 2.0.0
 **Language:** TypeScript
 **Total Lines:** ~10,897 LOC
-**Last Updated:** 2026-02-23
+**Last Updated:** 2026-04-11
 
 ## Project Overview
 
@@ -19,13 +19,12 @@ Context Sync is a **Model Context Protocol (MCP) server** that provides a local-
 
 ### Supported Platforms
 
-14 AI development tools supported:
+11 AI development tools supported:
 - Claude Desktop, Claude Code
 - Cursor, VS Code + GitHub Copilot
 - Continue.dev, Zed, Windsurf
-- Codeium, TabNine, Codewisperer
-- Codex CLI, Ollama
-- Notion (documentation integration)
+- Codeium, TabNine
+- Codex CLI, Antigravity (Google Gemini IDE)
 
 ---
 
@@ -84,6 +83,16 @@ decisions
 ├─ id (TEXT, PK)
 ├─ project_id (FK), type, description, reasoning
 └─ timestamp
+
+project_dependencies      — tracked deps (name, version, critical, dev)
+project_build_system       — build type, commands, config file
+project_test_framework     — test runner name, pattern, coverage
+project_env_vars           — required env vars with examples
+project_services           — service name, port, protocol, health check
+project_databases          — DB type, connection var, migrations path
+project_metrics            — LOC, file count, contributors, hotspots, complexity
+active_work                — current task, context, files, branch, status
+constraints                — architectural rules (key/value + reasoning)
 ```
 
 **Performance Features:**
@@ -119,6 +128,11 @@ decisions
 - Implements TTL-based caching (3,600s / 1 hour default)
 - Reduces redundant filesystem operations
 - Fast-path detection result retrieval
+
+**`project-metrics.ts` (128 LOC)**
+- Calculates project metrics (LOC, file count, contributors)
+- Generates hotspot analysis
+- Stores results in `project_metrics` table
 
 **`project-profiler.ts` (161 LOC)**
 - Gathers comprehensive project data
@@ -198,13 +212,14 @@ decisions
 
 **`notion-integration.ts` (544 LOC)**
 - Notion API client wrapper
-- Page creation, update, query
+- Page search and read operations (exposed via MCP tool)
+- Page creation, update, query (implemented but not exposed via MCP tool)
 - Database operations
 - Token management
 
 **`notion-handlers.ts` (269 LOC)**
 - MCP request handlers for Notion operations
-- Tool implementations for note creation/search
+- Tool implementations for search/read (the only actions exposed via the `notion` MCP tool)
 - Authentication and error handling
 
 ---
@@ -235,6 +250,7 @@ decisions
 - Detects workspace boundaries
 - Identifies project roots
 - Handles monorepos
+- File watching via chokidar for change detection
 - Caches detection results
 
 **`context-layers.ts` (109 LOC)**
@@ -394,9 +410,17 @@ When installed globally:
 1. `preinstall` hook logs friendly message
 2. `postinstall` hook runs setup (bin/install.cjs)
 3. Auto-detects AI tool configuration directories:
-   - Claude Desktop: `~/.claude/mcp.json`
-   - Cursor: `.cursor/mcp.json`
-   - VS Code: `.vscode/settings.json`
+   - Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
+   - Cursor: `~/.cursor/mcp.json`
+   - VS Code + GitHub Copilot: `~/Library/Application Support/Code/User/mcp.json` (macOS)
+   - Continue.dev: `.continue/mcpServers/context-sync.yaml`
+   - Zed: `~/Library/Application Support/Zed/settings.json` (macOS)
+   - Windsurf: `~/.codeium/windsurf/mcp_config.json`
+   - Codeium: `~/Library/Application Support/Code/User/settings.json` (macOS)
+   - TabNine: `~/Library/Application Support/TabNine/config.json` (macOS)
+   - Codex CLI: `~/.codex/config.toml`
+   - Claude Code: `~/.claude/mcp_servers.json`
+   - Antigravity: `~/.gemini/antigravity/mcp_config.json`
 4. Creates/updates MCP configuration
 5. Installs git hooks on project setup
 
@@ -472,13 +496,12 @@ When installed globally:
 
 - **Main:** `dist/index.js` (compiled entry point)
 - **Types:** `dist/index.d.ts` (TypeScript definitions)
-- **CLI:** `dist/bin/setup.cjs` (Notion configuration wizard)
+- **CLI:** `bin/setup.cjs` (Notion configuration wizard)
 - **Platform Support:** darwin (x64, arm64), linux (x64, arm64), win32 (x64)
 
 ### Version Management
 
 - Semantic versioning (currently 2.0.0)
-- CHANGELOG.md maintained
 - GitHub releases automated
 
 ### Publish Pipeline
@@ -566,7 +589,7 @@ src/
 
 ## Conclusion
 
-Context Sync is a **modular MCP server** with reasonable separation of concerns at the engine level. It integrates with 14 AI development tools and provides a working foundation for persistent context management. The Engine pattern gives individual components testability and replaceability in principle.
+Context Sync is a **modular MCP server** with reasonable separation of concerns at the engine level. It integrates with 11 AI development tools and provides a working foundation for persistent context management. The Engine pattern gives individual components testability and replaceability in principle.
 
 **What's working well:**
 - ✅ Comprehensive graceful degradation (missing config → features disabled, not crashed)
@@ -593,5 +616,5 @@ Context Sync is a **modular MCP server** with reasonable separation of concerns 
 ---
 
 **Date Created:** 2026-02-23
-**Review Status:** Architecture Analysis + Critical Review (2026-02-24)
+**Review Status:** Architecture Analysis + Critical Review (2026-02-24), Consistency Audit fixes (2026-04-11)
 **Next Steps:** See RUST-MIGRATION-ASSESSMENT.md for migration feasibility analysis

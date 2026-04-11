@@ -18,7 +18,7 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "watch": "tsx watch src/index.ts",
-    "test": "node -e \"console.log('✅ Context Sync v1.0.3 - All systems ready!')\"",
+    "test": "node -e \"console.log('✅ Context Sync v2.0.0 - All systems ready!')\"",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
@@ -71,7 +71,7 @@
     "bin/**/*",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "docs/**/*"
   ],
   "dependencies": {
     "@iarna/toml": "^2.2.5",
